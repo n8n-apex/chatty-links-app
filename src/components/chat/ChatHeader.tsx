@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { RotateCcw } from 'lucide-react';
 import logo from '@/assets/logo.webp';
 
 interface ChatHeaderProps {
@@ -26,14 +27,24 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
           </button>
         </div>
 
-        <div className="text-right">
-          <h1 className="font-semibold text-foreground">APEX AI Assistant</h1>
-          <div className="flex items-center justify-end gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs text-muted-foreground">
-              Airtable verbunden
-            </span>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <h1 className="font-semibold text-foreground">APEX AI Assistant</h1>
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-muted-foreground">
+                Airtable verbunden
+              </span>
+            </div>
           </div>
+          
+          <button
+            onClick={onLogoClick}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Neuer Chat"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </motion.header>
