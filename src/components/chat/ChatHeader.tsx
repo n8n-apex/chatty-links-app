@@ -17,14 +17,15 @@ export const ChatHeader = () => {
               className="h-8 w-auto brightness-0 invert object-contain"
             />
           </div>
-          <div>
-            <h1 className="font-semibold text-foreground">KI Assistent</h1>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs text-muted-foreground">
-                Airtable verbunden
-              </span>
-            </div>
+        </div>
+
+        <div className="text-right">
+          <h1 className="font-semibold text-foreground">KI Assistent</h1>
+          <div className="flex items-center justify-end gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-xs text-muted-foreground">
+              Airtable verbunden
+            </span>
           </div>
         </div>
       </div>
