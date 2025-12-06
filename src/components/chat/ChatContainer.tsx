@@ -8,7 +8,8 @@ import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
 import { toast } from 'sonner';
 
-const WEBHOOK_URL = 'https://your-n8n-instance.com/webhook/chat'; // Replace with your n8n webhook
+// Webhook URL aus Environment Variable (für Railway) oder Fallback
+const WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
 
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,6 +25,12 @@ export const ChatContainer = () => {
   }, [messages, isLoading, scrollToBottom]);
 
   const sendMessage = async (content: string) => {
+    if (!WEBHOOK_URL) {
+      toast.error('Webhook URL nicht konfiguriert. Bitte VITE_N8N_WEBHOOK_URL setzen.');
+      console.error('VITE_N8N_WEBHOOK_URL ist nicht gesetzt');
+      return;
+    }
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       content,
@@ -34,7 +41,11 @@ export const ChatContainer = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
+
     try {
+      console.log('Sende Nachricht an n8n:', { message: content, sessionId });
+      
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -42,33 +53,39 @@ export const ChatContainer = () => {
         },
         body: JSON.stringify({
           message: content,
-          sessionId: localStorage.getItem('chat-session-id') || crypto.randomUUID(),
+          sessionId: sessionId,
+          timestamp: new Date().toISOString(),
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('n8n Antwort:', data);
+      
+      // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
+      const responseText = data.response || data.message || data.output || data.text || 
+                          (typeof data === 'string' ? data : JSON.stringify(data));
       
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
-        content: data.response || data.message || data.output || JSON.stringify(data),
+        content: responseText,
         role: 'assistant',
         timestamp: new Date(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      console.error('Error sending message:', error);
-      toast.error('Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.');
+      console.error('Fehler beim Senden:', error);
+      toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Initialize session ID
+  // Session ID initialisieren
   useEffect(() => {
     if (!localStorage.getItem('chat-session-id')) {
       localStorage.setItem('chat-session-id', crypto.randomUUID());
