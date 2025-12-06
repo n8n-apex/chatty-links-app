@@ -1,0 +1,50 @@
+import { motion } from 'framer-motion';
+import { MessageSquare, Settings, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+interface ChatHeaderProps {
+  onSettingsClick: () => void;
+  isConnected: boolean;
+}
+
+export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) => {
+  return (
+    <motion.header
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="border-b border-border bg-background/80 backdrop-blur-xl"
+    >
+      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-glow">
+            <MessageSquare className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="font-semibold text-foreground">AI Chat</h1>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground'
+                }`}
+              />
+              <span className="text-xs text-muted-foreground">
+                {isConnected ? 'Connected to n8n' : 'Not configured'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="glass"
+            size="icon"
+            onClick={onSettingsClick}
+            className="rounded-xl"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </motion.header>
+  );
+};
