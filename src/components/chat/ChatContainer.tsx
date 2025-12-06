@@ -101,7 +101,7 @@ export const ChatContainer = () => {
         <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
       </div>
 
-      <ChatHeader />
+      <ChatHeader onLogoClick={() => setMessages([])} />
 
       <main className="relative flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl">
