@@ -17,15 +17,15 @@ export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) =>
     >
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center">
+          <div className="flex h-10 w-auto items-center justify-center">
             <img 
               src={logo} 
               alt="Chat Logo" 
-              className="h-8 w-8 brightness-0 invert"
+              className="h-8 w-auto brightness-0 invert object-contain"
             />
           </div>
           <div>
-            <h1 className="font-semibold text-foreground">AI Chat</h1>
+            <h1 className="font-semibold text-foreground">KI Chat</h1>
             <div className="flex items-center gap-1.5">
               <span
                 className={`h-2 w-2 rounded-full ${
@@ -33,7 +33,7 @@ export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) =>
                 }`}
               />
               <span className="text-xs text-muted-foreground">
-                {isConnected ? 'Connected to n8n' : 'Not configured'}
+                {isConnected ? 'Mit n8n verbunden' : 'Nicht konfiguriert'}
               </span>
             </div>
           </div>

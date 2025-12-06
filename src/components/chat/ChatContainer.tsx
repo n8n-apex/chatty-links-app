@@ -33,7 +33,7 @@ export const ChatContainer = () => {
 
   const sendMessage = async (content: string) => {
     if (!webhookUrl) {
-      toast.error('Please configure your n8n webhook URL first');
+      toast.error('Bitte konfiguriere zuerst deine n8n Webhook URL');
       setIsSettingsOpen(true);
       return;
     }
@@ -76,7 +76,7 @@ export const ChatContainer = () => {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error('Failed to send message. Please check your webhook URL.');
+      toast.error('Nachricht konnte nicht gesendet werden. Bitte überprüfe deine Webhook URL.');
     } finally {
       setIsLoading(false);
     }

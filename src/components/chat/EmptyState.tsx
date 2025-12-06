@@ -4,9 +4,9 @@ import logo from '@/assets/logo.webp';
 
 export const EmptyState = () => {
   const suggestions = [
-    { icon: Sparkles, text: 'Generate creative ideas' },
-    { icon: Zap, text: 'Automate workflows' },
-    { icon: Bot, text: 'Get instant answers' },
+    { icon: Sparkles, text: 'Kreative Ideen generieren' },
+    { icon: Zap, text: 'Workflows automatisieren' },
+    { icon: Bot, text: 'Sofortige Antworten erhalten' },
   ];
 
   return (
@@ -18,11 +18,11 @@ export const EmptyState = () => {
         className="text-center"
       >
         <div className="relative mx-auto mb-6">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl">
+          <div className="mx-auto flex h-20 w-auto items-center justify-center rounded-3xl">
             <img 
               src={logo} 
               alt="Chat Logo" 
-              className="h-16 w-16 brightness-0 invert"
+              className="h-16 w-auto brightness-0 invert object-contain"
             />
           </div>
           <motion.div
@@ -33,11 +33,11 @@ export const EmptyState = () => {
         </div>
 
         <h2 className="mb-2 text-2xl font-semibold text-foreground">
-          Start a Conversation
+          Starte eine Unterhaltung
         </h2>
         <p className="mb-8 max-w-sm text-muted-foreground">
-          Connect to your n8n workflow and start chatting with AI-powered
-          automation
+          Verbinde dich mit deinem n8n-Workflow und chatte mit KI-gestützter
+          Automatisierung
         </p>
 
         <div className="grid gap-3 sm:grid-cols-3">
