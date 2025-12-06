@@ -43,6 +43,7 @@ export const ChatContainer = () => {
     setIsLoading(true);
 
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
+    const assistantMessageId = crypto.randomUUID();
 
     try {
       console.log('Sende Nachricht an n8n:', { message: content, sessionId });
@@ -63,25 +64,82 @@ export const ChatContainer = () => {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log('n8n Antwort:', data);
+      const contentType = response.headers.get('content-type') || '';
       
-      // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
-      const responseText = data.response || data.message || data.output || data.text || 
-                          (typeof data === 'string' ? data : JSON.stringify(data));
-      
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        content: responseText,
-        role: 'assistant',
-        timestamp: new Date(),
-      };
+      // Check if response is streaming (text/event-stream or chunked)
+      if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+        // Handle streaming response
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No reader available');
 
-      setMessages((prev) => [...prev, assistantMessage]);
+        const decoder = new TextDecoder();
+        let assistantContent = '';
+
+        // Create initial assistant message
+        setMessages((prev) => [...prev, {
+          id: assistantMessageId,
+          content: '',
+          role: 'assistant',
+          timestamp: new Date(),
+        }]);
+        setIsLoading(false);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          console.log('Stream chunk:', chunk);
+
+          // Parse SSE format if present
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(data);
+                const text = parsed.response || parsed.message || parsed.output || parsed.text || parsed.content || '';
+                assistantContent += text;
+              } catch {
+                // Not JSON, treat as plain text
+                assistantContent += data;
+              }
+            } else if (line.trim() && !line.startsWith(':')) {
+              // Plain text streaming (no SSE format)
+              assistantContent += line;
+            }
+          }
+
+          // Update the assistant message with accumulated content
+          setMessages((prev) => prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: assistantContent }
+              : msg
+          ));
+        }
+      } else {
+        // Handle regular JSON response
+        const data = await response.json();
+        console.log('n8n Antwort:', data);
+        
+        // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
+        const responseText = data.response || data.message || data.output || data.text || 
+                            (typeof data === 'string' ? data : JSON.stringify(data));
+        
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          content: responseText,
+          role: 'assistant',
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+        setIsLoading(false);
+      }
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
-    } finally {
       setIsLoading(false);
     }
   };
