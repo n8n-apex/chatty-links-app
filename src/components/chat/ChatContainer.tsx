@@ -65,9 +65,10 @@ export const ChatContainer = () => {
       }
 
       const contentType = response.headers.get('content-type') || '';
+      console.log('Response content-type:', contentType);
       
-      // Check if response is streaming (text/event-stream or chunked)
-      if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+      // Check if response is streaming (text/event-stream)
+      if (contentType.includes('text/event-stream')) {
         // Handle streaming response
         const reader = response.body?.getReader();
         if (!reader) throw new Error('No reader available');
@@ -119,17 +120,27 @@ export const ChatContainer = () => {
           ));
         }
       } else {
-        // Handle regular JSON response
-        const data = await response.json();
+        // Handle regular JSON response (default case)
+        let data;
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+        
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          // If not valid JSON, use raw text
+          data = { response: responseText };
+        }
+        
         console.log('n8n Antwort:', data);
         
         // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
-        const responseText = data.response || data.message || data.output || data.text || 
+        const assistantText = data.response || data.message || data.output || data.text || 
                             (typeof data === 'string' ? data : JSON.stringify(data));
         
         const assistantMessage: Message = {
           id: assistantMessageId,
-          content: responseText,
+          content: assistantText,
           role: 'assistant',
           timestamp: new Date(),
         };
