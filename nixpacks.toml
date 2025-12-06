@@ -1,5 +1,8 @@
+# Use npm instead of bun to avoid lockfile issues
+providers = ["node"]
+
 [phases.install]
-cmds = ["bun install"]
+cmds = ["npm install"]
 
 [phases.build]
-cmds = ["bun run build"]
+cmds = ["npm run build"]
