@@ -14,6 +14,7 @@ const WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -105,7 +106,7 @@ export const ChatContainer = () => {
       <main className="relative flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl">
           {messages.length === 0 ? (
-            <EmptyState />
+            <EmptyState onSuggestionClick={(text) => setInputValue(text)} />
           ) : (
             <div className="py-4">
               {messages.map((message) => (
@@ -120,7 +121,15 @@ export const ChatContainer = () => {
         </div>
       </main>
 
-      <ChatInput onSendMessage={sendMessage} isLoading={isLoading} />
+      <ChatInput 
+        onSendMessage={(msg) => {
+          sendMessage(msg);
+          setInputValue('');
+        }} 
+        isLoading={isLoading}
+        inputValue={inputValue}
+        onInputChange={setInputValue}
+      />
     </div>
   );
 };

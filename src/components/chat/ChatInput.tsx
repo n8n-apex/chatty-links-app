@@ -7,11 +7,23 @@ import { cn } from '@/lib/utils';
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   isLoading: boolean;
+  inputValue?: string;
+  onInputChange?: (value: string) => void;
 }
 
-export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
-  const [message, setMessage] = useState('');
+export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
+  const [internalMessage, setInternalMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Use controlled input if inputValue is provided
+  const message = inputValue !== undefined ? inputValue : internalMessage;
+  const setMessage = (value: string) => {
+    if (onInputChange) {
+      onInputChange(value);
+    } else {
+      setInternalMessage(value);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

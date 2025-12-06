@@ -2,7 +2,11 @@ import { motion } from 'framer-motion';
 import { PenLine, Calendar, Lightbulb } from 'lucide-react';
 import logo from '@/assets/logo.webp';
 
-export const EmptyState = () => {
+interface EmptyStateProps {
+  onSuggestionClick?: (text: string) => void;
+}
+
+export const EmptyState = ({ onSuggestionClick }: EmptyStateProps) => {
   const suggestions = [
     { icon: PenLine, text: 'Copy schreiben für Kunde X' },
     { icon: Calendar, text: 'Drehplanung erstellen für Kunde Z' },
@@ -46,7 +50,8 @@ export const EmptyState = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + i * 0.1 }}
-              className="glass rounded-xl p-4 text-center transition-colors hover:bg-muted/50 cursor-pointer"
+              onClick={() => onSuggestionClick?.(suggestion.text)}
+              className="glass rounded-xl p-4 text-center transition-colors hover:bg-muted/50 cursor-pointer active:scale-95"
             >
               <suggestion.icon className="mx-auto mb-2 h-5 w-5 text-primary" />
               <span className="text-sm text-muted-foreground">
