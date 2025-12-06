@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { MessageSquare, Settings, Zap } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import logo from '@/assets/logo.webp';
 
 interface ChatHeaderProps {
   onSettingsClick: () => void;
@@ -16,8 +17,12 @@ export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) =>
     >
       <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-glow">
-            <MessageSquare className="h-5 w-5 text-primary-foreground" />
+          <div className="flex h-10 w-10 items-center justify-center">
+            <img 
+              src={logo} 
+              alt="Chat Logo" 
+              className="h-8 w-8 brightness-0 invert"
+            />
           </div>
           <div>
             <h1 className="font-semibold text-foreground">AI Chat</h1>

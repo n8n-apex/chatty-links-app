@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { MessageSquarePlus, Sparkles, Zap, Bot } from 'lucide-react';
+import { Sparkles, Zap, Bot } from 'lucide-react';
+import logo from '@/assets/logo.webp';
 
 export const EmptyState = () => {
   const suggestions = [
@@ -17,8 +18,12 @@ export const EmptyState = () => {
         className="text-center"
       >
         <div className="relative mx-auto mb-6">
-          <div className="gradient-primary mx-auto flex h-20 w-20 items-center justify-center rounded-3xl shadow-glow">
-            <MessageSquarePlus className="h-10 w-10 text-primary-foreground" />
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl">
+            <img 
+              src={logo} 
+              alt="Chat Logo" 
+              className="h-16 w-16 brightness-0 invert"
+            />
           </div>
           <motion.div
             className="absolute -inset-4 rounded-full gradient-glow -z-10"
