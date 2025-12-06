@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
-import { Sparkles, Zap, Bot } from 'lucide-react';
+import { PenLine, Calendar, Lightbulb } from 'lucide-react';
 import logo from '@/assets/logo.webp';
 
 export const EmptyState = () => {
   const suggestions = [
-    { icon: Sparkles, text: 'Kreative Ideen generieren' },
-    { icon: Zap, text: 'Workflows automatisieren' },
-    { icon: Bot, text: 'Sofortige Antworten erhalten' },
+    { icon: PenLine, text: 'Copy schreiben für Kunde X' },
+    { icon: Calendar, text: 'Drehplanung erstellen für Kunde Z' },
+    { icon: Lightbulb, text: 'Kreative Ideen generieren' },
   ];
 
   return (
@@ -36,8 +36,7 @@ export const EmptyState = () => {
           Starte eine Unterhaltung
         </h2>
         <p className="mb-8 max-w-sm text-muted-foreground">
-          Verbinde dich mit deinem n8n-Workflow und chatte mit KI-gestützter
-          Automatisierung
+          Frage Kundeninfos aus deiner Airtable-Datenbank ab und lass dir bei Projekten helfen
         </p>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -47,7 +46,7 @@ export const EmptyState = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + i * 0.1 }}
-              className="glass rounded-xl p-4 text-center transition-colors hover:bg-muted/50"
+              className="glass rounded-xl p-4 text-center transition-colors hover:bg-muted/50 cursor-pointer"
             >
               <suggestion.icon className="mx-auto mb-2 h-5 w-5 text-primary" />
               <span className="text-sm text-muted-foreground">
