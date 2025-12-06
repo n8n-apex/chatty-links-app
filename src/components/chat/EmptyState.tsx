@@ -21,20 +21,6 @@ export const EmptyState = ({ onSuggestionClick }: EmptyStateProps) => {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="text-center"
       >
-        <div className="relative mx-auto mb-6">
-          <div className="mx-auto flex h-20 w-auto items-center justify-center rounded-3xl">
-            <img 
-              src={logo} 
-              alt="Chat Logo" 
-              className="h-16 w-auto brightness-0 invert object-contain"
-            />
-          </div>
-          <motion.div
-            className="absolute -inset-4 rounded-full gradient-glow -z-10"
-            animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          />
-        </div>
 
         <h2 className="mb-2 text-2xl font-semibold text-foreground">
           Cordes AI
