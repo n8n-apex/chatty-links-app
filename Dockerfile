@@ -2,6 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build argument for webhook URL
+ARG VITE_N8N_WEBHOOK_URL
+ENV VITE_N8N_WEBHOOK_URL=$VITE_N8N_WEBHOOK_URL
+
 # Copy package files
 COPY package.json package-lock.json ./
 
