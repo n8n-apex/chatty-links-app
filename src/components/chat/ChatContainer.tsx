@@ -5,17 +5,14 @@ import { ChatHeader } from './ChatHeader';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { TypingIndicator } from './TypingIndicator';
-import { SettingsDialog } from './SettingsDialog';
 import { EmptyState } from './EmptyState';
 import { toast } from 'sonner';
+
+const WEBHOOK_URL = 'https://your-n8n-instance.com/webhook/chat'; // Replace with your n8n webhook
 
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState(() => {
-    return localStorage.getItem('n8n-webhook-url') || '';
-  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -26,18 +23,7 @@ export const ChatContainer = () => {
     scrollToBottom();
   }, [messages, isLoading, scrollToBottom]);
 
-  const handleSaveWebhookUrl = (url: string) => {
-    setWebhookUrl(url);
-    localStorage.setItem('n8n-webhook-url', url);
-  };
-
   const sendMessage = async (content: string) => {
-    if (!webhookUrl) {
-      toast.error('Bitte konfiguriere zuerst deine n8n Webhook URL');
-      setIsSettingsOpen(true);
-      return;
-    }
-
     const userMessage: Message = {
       id: crypto.randomUUID(),
       content,
@@ -49,7 +35,7 @@ export const ChatContainer = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +62,7 @@ export const ChatContainer = () => {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error('Nachricht konnte nicht gesendet werden. Bitte überprüfe deine Webhook URL.');
+      toast.error('Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.');
     } finally {
       setIsLoading(false);
     }
@@ -97,10 +83,7 @@ export const ChatContainer = () => {
         <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
       </div>
 
-      <ChatHeader
-        onSettingsClick={() => setIsSettingsOpen(true)}
-        isConnected={!!webhookUrl}
-      />
+      <ChatHeader />
 
       <main className="relative flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl">
@@ -121,13 +104,6 @@ export const ChatContainer = () => {
       </main>
 
       <ChatInput onSendMessage={sendMessage} isLoading={isLoading} />
-
-      <SettingsDialog
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        webhookUrl={webhookUrl}
-        onSaveWebhookUrl={handleSaveWebhookUrl}
-      />
     </div>
   );
 };

@@ -1,14 +1,7 @@
 import { motion } from 'framer-motion';
-import { Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import logo from '@/assets/logo.webp';
 
-interface ChatHeaderProps {
-  onSettingsClick: () => void;
-  isConnected: boolean;
-}
-
-export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) => {
+export const ChatHeader = () => {
   return (
     <motion.header
       initial={{ opacity: 0, y: -10 }}
@@ -25,29 +18,14 @@ export const ChatHeader = ({ onSettingsClick, isConnected }: ChatHeaderProps) =>
             />
           </div>
           <div>
-            <h1 className="font-semibold text-foreground">KI Chat</h1>
+            <h1 className="font-semibold text-foreground">KI Assistent</h1>
             <div className="flex items-center gap-1.5">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground'
-                }`}
-              />
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-xs text-muted-foreground">
-                {isConnected ? 'Mit n8n verbunden' : 'Nicht konfiguriert'}
+                Airtable verbunden
               </span>
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="glass"
-            size="icon"
-            onClick={onSettingsClick}
-            className="rounded-xl"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     </motion.header>
