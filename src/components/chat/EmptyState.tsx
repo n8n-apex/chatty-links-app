@@ -33,7 +33,7 @@ export const EmptyState = () => {
         </div>
 
         <h2 className="mb-2 text-2xl font-semibold text-foreground">
-          Starte eine Unterhaltung
+          Cordes AI
         </h2>
         <p className="mx-auto mb-8 max-w-sm text-center text-muted-foreground">
           Frage Kundeninfos aus deiner Airtable-Datenbank ab und lass dir bei Projekten helfen
