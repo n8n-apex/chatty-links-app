@@ -52,7 +52,7 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
+              placeholder="Schreibe deine Nachricht..."
               rows={1}
               disabled={isLoading}
               className={cn(
@@ -76,8 +76,8 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
           </div>
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          Press <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Enter</kbd> to send,{' '}
-          <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> for new line
+          Drücke <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Enter</kbd> zum Senden,{' '}
+          <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> für neue Zeile
         </p>
       </form>
     </motion.div>

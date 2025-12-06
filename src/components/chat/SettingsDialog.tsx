@@ -21,7 +21,7 @@ export const SettingsDialog = ({
 
   const handleSave = () => {
     onSaveWebhookUrl(url);
-    toast.success('Webhook URL saved successfully');
+    toast.success('Webhook URL erfolgreich gespeichert');
     onClose();
   };
 
@@ -45,7 +45,7 @@ export const SettingsDialog = ({
           >
             <div className="glass rounded-2xl p-6 shadow-soft">
               <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">Settings</h2>
+                <h2 className="text-lg font-semibold text-foreground">Einstellungen</h2>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -66,11 +66,11 @@ export const SettingsDialog = ({
                     type="url"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://your-n8n-instance.com/webhook/..."
+                    placeholder="https://deine-n8n-instanz.com/webhook/..."
                     className="w-full rounded-xl border border-border bg-secondary/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Enter your n8n webhook URL to connect the chat interface
+                    Gib deine n8n Webhook URL ein, um das Chat-Interface zu verbinden
                   </p>
                 </div>
 
@@ -80,7 +80,7 @@ export const SettingsDialog = ({
                   className="w-full"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  Save Settings
+                  Einstellungen speichern
                 </Button>
               </div>
             </div>
