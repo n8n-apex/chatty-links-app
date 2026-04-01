@@ -22,7 +22,9 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
             <img 
               src={logo} 
               alt="PMM Logo" 
-              className="h-8 w-auto object-contain"
+              className="h-10 w-auto object-contain"
+              style={{ imageRendering: 'auto' }}
+              loading="eager"
             />
           </button>
         </div>
