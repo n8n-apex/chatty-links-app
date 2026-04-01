@@ -21,17 +21,17 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
           >
             <img 
               src={logo} 
-              alt="Chat Logo" 
-              className="h-8 w-auto brightness-0 invert object-contain"
+              alt="PMM Logo" 
+              className="h-8 w-auto object-contain"
             />
           </button>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <h1 className="font-semibold text-foreground">APEX AI Assistant</h1>
+            <h1 className="font-semibold text-foreground">PMM AI Chat Assistant</h1>
             <div className="flex items-center justify-end gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               <span className="text-xs text-muted-foreground">
                 Airtable verbunden
               </span>
