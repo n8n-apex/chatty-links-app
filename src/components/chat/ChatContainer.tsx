@@ -7,9 +7,7 @@ import { ChatInput } from './ChatInput';
 import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
 import { toast } from 'sonner';
-
-// Webhook URL aus Environment Variable (für Railway) oder Fallback
-const WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
+import { supabase } from '@/integrations/supabase/client';
 
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
