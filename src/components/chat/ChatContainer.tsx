@@ -24,12 +24,6 @@ export const ChatContainer = () => {
   }, [messages, isLoading, scrollToBottom]);
 
   const sendMessage = async (content: string) => {
-    if (!WEBHOOK_URL) {
-      toast.error('Webhook URL nicht konfiguriert. Bitte VITE_N8N_WEBHOOK_URL setzen.');
-      console.error('VITE_N8N_WEBHOOK_URL ist nicht gesetzt');
-      return;
-    }
-
     const userMessage: Message = {
       id: crypto.randomUUID(),
       content,
@@ -43,29 +37,20 @@ export const ChatContainer = () => {
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
 
     try {
-      console.log('Sende Nachricht an n8n:', { message: content, sessionId });
-      console.log('Webhook URL:', WEBHOOK_URL);
+      console.log('Sende Nachricht über Edge Function:', { message: content, sessionId });
       
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('chat-proxy', {
+        body: {
           message: content,
           sessionId: sessionId,
           timestamp: new Date().toISOString(),
-        }),
+        },
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (error) {
+        throw new Error(error.message);
       }
 
-      const data = await response.json();
       console.log('n8n Antwort:', data);
       
       // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
