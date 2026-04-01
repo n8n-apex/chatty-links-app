@@ -21,8 +21,8 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
           >
             <img 
               src={logo} 
-              alt="Chat Logo" 
-              className="h-8 w-auto brightness-0 invert object-contain"
+              alt="PMM Logo" 
+              className="h-8 w-auto object-contain"
             />
           </button>
         </div>
