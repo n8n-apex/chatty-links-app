@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
-import logo from '@/assets/logo.webp';
+import logo from '@/assets/logo.png';
 
 interface ChatHeaderProps {
   onLogoClick?: () => void;
