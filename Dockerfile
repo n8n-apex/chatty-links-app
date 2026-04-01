@@ -27,6 +27,8 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx config for SPA routing
 RUN echo 'server { \
     listen 80; \
+    add_header X-Frame-Options ""; \
+    add_header Content-Security-Policy "frame-ancestors *;"; \
     location / { \
         root /usr/share/nginx/html; \
         index index.html; \
