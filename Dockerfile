@@ -26,7 +26,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN echo 'server { \
-    listen ${PORT:-80}; \
+    listen ${PORT}; \
     add_header X-Frame-Options ""; \
     add_header Content-Security-Policy "frame-ancestors *;"; \
     location / { \
@@ -36,6 +36,6 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf.template
 
-EXPOSE 80
+EXPOSE 8080
 
-CMD ["/bin/sh", "-c", "envsubst '${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "export PORT=${PORT:-8080}; envsubst '$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
