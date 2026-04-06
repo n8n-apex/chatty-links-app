@@ -53,9 +53,20 @@ export const ChatContainer = () => {
 
       console.log('n8n Antwort:', data);
       
-      // Flexible Antwort-Erkennung (n8n kann verschiedene Formate zurückgeben)
-      const responseText = data.response || data.message || data.output || data.text || 
-                          (typeof data === 'string' ? data : JSON.stringify(data));
+      // Flexible Antwort-Erkennung: unterstützt verschachtelte JSON und Arrays
+      let responseText: string;
+      
+      if (typeof data === 'string') {
+        responseText = data;
+      } else if (Array.isArray(data)) {
+        // n8n sometimes returns an array of objects
+        const first = data[0];
+        responseText = first?.output || first?.response || first?.message || first?.text || JSON.stringify(data);
+      } else if (data && typeof data === 'object') {
+        responseText = data.output || data.response || data.message || data.text || JSON.stringify(data);
+      } else {
+        responseText = String(data);
+      }
       
       const assistantMessage: Message = {
         id: crypto.randomUUID(),

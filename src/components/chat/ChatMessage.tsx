@@ -50,7 +50,26 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               : 'glass text-foreground rounded-bl-md'
           )}
         >
-          {message.content}
+          {isUser ? (
+            message.content
+          ) : (
+            <ReactMarkdown
+              className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc"
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
+                h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
+                h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
+                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+                code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          )}
         </div>
         <span className="px-2 text-xs text-muted-foreground">
           {message.timestamp.toLocaleTimeString([], {
