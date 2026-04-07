@@ -61,29 +61,40 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           >
             {isUser ? (
               message.content
-            ) : /<\s*img\s/i.test(message.content) ? (
-              <div
-                className="prose prose-sm max-w-none [&_img]:max-w-full [&_img]:rounded-lg"
-                dangerouslySetInnerHTML={{ __html: message.content }}
-              />
             ) : (
-              <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-                    li: ({ children }) => <li className="mb-1">{children}</li>,
-                    h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
-                    h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
-                    h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
-                    a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
-                    code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              </div>
+              <>
+                {/* Render image from imageUrl or from img tag in content */}
+                {(message.imageUrl || /<\s*img\s/i.test(message.content)) && (
+                  <div className="mb-2">
+                    <img
+                      src={message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || ''}
+                      alt="Generated image"
+                      className="max-w-full rounded-lg"
+                      style={{ maxHeight: '400px' }}
+                    />
+                  </div>
+                )}
+                {/* Render text content only if it's not just an img tag */}
+                {!/<\s*img\s/i.test(message.content) && (
+                  <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
+                        h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
+                        h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
+                        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+                        code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
