@@ -55,15 +55,16 @@ export const ChatContainer = () => {
       
       // Flexible Antwort-Erkennung: unterstützt verschachtelte JSON und Arrays
       let responseText: string;
+      let imageUrl: string | undefined;
+      
+      const parsed = Array.isArray(data) ? data[0] : data;
       
       if (typeof data === 'string') {
         responseText = data;
-      } else if (Array.isArray(data)) {
-        // n8n sometimes returns an array of objects
-        const first = data[0];
-        responseText = first?.output || first?.response || first?.message || first?.text || JSON.stringify(data);
-      } else if (data && typeof data === 'object') {
-        responseText = data.output || data.response || data.message || data.text || JSON.stringify(data);
+      } else if (parsed && typeof parsed === 'object') {
+        // Extract imageUrl if present
+        imageUrl = parsed.imageUrl || parsed.image_url || undefined;
+        responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
       } else {
         responseText = String(data);
       }
@@ -73,6 +74,7 @@ export const ChatContainer = () => {
         content: responseText,
         role: 'assistant',
         timestamp: new Date(),
+        imageUrl,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
