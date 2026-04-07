@@ -61,6 +61,11 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           >
             {isUser ? (
               message.content
+            ) : /<\s*img\s/i.test(message.content) ? (
+              <div
+                className="prose prose-sm max-w-none [&_img]:max-w-full [&_img]:rounded-lg"
+                dangerouslySetInnerHTML={{ __html: message.content }}
+              />
             ) : (
               <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
                 <ReactMarkdown
