@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import { User, Bot, Copy, Check, Download } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
