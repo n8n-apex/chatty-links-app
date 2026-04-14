@@ -5,6 +5,7 @@ import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessageProps {
   message: Message;
@@ -22,8 +23,14 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
   const handleDownload = async (url: string) => {
     try {
-      const res = await fetch(url);
-      const blob = await res.blob();
+      const { data, error } = await supabase.functions.invoke('image-proxy', {
+        body: { url },
+      });
+
+      if (error) throw error;
+
+      // data is already a Blob when Content-Type is not JSON
+      const blob = data instanceof Blob ? data : new Blob([data]);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
