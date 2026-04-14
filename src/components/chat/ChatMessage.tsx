@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ChatMessageProps {
   message: Message;
