@@ -5,7 +5,6 @@ import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessageProps {
   message: Message;
@@ -21,35 +20,19 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = async (url: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('image-proxy', {
-        body: { url },
-      });
-
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || 'Download failed');
-
-      // Convert base64 to blob
-      const byteChars = atob(data.base64);
-      const byteNumbers = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) {
-        byteNumbers[i] = byteChars.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: data.contentType || 'image/jpeg' });
-
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = 'generated-image.jpg';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      toast.error('Download fehlgeschlagen');
+  const handleDownload = (url: string) => {
+    if (!url) {
+      toast.error('Download-Link fehlt');
+      return;
     }
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
