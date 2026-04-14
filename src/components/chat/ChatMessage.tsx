@@ -20,6 +20,23 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDownload = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'generated-image.jpg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error('Download fehlgeschlagen');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
