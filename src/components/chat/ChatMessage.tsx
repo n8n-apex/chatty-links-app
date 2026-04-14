@@ -5,6 +5,7 @@ import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessageProps {
   message: Message;
