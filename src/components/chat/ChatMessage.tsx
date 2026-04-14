@@ -90,16 +90,13 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
                       className="max-w-full rounded-lg"
                       style={{ maxHeight: '400px' }}
                     />
-                    <a
-                      href={message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || ''}
-                      download="generated-image.jpg"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute bottom-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-lg p-2 bg-background/80 backdrop-blur-sm border border-border text-foreground hover:bg-background shadow-sm"
+                    <button
+                      onClick={() => handleDownload(message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || '')}
+                      className="absolute bottom-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-lg p-2 bg-background/80 backdrop-blur-sm border border-border text-foreground hover:bg-background shadow-sm cursor-pointer"
                       title="Bild herunterladen"
                     >
                       <Download className="h-4 w-4" />
-                    </a>
+                    </button>
                   </div>
                 )}
                 {/* Render text content only if it's not just an img tag */}
