@@ -28,9 +28,17 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
       });
 
       if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Download failed');
 
-      // data is already a Blob when Content-Type is not JSON
-      const blob = data instanceof Blob ? data : new Blob([data]);
+      // Convert base64 to blob
+      const byteChars = atob(data.base64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: data.contentType || 'image/jpeg' });
+
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
