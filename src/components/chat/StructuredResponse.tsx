@@ -31,7 +31,7 @@ export interface StructuredPayload {
   antwortschreiben_entwurf?: string;
   // B6 - Stellungnahme
   sachverhalt?: string;
-  kernargumente?: string[];
+  kernargumente?: Array<string | { punkt?: string; argument?: string; rechtsgrundlage?: string; [key: string]: unknown }>;
   ergebnis?: string;
   entwurf_stellungnahme?: string;
 }
@@ -104,10 +104,21 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
         {Array.isArray(data.kernargumente) && data.kernargumente.length > 0 && (
           <div>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kernargumente</div>
-            <ol className="ml-4 list-decimal space-y-1 text-sm text-foreground">
-              {data.kernargumente.map((arg, i) => (
-                <li key={i} className="leading-relaxed">{arg}</li>
-              ))}
+            <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
+              {data.kernargumente.map((arg, i) => {
+                if (typeof arg === 'string') {
+                  return <li key={i} className="leading-relaxed">{arg}</li>;
+                }
+                return (
+                  <li key={i} className="leading-relaxed">
+                    {arg.punkt && <div className="font-medium">{arg.punkt}</div>}
+                    {arg.argument && <div className="text-muted-foreground">{arg.argument}</div>}
+                    {arg.rechtsgrundlage && (
+                      <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           </div>
         )}
