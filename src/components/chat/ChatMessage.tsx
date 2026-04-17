@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from 'lucide-react';
+import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { StructuredResponse, tryParseStructured } from './StructuredResponse';
+import { ConfidenceIndicator } from './ConfidenceIndicator';
+import { exportResponseToPdf, countSources } from '@/lib/exportPdf';
 
 export type FeedbackStatus = 'correct' | 'correction' | 'inaccurate' | 'note';
 
