@@ -110,10 +110,13 @@ export const ChatContainer = () => {
 
   const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
     try {
-      const webhookUrl = 'http://178.104.144.16:5678/webhook/building-law-gpt';
-      await fetch(webhookUrl, {
+      console.log('Sending feedback:', { messageId, status });
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-proxy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
         body: JSON.stringify({
           action: 'submit_feedback',
           response_id: messageId,
@@ -122,6 +125,7 @@ export const ChatContainer = () => {
           sessionId: localStorage.getItem('chat-session-id')
         })
       });
+      console.log('Feedback response:', response.status);
     } catch (e) {
       console.error('Feedback error:', e);
     }
