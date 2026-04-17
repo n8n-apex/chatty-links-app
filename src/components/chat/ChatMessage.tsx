@@ -284,12 +284,21 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           </div>
         )}
 
-        <span className="px-2 text-xs text-muted-foreground">
-          {message.timestamp.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
+        {!isUser && sourceCount > 0 && (
+          <ConfidenceIndicator sources={sourceCount} className="px-2" />
+        )}
+
+        <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+          <span>
+            {message.timestamp.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+          {!isUser && typeof message.durationMs === 'number' && (
+            <span title="Antwortzeit">· Antwort in {(message.durationMs / 1000).toFixed(1)}s</span>
+          )}
+        </div>
       </div>
     </motion.div>
   );
