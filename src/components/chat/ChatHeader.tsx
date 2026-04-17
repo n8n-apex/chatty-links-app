@@ -41,7 +41,7 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
           >
             <img 
               src={logo} 
-              alt="PMM Logo" 
+              alt="Umnutzung.de - Fewolizenz GmbH" 
               className="h-10 w-auto object-contain"
               style={{ imageRendering: 'auto' }}
               loading="eager"
