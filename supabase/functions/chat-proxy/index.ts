@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const { message, sessionId, timestamp } = body
 
-    if (!message || typeof message !== 'string') {
+    if (body.action !== 'submit_feedback' && (!message || typeof message !== 'string')) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
