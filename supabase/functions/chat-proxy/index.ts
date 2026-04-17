@@ -44,6 +44,24 @@ Deno.serve(async (req) => {
       )
     }
 
+    if (body.action === 'submit_feedback') {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          response_id: body.response_id,
+          status: body.status,
+          corrected_text: body.corrected_text || null,
+          sessionId: body.sessionId,
+        }),
+      });
+      return new Response(
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
 
     const response = await fetch(webhookUrl, {
