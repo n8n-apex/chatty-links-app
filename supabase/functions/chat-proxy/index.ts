@@ -19,6 +19,23 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Detect action from message content if not explicitly set
+    if (!body.action && body.message) {
+      const msg = body.message.toLowerCase();
+      if (msg.startsWith('ich habe eine baurechtsfrage') || msg.includes('?')) {
+        body.action = 'question';
+        body.question = body.message;
+      } else if (msg.startsWith('erstelle eine stellungnahme')) {
+        body.action = 'draft_statement';
+        body.topic = body.message.replace('erstelle eine stellungnahme zum thema:', '').trim();
+      } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
+        body.action = 'analyze_pdf';
+      } else {
+        body.action = 'question';
+        body.question = body.message;
+      }
+    }
+
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
     if (!webhookUrl) {
       return new Response(
