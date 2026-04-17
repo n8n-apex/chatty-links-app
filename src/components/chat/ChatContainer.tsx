@@ -36,12 +36,27 @@ export const ChatContainer = () => {
 
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
 
+    // Action detection
+    const msg = content.toLowerCase();
+    let action = 'question';
+    const extra: Record<string, string> = { question: content };
+    if (msg.startsWith('erstelle eine stellungnahme')) {
+      action = 'draft_statement';
+      extra.topic = content.replace(/erstelle eine stellungnahme zum thema:?/i, '').trim();
+      delete extra.question;
+    } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
+      action = 'analyze_pdf';
+      delete extra.question;
+    }
+
     try {
-      console.log('Sende Nachricht über Edge Function:', { message: content, sessionId });
-      
+      console.log('Sende Nachricht über Edge Function:', { message: content, sessionId, action });
+
       const { data, error } = await supabase.functions.invoke('chat-proxy', {
         body: {
           message: content,
+          action,
+          ...extra,
           sessionId: sessionId,
           timestamp: new Date().toISOString(),
         },
@@ -110,11 +125,20 @@ export const ChatContainer = () => {
     }
   };
 
-  // Session ID initialisieren
+  // Session ID + welcome message initialisieren
   useEffect(() => {
     if (!localStorage.getItem('chat-session-id')) {
       localStorage.setItem('chat-session-id', crypto.randomUUID());
     }
+    setMessages([
+      {
+        id: crypto.randomUUID(),
+        content:
+          'Willkommen bei Baurecht GPT! Sie können mir Fragen zum deutschen Baurecht stellen, eine Stellungnahme erstellen lassen oder ein Behördenschreiben zur Analyse hochladen. Wie kann ich Ihnen helfen?',
+        role: 'assistant',
+        timestamp: new Date(),
+      },
+    ]);
   }, []);
 
   return (
