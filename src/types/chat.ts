@@ -1,8 +1,3 @@
-export interface MessageAttachment {
-  fileName: string;
-  fileBase64: string;
-}
-
 export interface Message {
   id: string;
   content: string;
@@ -10,7 +5,6 @@ export interface Message {
   timestamp: Date;
   imageUrl?: string;
   durationMs?: number;
-  attachment?: MessageAttachment;
 }
 
 export interface ChatConfig {
