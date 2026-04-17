@@ -43,6 +43,7 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
   };
 
   const submitFeedback = async (status: FeedbackStatus, text?: string) => {
+    console.log('Feedback clicked:', status);
     try {
       await onFeedback?.(message.id, status, text);
       setActiveStatus(status);
@@ -166,7 +167,7 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
 
         {!isUser && (
           <div className="mt-1 w-full">
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => handleQuickFeedback('correct')}
                 className={cn(
