@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, AlertTriangle, Info, CheckCircle2, FileText } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ChevronDown, ChevronRight, AlertTriangle, Info, CheckCircle2, FileText, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Rechtsgrundlage {
@@ -70,6 +71,61 @@ const getBeurteilungVariant = (text?: string): string => {
   return 'bg-yellow-500/15 text-yellow-500 border-yellow-500/30';
 };
 
+const containerVariants = {
+  hidden: { opacity: 1 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.12,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
+};
+
+const Section = ({ children }: { children: React.ReactNode }) => (
+  <motion.div variants={itemVariants}>{children}</motion.div>
+);
+
+const ParagraphBadge = ({ paragraph, quelle }: { paragraph?: string; quelle?: string }) => {
+  const [copied, setCopied] = useState(false);
+  const fullRef = [paragraph, quelle].filter(Boolean).join(' — ');
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!fullRef) return;
+    try {
+      await navigator.clipboard.writeText(fullRef);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="group/badge relative inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/20 cursor-pointer"
+      title={`Kopieren: ${fullRef}`}
+    >
+      <span className="font-medium">{paragraph}</span>
+      {quelle && <span className="text-primary/70">· {quelle}</span>}
+      {copied && (
+        <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-green-500">
+          <Check className="h-2.5 w-2.5" />
+          Kopiert!
+        </span>
+      )}
+    </button>
+  );
+};
+
 const Collapsible = ({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -97,12 +153,14 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
   // B6 - Stellungnahme
   if (data.entwurf_stellungnahme || data.kernargumente) {
     return (
-      <div className="flex flex-col gap-3">
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.sachverhalt && (
-          <p className="text-sm leading-relaxed text-foreground">{data.sachverhalt}</p>
+          <Section>
+            <p className="text-sm leading-relaxed text-foreground">{data.sachverhalt}</p>
+          </Section>
         )}
         {Array.isArray(data.kernargumente) && data.kernargumente.length > 0 && (
-          <div>
+          <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kernargumente</div>
             <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
               {data.kernargumente.map((arg, i) => {
@@ -120,99 +178,112 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
                 );
               })}
             </ol>
-          </div>
+          </Section>
         )}
         {data.ergebnis && (
-          <div className="flex gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500 mt-0.5" />
-            <div className="text-sm text-foreground">
-              <div className="mb-0.5 text-xs font-semibold text-green-500 uppercase tracking-wide">Ergebnis</div>
-              {data.ergebnis}
+          <Section>
+            <div className="flex gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500 mt-0.5" />
+              <div className="text-sm text-foreground">
+                <div className="mb-0.5 text-xs font-semibold text-green-500 uppercase tracking-wide">Ergebnis</div>
+                {data.ergebnis}
+              </div>
             </div>
-          </div>
+          </Section>
         )}
         {data.entwurf_stellungnahme && (
-          <Collapsible title="Entwurf Stellungnahme">{data.entwurf_stellungnahme}</Collapsible>
+          <Section>
+            <Collapsible title="Entwurf Stellungnahme">{data.entwurf_stellungnahme}</Collapsible>
+          </Section>
         )}
-        {renderCommonExtras(data)}
-      </div>
+        <Section>{renderCommonExtras(data)}</Section>
+      </motion.div>
     );
   }
 
   // B4 - Behördenschreiben Analyse
   if (data.zusammenfassung || data.analyse_der_forderungen || data.antwortschreiben_entwurf) {
     return (
-      <div className="flex flex-col gap-3">
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.zusammenfassung && (
-          <p className="text-sm leading-relaxed text-foreground">{data.zusammenfassung}</p>
+          <Section>
+            <p className="text-sm leading-relaxed text-foreground">{data.zusammenfassung}</p>
+          </Section>
         )}
         {data.gesamtbeurteilung && (
-          <div>
+          <Section>
             <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium', getBeurteilungVariant(data.gesamtbeurteilung))}>
               {data.gesamtbeurteilung}
             </span>
-          </div>
+          </Section>
         )}
         {Array.isArray(data.analyse_der_forderungen) && data.analyse_der_forderungen.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Analyse der Forderungen</div>
-            {data.analyse_der_forderungen.map((f, i) => (
-              <div key={i} className="rounded-lg border border-border bg-background/40 p-3">
-                {f.forderung && <div className="mb-1 text-sm font-medium text-foreground">{f.forderung}</div>}
-                {f.bewertung && (
-                  <span className={cn('mb-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium', getBeurteilungVariant(f.bewertung))}>
-                    {f.bewertung}
-                  </span>
-                )}
-                {f.begruendung && <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{f.begruendung}</p>}
-              </div>
-            ))}
-          </div>
+          <Section>
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Analyse der Forderungen</div>
+              {data.analyse_der_forderungen.map((f, i) => (
+                <div key={i} className="rounded-lg border border-border bg-background/40 p-3">
+                  {f.forderung && <div className="mb-1 text-sm font-medium text-foreground">{f.forderung}</div>}
+                  {f.bewertung && (
+                    <span className={cn('mb-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium', getBeurteilungVariant(f.bewertung))}>
+                      {f.bewertung}
+                    </span>
+                  )}
+                  {f.begruendung && <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{f.begruendung}</p>}
+                </div>
+              ))}
+            </div>
+          </Section>
         )}
         {data.antwortschreiben_entwurf && (
-          <Collapsible title="Antwortschreiben Entwurf">{data.antwortschreiben_entwurf}</Collapsible>
+          <Section>
+            <Collapsible title="Antwortschreiben Entwurf">{data.antwortschreiben_entwurf}</Collapsible>
+          </Section>
         )}
-        {renderCommonExtras(data)}
-      </div>
+        <Section>{renderCommonExtras(data)}</Section>
+      </motion.div>
     );
   }
 
   // B1/B2 - Rechtsfrage (default with antwort)
   return (
-    <div className="flex flex-col gap-3">
+    <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
       {data.antwort && (
-        <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
+        <Section>
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
+        </Section>
       )}
       {Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0 && (
-        <div>
+        <Section>
           <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
           <div className="flex flex-wrap gap-1.5">
             {data.rechtsgrundlage.map((r, i) => (
-              <span key={i} className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary">
-                <span className="font-medium">{r.paragraph}</span>
-                {r.quelle && <span className="text-primary/70">· {r.quelle}</span>}
-              </span>
+              <ParagraphBadge key={i} paragraph={r.paragraph} quelle={r.quelle} />
             ))}
           </div>
-        </div>
+        </Section>
       )}
       {typeof data.rechtsgrundlage === 'string' && (
-        <div className="text-xs text-foreground">
-          <span className="font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage: </span>
-          {data.rechtsgrundlage}
-        </div>
+        <Section>
+          <div className="text-xs text-foreground">
+            <span className="font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage: </span>
+            {data.rechtsgrundlage}
+          </div>
+        </Section>
       )}
       {data.fehlende_informationen && (
-        <div className="flex gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500 mt-0.5" />
-          <div className="text-sm text-foreground">
-            <div className="mb-0.5 text-xs font-semibold text-yellow-500 uppercase tracking-wide">Fehlende Informationen</div>
-            {data.fehlende_informationen}
+        <Section>
+          <div className="flex gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500 mt-0.5" />
+            <div className="text-sm text-foreground">
+              <div className="mb-0.5 text-xs font-semibold text-yellow-500 uppercase tracking-wide">Fehlende Informationen</div>
+              {data.fehlende_informationen}
+            </div>
           </div>
-        </div>
+        </Section>
       )}
       {data.naechste_schritte && (
-        <div>
+        <Section>
           <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nächste Schritte</div>
           {Array.isArray(data.naechste_schritte) ? (
             <ol className="ml-4 list-decimal space-y-1 text-sm text-foreground">
@@ -223,19 +294,21 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
               <li className="leading-relaxed">{data.naechste_schritte}</li>
             </ol>
           )}
-        </div>
+        </Section>
       )}
       {data.wichtiger_hinweis && (
-        <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
-          <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
-          <div className="text-sm text-foreground">
-            <div className="mb-0.5 text-xs font-semibold text-blue-500 uppercase tracking-wide">Wichtiger Hinweis</div>
-            {data.wichtiger_hinweis}
+        <Section>
+          <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+            <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+            <div className="text-sm text-foreground">
+              <div className="mb-0.5 text-xs font-semibold text-blue-500 uppercase tracking-wide">Wichtiger Hinweis</div>
+              {data.wichtiger_hinweis}
+            </div>
           </div>
-        </div>
+        </Section>
       )}
-      {renderCommonExtras(data)}
-    </div>
+      <Section>{renderCommonExtras(data)}</Section>
+    </motion.div>
   );
 };
 
