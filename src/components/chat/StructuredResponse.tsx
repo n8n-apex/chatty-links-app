@@ -22,7 +22,7 @@ export interface StructuredPayload {
   fehlende_informationen?: string | null;
   naechste_schritte?: string | string[] | null;
   wichtiger_hinweis?: string | null;
-  quellen?: string[] | string;
+  quellen?: Array<string | { file?: string; state?: string; type?: string; [key: string]: unknown }> | string;
   action?: string;
   // B4 - Behördenschreiben Analyse
   zusammenfassung?: string;
@@ -237,11 +237,16 @@ const renderCommonExtras = (data: StructuredPayload) => {
   if (quellen.length === 0) return null;
   return (
     <div className="mt-1 flex flex-wrap gap-1.5 border-t border-border pt-2">
-      {quellen.map((q, i) => (
-        <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-          {q}
-        </span>
-      ))}
+      {quellen.map((q, i) => {
+        const label = typeof q === 'string'
+          ? q
+          : [q.file, q.state, q.type].filter(Boolean).join(' · ') || JSON.stringify(q);
+        return (
+          <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 };
