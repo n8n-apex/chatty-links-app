@@ -9,7 +9,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { message, sessionId, timestamp } = await req.json()
+    const body = await req.json()
+    const { message, sessionId, timestamp } = body
 
     if (!message || typeof message !== 'string') {
       return new Response(
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, sessionId, timestamp }),
+      body: JSON.stringify(body),
     })
 
     const rawText = await response.text()
