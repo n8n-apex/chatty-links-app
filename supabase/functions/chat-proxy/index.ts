@@ -79,7 +79,20 @@ Deno.serve(async (req) => {
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        action: body.action,
+        file_id: body.file_id || null,
+        file_name: body.file_name || 'Behördenschreiben.pdf',
+        state: body.state || null,
+        question: body.question || null,
+        topic: body.topic || null,
+        message: body.message,
+        sessionId: body.sessionId,
+        timestamp: body.timestamp,
+        response_id: body.response_id || null,
+        status: body.status || null,
+        corrected_text: body.corrected_text || null,
+      }),
     })
 
     const rawText = await response.text()
