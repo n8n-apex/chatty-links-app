@@ -49,6 +49,7 @@ export const ChatContainer = () => {
       delete extra.question;
     }
 
+    const startTime = performance.now();
     try {
       console.log('Sende Nachricht über Edge Function:', { message: content, sessionId, action });
 
@@ -95,6 +96,7 @@ export const ChatContainer = () => {
         role: 'assistant',
         timestamp: new Date(),
         imageUrl,
+        durationMs: performance.now() - startTime,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
