@@ -64,7 +64,12 @@ export const ChatContainer = () => {
       } else if (parsed && typeof parsed === 'object') {
         // Extract imageUrl if present
         imageUrl = parsed.imageUrl || parsed.image_url || undefined;
-        responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+        // Handle Baurecht GPT structured response
+        if (parsed.action === 'question' || parsed.antwort) {
+          responseText = JSON.stringify(parsed);
+        } else {
+          responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+        }
       } else {
         responseText = String(data);
       }
