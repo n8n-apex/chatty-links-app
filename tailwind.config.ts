@@ -88,6 +88,10 @@ export default {
           "0%, 60%, 100%": { transform: "translateY(0)" },
           "30%": { transform: "translateY(-4px)" },
         },
+        "float-gentle": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -95,6 +99,7 @@ export default {
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
         "slide-up": "slide-up 0.3s ease-out",
         "typing-dot": "typing-dot 1.4s ease-in-out infinite",
+        "float-gentle": "float-gentle 4s ease-in-out infinite",
       },
     },
   },

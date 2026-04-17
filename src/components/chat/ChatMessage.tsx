@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from 'lucide-react';
+import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { StructuredResponse, tryParseStructured } from './StructuredResponse';
+import { ConfidenceIndicator } from './ConfidenceIndicator';
+import { exportResponseToPdf, countSources } from '@/lib/exportPdf';
 
 export type FeedbackStatus = 'correct' | 'correction' | 'inaccurate' | 'note';
 
@@ -20,6 +22,9 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
   const [textareaOpen, setTextareaOpen] = useState<'correction' | 'note' | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
+
+  const structured = !isUser ? tryParseStructured(message.content) : null;
+  const sourceCount = structured ? countSources(structured) : 0;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -126,7 +131,6 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
                   </div>
                 )}
                 {!/<\s*img\s/i.test(message.content) && (() => {
-                  const structured = tryParseStructured(message.content);
                   if (structured) {
                     return <StructuredResponse data={structured} />;
                   }
@@ -155,13 +159,30 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           </div>
 
           {!isUser && (
-            <button
-              onClick={handleCopy}
-              className="absolute -bottom-1 right-1 translate-y-full opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              title="Text kopieren"
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
+            <div className="absolute -bottom-1 right-1 translate-y-full flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={handleCopy}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                title="Text kopieren"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    exportResponseToPdf(structured ?? {}, message.content);
+                  } catch (err) {
+                    console.error('PDF export error:', err);
+                    toast.error('PDF konnte nicht erstellt werden');
+                  }
+                }}
+                className="flex items-center gap-1 rounded-md px-1.5 py-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                title="Als PDF exportieren"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="text-[11px]">Export</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -263,12 +284,21 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           </div>
         )}
 
-        <span className="px-2 text-xs text-muted-foreground">
-          {message.timestamp.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
+        {!isUser && sourceCount > 0 && (
+          <ConfidenceIndicator sources={sourceCount} className="px-2" />
+        )}
+
+        <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+          <span>
+            {message.timestamp.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+          {!isUser && typeof message.durationMs === 'number' && (
+            <span title="Antwortzeit">· Antwort in {(message.durationMs / 1000).toFixed(1)}s</span>
+          )}
+        </div>
       </div>
     </motion.div>
   );

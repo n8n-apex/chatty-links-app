@@ -4,6 +4,7 @@ export interface Message {
   role: 'user' | 'assistant';
   timestamp: Date;
   imageUrl?: string;
+  durationMs?: number;
 }
 
 export interface ChatConfig {

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MessageSquare, FileText, Search } from 'lucide-react';
+import { MessageSquare, FileText, Search, Scale } from 'lucide-react';
 
 interface EmptyStateProps {
   onSuggestionClick?: (text: string) => void;
@@ -35,6 +35,14 @@ export const EmptyState = ({ onSuggestionClick }: EmptyStateProps) => {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="text-center"
       >
+        <div className="mb-4 flex justify-center">
+          <div className="relative animate-float-gentle">
+            <div className="absolute inset-0 rounded-full bg-primary/20 blur-2xl" aria-hidden />
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary shadow-glow">
+              <Scale className="h-8 w-8 text-primary-foreground" />
+            </div>
+          </div>
+        </div>
         <h2 className="mb-2 text-2xl font-semibold text-foreground">
           Baurecht GPT
         </h2>
