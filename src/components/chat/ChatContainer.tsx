@@ -86,6 +86,18 @@ export const ChatContainer = () => {
     }
   };
 
+  const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
+    await supabase.functions.invoke('chat-proxy', {
+      body: {
+        action: 'submit_feedback',
+        response_id: messageId,
+        status: status,
+        corrected_text: correctedText || null,
+        sessionId: localStorage.getItem('chat-session-id'),
+      },
+    });
+  };
+
   // Session ID initialisieren
   useEffect(() => {
     if (!localStorage.getItem('chat-session-id')) {
@@ -110,7 +122,7 @@ export const ChatContainer = () => {
           ) : (
             <div className="py-4">
               {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} />
               ))}
               <AnimatePresence>
                 {isLoading && <TypingIndicator />}
