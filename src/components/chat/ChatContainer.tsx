@@ -131,20 +131,11 @@ export const ChatContainer = () => {
     }
   };
 
-  // Session ID + welcome message initialisieren
+  // Session ID initialisieren
   useEffect(() => {
     if (!localStorage.getItem('chat-session-id')) {
       localStorage.setItem('chat-session-id', crypto.randomUUID());
     }
-    setMessages([
-      {
-        id: crypto.randomUUID(),
-        content:
-          'Willkommen bei Baurecht GPT! Sie können mir Fragen zum deutschen Baurecht stellen, eine Stellungnahme erstellen lassen oder ein Behördenschreiben zur Analyse hochladen. Wie kann ich Ihnen helfen?',
-        role: 'assistant',
-        timestamp: new Date(),
-      },
-    ]);
   }, []);
 
   return (
