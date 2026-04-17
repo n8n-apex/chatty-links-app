@@ -49,13 +49,10 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <h1 className="font-semibold text-foreground">PMM AI Chat Assistant</h1>
-            <div className="flex items-center justify-end gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-xs text-muted-foreground">
-                Airtable verbunden
-              </span>
-            </div>
+            <h1 className="font-semibold text-foreground">Baurecht GPT</h1>
+            <span className="text-xs text-muted-foreground">
+              KI-Assistent für deutsches Baurecht
+            </span>
           </div>
 
           <div className="flex flex-col items-end gap-1">
