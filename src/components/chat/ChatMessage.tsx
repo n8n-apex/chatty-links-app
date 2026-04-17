@@ -5,6 +5,7 @@ import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from 'lucide-react';
 import { toast } from 'sonner';
+import { StructuredResponse, tryParseStructured } from './StructuredResponse';
 
 export type FeedbackStatus = 'correct' | 'correction' | 'inaccurate' | 'note';
 
@@ -123,25 +124,31 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
                     </button>
                   </div>
                 )}
-                {!/<\s*img\s/i.test(message.content) && (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
-                    <ReactMarkdown
-                      components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-                        li: ({ children }) => <li className="mb-1">{children}</li>,
-                        h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
-                        h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
-                        h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
-                        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
-                        code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                )}
+                {!/<\s*img\s/i.test(message.content) && (() => {
+                  const structured = tryParseStructured(message.content);
+                  if (structured) {
+                    return <StructuredResponse data={structured} />;
+                  }
+                  return (
+                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
+                          h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
+                          h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
+                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+                          code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
