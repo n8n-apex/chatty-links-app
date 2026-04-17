@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     }
 
     // Detect action from message content if not explicitly set
-    if (!body.action && body.message) {
+    if (body.message) {
       const msg = body.message.toLowerCase();
       if (msg.startsWith('ich habe eine baurechtsfrage') || msg.includes('?')) {
         body.action = 'question';
