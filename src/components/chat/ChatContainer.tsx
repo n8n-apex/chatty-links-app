@@ -92,15 +92,22 @@ export const ChatContainer = () => {
   };
 
   const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
-    await supabase.functions.invoke('chat-proxy', {
-      body: {
-        action: 'submit_feedback',
-        response_id: messageId,
-        status: status,
-        corrected_text: correctedText || null,
-        sessionId: localStorage.getItem('chat-session-id'),
-      },
-    });
+    try {
+      const webhookUrl = 'http://178.104.144.16:5678/webhook/building-law-gpt';
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_feedback',
+          response_id: messageId,
+          status: status,
+          corrected_text: correctedText || null,
+          sessionId: localStorage.getItem('chat-session-id')
+        })
+      });
+    } catch (e) {
+      console.error('Feedback error:', e);
+    }
   };
 
   // Session ID initialisieren
