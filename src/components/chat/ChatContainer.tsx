@@ -288,6 +288,14 @@ export const ChatContainer = () => {
 
         <ChatHeader onLogoClick={handleNewConversation} />
 
+        <div className="border-b border-border bg-background/60 backdrop-blur-xl">
+          <div className="mx-auto max-w-3xl px-4 py-1.5 text-center">
+            <span className="text-[11px] text-muted-foreground/70">
+              Eingeloggt als: <span className="font-mono text-muted-foreground">{currentUserEmail}</span>
+            </span>
+          </div>
+        </div>
+
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
             {messages.length === 0 ? (
