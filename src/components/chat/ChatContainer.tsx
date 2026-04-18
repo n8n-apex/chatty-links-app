@@ -224,7 +224,7 @@ export const ChatContainer = () => {
       setMessages((prev) => [...prev, assistantMessage]);
       persistMessage('ai', responseText);
       // Refresh sidebar list (title/lastAt) after a successful exchange
-      loadConversations();
+      if (historyEnabled) loadConversations();
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
