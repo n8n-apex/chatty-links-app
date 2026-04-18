@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { Menu } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
+import { ConversationSidebar, ConversationSummary } from './ConversationSidebar';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,6 +20,11 @@ export const ChatContainer = () => {
     const emailFromUrl = new URLSearchParams(window.location.search).get('email');
     return emailFromUrl || 'preview@test.com';
   });
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= 768,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
