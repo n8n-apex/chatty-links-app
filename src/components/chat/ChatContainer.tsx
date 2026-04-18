@@ -265,14 +265,16 @@ export const ChatContainer = () => {
 
   return (
     <div className="flex h-screen w-full bg-background">
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={conversationId}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onSelect={handleSelectConversation}
-        onNew={handleNewConversation}
-      />
+      {historyEnabled && (
+        <ConversationSidebar
+          conversations={conversations}
+          activeId={conversationId}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onSelect={handleSelectConversation}
+          onNew={handleNewConversation}
+        />
+      )}
 
       <div className="relative flex h-screen flex-1 flex-col">
         {/* Ambient glow effect */}
@@ -281,8 +283,8 @@ export const ChatContainer = () => {
           <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
         </div>
 
-        {/* Sidebar toggle (always visible when sidebar is closed) */}
-        {!sidebarOpen && (
+        {/* Sidebar toggle (only when history is available) */}
+        {historyEnabled && !sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
             className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/80 text-muted-foreground backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
