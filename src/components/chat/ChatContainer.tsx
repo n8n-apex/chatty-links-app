@@ -216,6 +216,8 @@ export const ChatContainer = () => {
 
       setMessages((prev) => [...prev, assistantMessage]);
       persistMessage('ai', responseText);
+      // Refresh sidebar list (title/lastAt) after a successful exchange
+      loadConversations();
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
@@ -255,42 +257,65 @@ export const ChatContainer = () => {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      {/* Ambient glow effect */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
-      </div>
-
-      <ChatHeader onLogoClick={() => setMessages([])} />
-
-      <main className="relative flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl">
-          {messages.length === 0 ? (
-            <EmptyState onSuggestionClick={(text) => setInputValue(text)} />
-          ) : (
-            <div className="py-4">
-              {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} />
-              ))}
-              <AnimatePresence>
-                {isLoading && <TypingIndicator />}
-              </AnimatePresence>
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
-      </main>
-
-      <ChatInput
-        onSendMessage={(msg) => {
-          sendMessage(msg);
-          setInputValue('');
-        }}
-        isLoading={isLoading}
-        inputValue={inputValue}
-        onInputChange={setInputValue}
+    <div className="flex h-screen w-full bg-background">
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={conversationId}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSelect={handleSelectConversation}
+        onNew={handleNewConversation}
       />
+
+      <div className="relative flex h-screen flex-1 flex-col">
+        {/* Ambient glow effect */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
+          <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
+        </div>
+
+        {/* Sidebar toggle (always visible when sidebar is closed) */}
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/80 text-muted-foreground backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
+            aria-label="Seitenleiste öffnen"
+            title="Gespräche"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+        )}
+
+        <ChatHeader onLogoClick={handleNewConversation} />
+
+        <main className="relative flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl">
+            {messages.length === 0 ? (
+              <EmptyState onSuggestionClick={(text) => setInputValue(text)} />
+            ) : (
+              <div className="py-4">
+                {messages.map((message) => (
+                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} />
+                ))}
+                <AnimatePresence>
+                  {isLoading && <TypingIndicator />}
+                </AnimatePresence>
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+        </main>
+
+        <ChatInput
+          onSendMessage={(msg) => {
+            sendMessage(msg);
+            setInputValue('');
+          }}
+          isLoading={isLoading}
+          inputValue={inputValue}
+          onInputChange={setInputValue}
+        />
+      </div>
     </div>
   );
 };
