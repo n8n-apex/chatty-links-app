@@ -62,7 +62,10 @@ Deno.serve(async (req) => {
             response_id: body.response_id,
             status: body.status,
             corrected_text: body.corrected_text || null,
-            sessionId: body.sessionId
+            sessionId: body.sessionId,
+            response_content: body.response_content || null,
+            question: body.question || null,
+            user_email: body.user_email || null
           }),
         });
       } catch (e) {
