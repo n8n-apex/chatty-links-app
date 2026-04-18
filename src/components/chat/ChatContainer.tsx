@@ -102,14 +102,10 @@ export const ChatContainer = () => {
 
   useEffect(() => {
     (async () => {
-      const list = await loadConversations();
-      if (list.length > 0) {
-        setConversationId(list[0].id);
-        await loadConversationMessages(list[0].id);
-      } else {
-        setConversationId(crypto.randomUUID());
-        setMessages([]);
-      }
+      await loadConversations();
+      // Always start with a fresh empty conversation on mount/refresh
+      setConversationId(crypto.randomUUID());
+      setMessages([]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
