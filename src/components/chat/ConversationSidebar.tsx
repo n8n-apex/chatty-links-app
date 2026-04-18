@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, MessageSquare } from 'lucide-react';
+import { Plus, X, MessageSquare, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ConversationSummary {
@@ -16,6 +16,7 @@ interface ConversationSidebarProps {
   onClose: () => void;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }
 
 const groupConversations = (items: ConversationSummary[]) => {
@@ -57,7 +58,11 @@ export const ConversationSidebar = ({
   onClose,
   onSelect,
   onNew,
+  onDelete,
 }: ConversationSidebarProps) => {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Lock body scroll on mobile when open
   useEffect(() => {
     if (open && window.innerWidth < 768) {
@@ -67,6 +72,18 @@ export const ConversationSidebar = ({
       };
     }
   }, [open]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenuId]);
 
   const groups = groupConversations(conversations);
 
@@ -132,11 +149,11 @@ export const ConversationSidebar = ({
                       </div>
                       <ul className="space-y-0.5">
                         {items.map((c) => (
-                          <li key={c.id}>
+                          <li key={c.id} className="relative group/item">
                             <button
                               onClick={() => onSelect(c.id)}
                               className={cn(
-                                'group flex w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                'flex w-full items-start gap-2 rounded-md px-3 py-2 pr-8 text-left text-sm transition-colors',
                                 activeId === c.id
                                   ? 'bg-accent text-accent-foreground'
                                   : 'text-foreground/80 hover:bg-accent/50 hover:text-foreground',
@@ -150,6 +167,39 @@ export const ConversationSidebar = ({
                                 </div>
                               </div>
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === c.id ? null : c.id);
+                              }}
+                              className={cn(
+                                'absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-opacity hover:bg-background hover:text-foreground',
+                                openMenuId === c.id || activeId === c.id
+                                  ? 'opacity-100'
+                                  : 'opacity-0 group-hover/item:opacity-100',
+                              )}
+                              aria-label="Optionen"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </button>
+                            {openMenuId === c.id && (
+                              <div
+                                ref={menuRef}
+                                className="absolute right-1.5 top-full z-50 mt-1 min-w-[140px] overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(null);
+                                    onDelete(c.id);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/10 transition-colors"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Löschen
+                                </button>
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
