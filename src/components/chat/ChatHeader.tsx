@@ -31,7 +31,7 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
       animate={{ opacity: 1, y: 0 }}
       className="border-b border-border bg-background/80 backdrop-blur-xl"
     >
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 pl-16 md:pl-4">
         <div className="flex items-center gap-3">
           <button 
             onClick={onLogoClick}
