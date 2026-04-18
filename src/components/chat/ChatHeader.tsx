@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { RotateCcw, Copy, Check, Moon, Sun } from 'lucide-react';
+import { RotateCcw, Copy, Check } from 'lucide-react';
 import logo from '@/assets/logo.png';
-import { useTheme } from '@/hooks/useTheme';
 
 interface ChatHeaderProps {
   onLogoClick?: () => void;
@@ -11,7 +10,6 @@ interface ChatHeaderProps {
 export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
   const [sessionId, setSessionId] = useState('');
   const [copied, setCopied] = useState(false);
-  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const id = localStorage.getItem('chat-session-id') || crypto.randomUUID();
@@ -59,14 +57,6 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
 
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-1.5">
-              <button
-                onClick={toggleTheme}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                title={theme === 'dark' ? 'Helles Design' : 'Dunkles Design'}
-                aria-label="Design wechseln"
-              >
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
               <button
                 onClick={onLogoClick}
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
