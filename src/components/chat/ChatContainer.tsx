@@ -257,6 +257,13 @@ export const ChatContainer = () => {
   const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
     try {
       console.log('Sending feedback:', { messageId, status });
+
+      // Find the message being rated
+      const ratedMessage = messages.find(m => m.id === messageId);
+      // Find the user message that preceded it
+      const messageIndex = messages.findIndex(m => m.id === messageId);
+      const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-proxy`, {
         method: 'POST',
         headers: {
@@ -268,7 +275,10 @@ export const ChatContainer = () => {
           response_id: messageId,
           status: status,
           corrected_text: correctedText || null,
-          sessionId: localStorage.getItem('chat-session-id')
+          sessionId: localStorage.getItem('chat-session-id'),
+          response_content: ratedMessage?.content || null,
+          question: userMessage?.content || null,
+          user_email: currentUserEmail
         })
       });
       console.log('Feedback response:', response.status);
