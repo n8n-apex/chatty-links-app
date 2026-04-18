@@ -23,9 +23,15 @@ export const ChatContainer = () => {
   const isUnresolvedEmail = currentUserEmail.includes('{{') || currentUserEmail.includes('}}');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    typeof window === 'undefined' ? true : window.innerWidth >= 768,
-  );
+  // Privacy: when embedded in an iframe, the email comes from an untrusted URL param
+  // and could be spoofed to view someone else's history. Disable history/sidebar entirely.
+  const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
+  const historyEnabled = !isEmbedded;
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.self !== window.top) return false;
+    return window.innerWidth >= 768;
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
