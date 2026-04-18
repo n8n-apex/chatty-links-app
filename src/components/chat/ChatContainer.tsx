@@ -13,6 +13,10 @@ export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('email');
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -137,6 +141,19 @@ export const ChatContainer = () => {
       localStorage.setItem('chat-session-id', crypto.randomUUID());
     }
   }, []);
+
+  if (!currentUserEmail) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background p-6">
+        <div className="max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg">
+          <h1 className="mb-3 text-xl font-semibold text-foreground">Zugriff verweigert</h1>
+          <p className="text-sm text-muted-foreground">
+            Error: Please access this tool directly through your learning portal.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-background">
