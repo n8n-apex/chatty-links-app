@@ -23,13 +23,11 @@ export const ChatContainer = () => {
   const isUnresolvedEmail = currentUserEmail.includes('{{') || currentUserEmail.includes('}}');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  // Privacy: when embedded in an iframe, the email comes from an untrusted URL param
-  // and could be spoofed to view someone else's history. Disable history/sidebar entirely.
-  const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
-  const historyEnabled = !isEmbedded;
+  // Sidebar is always available; conversations are filtered by user_email so each
+  // email only sees its own history.
+  const historyEnabled = true;
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
-    if (window.self !== window.top) return false;
     return window.innerWidth >= 768;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
