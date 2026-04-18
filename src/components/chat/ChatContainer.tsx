@@ -28,6 +28,42 @@ export const ChatContainer = () => {
     scrollToBottom();
   }, [messages, isLoading, scrollToBottom]);
 
+  // Load past chat history for this user
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_email', currentUserEmail)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Fehler beim Laden des Verlaufs:', error);
+        return;
+      }
+      if (data && data.length > 0) {
+        const restored: Message[] = data.map((row: any) => ({
+          id: row.id,
+          content: row.content,
+          role: row.role === 'ai' ? 'assistant' : 'user',
+          timestamp: new Date(row.created_at),
+        }));
+        setMessages(restored);
+      }
+    })();
+  }, [currentUserEmail]);
+
+  const persistMessage = async (role: 'user' | 'ai', content: string) => {
+    if (!currentUserEmail || !content) return;
+    const { error } = await supabase.from('chat_messages').insert({
+      user_email: currentUserEmail,
+      role,
+      content,
+    });
+    if (error) console.error('Fehler beim Speichern der Nachricht:', error);
+  };
+
   const sendMessage = async (content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -38,6 +74,7 @@ export const ChatContainer = () => {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    persistMessage('user', content);
 
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
 
@@ -105,6 +142,7 @@ export const ChatContainer = () => {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      persistMessage('ai', responseText);
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
