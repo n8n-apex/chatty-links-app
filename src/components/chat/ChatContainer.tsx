@@ -74,6 +74,7 @@ export const ChatContainer = () => {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    persistMessage('user', content);
 
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
 
@@ -141,6 +142,7 @@ export const ChatContainer = () => {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      persistMessage('ai', responseText);
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
