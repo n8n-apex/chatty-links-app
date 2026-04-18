@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Menu } from 'lucide-react';
+import { Menu, MessageSquare, FileText, Search } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessage } from './ChatMessage';
@@ -306,6 +306,25 @@ export const ChatContainer = () => {
           </div>
         </main>
 
+        <div className="border-t border-border bg-background/80 px-4 pt-3 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
+            {[
+              { icon: MessageSquare, label: 'Rechtsfrage', prefill: 'Ich habe eine Baurechtsfrage: ' },
+              { icon: FileText, label: 'Stellungnahme', prefill: 'Erstelle eine Stellungnahme zum Thema: ' },
+              { icon: Search, label: 'Behördenschreiben', prefill: 'Analysiere dieses Behördenschreiben: ' },
+            ].map(({ icon: Icon, label, prefill }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setInputValue(prefill)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground"
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <ChatInput
           onSendMessage={(msg) => {
             sendMessage(msg);
