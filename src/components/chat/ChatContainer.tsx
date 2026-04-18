@@ -35,40 +35,106 @@ export const ChatContainer = () => {
     scrollToBottom();
   }, [messages, isLoading, scrollToBottom]);
 
-  // Load past chat history for this user
-  useEffect(() => {
-    if (!currentUserEmail) return;
-    (async () => {
-      const { data, error } = await supabase
+  // Load conversations list for the current user
+  const loadConversations = useCallback(async () => {
+    if (!currentUserEmail) return [] as ConversationSummary[];
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_email', currentUserEmail)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Fehler beim Laden des Verlaufs:', error);
+      return [];
+    }
+
+    const map = new Map<string, { firstUserMsg?: string; lastAt: Date }>();
+    for (const row of data || []) {
+      const cid = (row as any).conversation_id || 'legacy';
+      const existing = map.get(cid) || { lastAt: new Date(row.created_at) };
+      if (!existing.firstUserMsg && row.role === 'user') {
+        existing.firstUserMsg = row.content;
+      }
+      existing.lastAt = new Date(row.created_at);
+      map.set(cid, existing);
+    }
+
+    const list: ConversationSummary[] = Array.from(map.entries()).map(([id, v]) => ({
+      id,
+      title: (v.firstUserMsg || 'Neues Gespräch').slice(0, 40),
+      lastAt: v.lastAt,
+    }));
+    list.sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
+    setConversations(list);
+    return list;
+  }, [currentUserEmail]);
+
+  const loadConversationMessages = useCallback(
+    async (cid: string) => {
+      if (!currentUserEmail) return;
+      let query = supabase
         .from('chat_messages')
         .select('*')
         .eq('user_email', currentUserEmail)
         .order('created_at', { ascending: true });
 
+      query = cid === 'legacy'
+        ? query.is('conversation_id', null)
+        : query.eq('conversation_id', cid);
+
+      const { data, error } = await query;
       if (error) {
-        console.error('Fehler beim Laden des Verlaufs:', error);
+        console.error('Fehler beim Laden der Nachrichten:', error);
         return;
       }
-      if (data && data.length > 0) {
-        const restored: Message[] = data.map((row: any) => ({
-          id: row.id,
-          content: row.content,
-          role: row.role === 'ai' ? 'assistant' : 'user',
-          timestamp: new Date(row.created_at),
-        }));
-        setMessages(restored);
+      const restored: Message[] = (data || []).map((row: any) => ({
+        id: row.id,
+        content: row.content,
+        role: row.role === 'ai' ? 'assistant' : 'user',
+        timestamp: new Date(row.created_at),
+      }));
+      setMessages(restored);
+    },
+    [currentUserEmail],
+  );
+
+  useEffect(() => {
+    (async () => {
+      const list = await loadConversations();
+      if (list.length > 0) {
+        setConversationId(list[0].id);
+        await loadConversationMessages(list[0].id);
+      } else {
+        setConversationId(crypto.randomUUID());
+        setMessages([]);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
 
   const persistMessage = async (role: 'user' | 'ai', content: string) => {
-    if (!currentUserEmail || !content) return;
+    if (!currentUserEmail || !content || !conversationId) return;
     const { error } = await supabase.from('chat_messages').insert({
       user_email: currentUserEmail,
       role,
       content,
+      conversation_id: conversationId,
     });
     if (error) console.error('Fehler beim Speichern der Nachricht:', error);
+  };
+
+  const handleNewConversation = () => {
+    const newId = crypto.randomUUID();
+    setConversationId(newId);
+    setMessages([]);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const handleSelectConversation = async (cid: string) => {
+    setConversationId(cid);
+    await loadConversationMessages(cid);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const sendMessage = async (content: string) => {
