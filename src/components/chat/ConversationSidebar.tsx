@@ -58,7 +58,11 @@ export const ConversationSidebar = ({
   onClose,
   onSelect,
   onNew,
+  onDelete,
 }: ConversationSidebarProps) => {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Lock body scroll on mobile when open
   useEffect(() => {
     if (open && window.innerWidth < 768) {
@@ -68,6 +72,18 @@ export const ConversationSidebar = ({
       };
     }
   }, [open]);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenuId]);
 
   const groups = groupConversations(conversations);
 
