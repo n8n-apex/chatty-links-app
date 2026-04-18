@@ -20,6 +20,7 @@ export const ChatContainer = () => {
     const emailFromUrl = new URLSearchParams(window.location.search).get('email');
     return emailFromUrl || 'preview@test.com';
   });
+  const isUnresolvedEmail = currentUserEmail.includes('{{') || currentUserEmail.includes('}}');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
