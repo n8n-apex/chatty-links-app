@@ -294,6 +294,7 @@ export const ChatContainer = () => {
           onClose={() => setSidebarOpen(false)}
           onSelect={handleSelectConversation}
           onNew={handleNewConversation}
+          onDelete={handleDeleteConversation}
         />
       )}
 
