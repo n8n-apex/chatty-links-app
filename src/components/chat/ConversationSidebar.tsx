@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, MessageSquare } from 'lucide-react';
+import { Plus, X, MessageSquare, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ConversationSummary {
@@ -16,6 +16,7 @@ interface ConversationSidebarProps {
   onClose: () => void;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }
 
 const groupConversations = (items: ConversationSummary[]) => {
