@@ -108,7 +108,11 @@ export const ChatContainer = () => {
 
   useEffect(() => {
     (async () => {
-      await loadConversations();
+      if (historyEnabled) {
+        await loadConversations();
+      } else {
+        setConversations([]);
+      }
       // Always start with a fresh empty conversation on mount/refresh
       setConversationId(crypto.randomUUID());
       setMessages([]);
