@@ -20,6 +20,7 @@ export const ChatContainer = () => {
     const emailFromUrl = new URLSearchParams(window.location.search).get('email');
     return emailFromUrl || 'preview@test.com';
   });
+  const isUnresolvedEmail = currentUserEmail.includes('{{') || currentUserEmail.includes('}}');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -288,11 +289,17 @@ export const ChatContainer = () => {
 
         <ChatHeader onLogoClick={handleNewConversation} />
 
-        <div className="border-b border-border bg-background/60 backdrop-blur-xl">
+        <div className={`border-b border-border backdrop-blur-xl ${isUnresolvedEmail ? 'bg-destructive/10' : 'bg-background/60'}`}>
           <div className="mx-auto max-w-3xl px-4 py-1.5 text-center">
-            <span className="text-[11px] text-muted-foreground/70">
-              Eingeloggt als: <span className="font-mono text-muted-foreground">{currentUserEmail}</span>
-            </span>
+            {isUnresolvedEmail ? (
+              <span className="text-[11px] text-destructive">
+                ⚠ E-Mail nicht erkannt. Bitte kontaktieren Sie Ihren Administrator.
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/70">
+                Eingeloggt als: <span className="font-mono text-muted-foreground">{currentUserEmail}</span>
+              </span>
+            )}
           </div>
         </div>
 
