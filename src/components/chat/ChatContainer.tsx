@@ -144,6 +144,27 @@ export const ChatContainer = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) setSidebarOpen(false);
   };
 
+  const handleDeleteConversation = async (cid: string) => {
+    if (!currentUserEmail) return;
+    let query = supabase
+      .from('chat_messages')
+      .delete()
+      .eq('user_email', currentUserEmail);
+    query = cid === 'legacy' ? query.is('conversation_id', null) : query.eq('conversation_id', cid);
+    const { error } = await query;
+    if (error) {
+      console.error('Fehler beim Löschen:', error);
+      toast.error('Gespräch konnte nicht gelöscht werden.');
+      return;
+    }
+    toast.success('Gespräch gelöscht');
+    if (conversationId === cid) {
+      setMessages([]);
+      setConversationId(crypto.randomUUID());
+    }
+    await loadConversations();
+  };
+
   const sendMessage = async (content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
