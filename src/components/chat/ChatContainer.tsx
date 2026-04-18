@@ -23,9 +23,15 @@ export const ChatContainer = () => {
   const isUnresolvedEmail = currentUserEmail.includes('{{') || currentUserEmail.includes('}}');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    typeof window === 'undefined' ? true : window.innerWidth >= 768,
-  );
+  // Privacy: when embedded in an iframe, the email comes from an untrusted URL param
+  // and could be spoofed to view someone else's history. Disable history/sidebar entirely.
+  const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
+  const historyEnabled = !isEmbedded;
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.self !== window.top) return false;
+    return window.innerWidth >= 768;
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -102,7 +108,11 @@ export const ChatContainer = () => {
 
   useEffect(() => {
     (async () => {
-      await loadConversations();
+      if (historyEnabled) {
+        await loadConversations();
+      } else {
+        setConversations([]);
+      }
       // Always start with a fresh empty conversation on mount/refresh
       setConversationId(crypto.randomUUID());
       setMessages([]);
@@ -214,7 +224,7 @@ export const ChatContainer = () => {
       setMessages((prev) => [...prev, assistantMessage]);
       persistMessage('ai', responseText);
       // Refresh sidebar list (title/lastAt) after a successful exchange
-      loadConversations();
+      if (historyEnabled) loadConversations();
     } catch (error) {
       console.error('Fehler beim Senden:', error);
       toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
@@ -255,14 +265,16 @@ export const ChatContainer = () => {
 
   return (
     <div className="flex h-screen w-full bg-background">
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={conversationId}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onSelect={handleSelectConversation}
-        onNew={handleNewConversation}
-      />
+      {historyEnabled && (
+        <ConversationSidebar
+          conversations={conversations}
+          activeId={conversationId}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onSelect={handleSelectConversation}
+          onNew={handleNewConversation}
+        />
+      )}
 
       <div className="relative flex h-screen flex-1 flex-col">
         {/* Ambient glow effect */}
@@ -271,8 +283,8 @@ export const ChatContainer = () => {
           <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-accent/5 blur-3xl" />
         </div>
 
-        {/* Sidebar toggle (always visible when sidebar is closed) */}
-        {!sidebarOpen && (
+        {/* Sidebar toggle (only when history is available) */}
+        {historyEnabled && !sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
             className="absolute left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/80 text-muted-foreground backdrop-blur hover:bg-accent hover:text-accent-foreground transition-colors"
