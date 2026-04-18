@@ -142,6 +142,19 @@ export const ChatContainer = () => {
     }
   }, []);
 
+  if (!currentUserEmail) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background p-6">
+        <div className="max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-lg">
+          <h1 className="mb-3 text-xl font-semibold text-foreground">Zugriff verweigert</h1>
+          <p className="text-sm text-muted-foreground">
+            Error: Please access this tool directly through your learning portal.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Ambient glow effect */}
