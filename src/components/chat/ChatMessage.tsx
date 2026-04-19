@@ -34,7 +34,8 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
   })();
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
+    const textToCopy = structured ? structuredToPlainText(structured) : message.content;
+    await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
