@@ -64,6 +64,36 @@ Deno.serve(async (req) => {
       }
 
       if (cleanId) body.file_id = cleanId;
+
+      const stateMap: Record<string, string> = {
+        'bayern': 'Bayern', 'münchen': 'Bayern', 'nürnberg': 'Bayern', 'bamberg': 'Bayern', 'augsburg': 'Bayern',
+        'berlin': 'Berlin',
+        'hamburg': 'Hamburg',
+        'bremen': 'Bremen',
+        'hessen': 'Hessen', 'frankfurt': 'Hessen',
+        'nrw': 'Nordrhein-Westfalen', 'nordrhein': 'Nordrhein-Westfalen', 'düsseldorf': 'Nordrhein-Westfalen', 'köln': 'Nordrhein-Westfalen',
+        'baden': 'Baden-Württemberg', 'stuttgart': 'Baden-Württemberg',
+        'sachsen': 'Sachsen', 'dresden': 'Sachsen',
+        'niedersachsen': 'Niedersachsen', 'hannover': 'Niedersachsen',
+        'schleswig': 'Schleswig Holstein', 'kiel': 'Schleswig Holstein',
+        'thüringen': 'Thüringen', 'erfurt': 'Thüringen',
+        'brandenburg': 'Brandenburg', 'potsdam': 'Brandenburg',
+        'mecklenburg': 'Mecklenburg-Vorpommern', 'schwerin': 'Mecklenburg-Vorpommern',
+        'sachsen-anhalt': 'Sachsen-Anhalt', 'magdeburg': 'Sachsen-Anhalt',
+        'saarland': 'Saarland', 'saarbrücken': 'Saarland',
+        'rheinland': 'Rheinland-Pfalz', 'mainz': 'Rheinland-Pfalz',
+      };
+      const msgLower = body.message.toLowerCase();
+      let detectedState = body.state || null;
+      if (!detectedState) {
+        for (const [keyword, state] of Object.entries(stateMap)) {
+          if (msgLower.includes(keyword)) {
+            detectedState = state;
+            break;
+          }
+        }
+      }
+      body.state = detectedState;
     }
 
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
