@@ -208,8 +208,8 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
     );
   }
 
-  // B4 - Behördenschreiben Analyse
-  if (data.zusammenfassung || data.analyse_der_forderungen || data.antwortschreiben_entwurf) {
+  // B4 - Behördenschreiben Analyse: only enter if there's actual B4 content beyond zusammenfassung
+  if (hasAnalyseForderungen || hasAntwortEntwurf || hasGesamtbeurteilung) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.zusammenfassung && (
