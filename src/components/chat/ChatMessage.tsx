@@ -5,7 +5,7 @@ import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from 'lucide-react';
 import { toast } from 'sonner';
-import { StructuredResponse, tryParseStructured } from './StructuredResponse';
+import { StructuredResponse, tryParseStructured, structuredToPlainText } from './StructuredResponse';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 
 export type FeedbackStatus = 'correct' | 'correction' | 'inaccurate' | 'note';
@@ -34,7 +34,8 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
   })();
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
+    const textToCopy = structured ? structuredToPlainText(structured) : message.content;
+    await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
