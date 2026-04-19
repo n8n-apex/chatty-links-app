@@ -30,18 +30,40 @@ Deno.serve(async (req) => {
         body.topic = body.message.replace('erstelle eine stellungnahme zum thema:', '').trim();
       } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
         body.action = 'analyze_pdf';
-        const driveMatch = body.message.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
-        body.file_id = cleanId || body.message.replace(/analysiere dieses behördenschreiben:?\s*/i, '').trim();
         body.file_name = 'Behördenschreiben.pdf';
-        body.state = 'Bayern';
-        delete body.question;
         body.state = 'Bayern';
         delete body.question;
       } else {
         body.action = 'question';
         body.question = body.message;
       }
+    }
+
+    if (body.action === 'analyze_pdf') {
+      const driveMatch = body.message?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
+
+      if (!cleanId && !body.file_id) {
+        return new Response(
+          JSON.stringify({
+            status: 'success',
+            action: 'question',
+            frage: '',
+            bundesland: 'nicht erkannt',
+            antwort: 'Bitte fügen Sie einen gültigen Google Drive Link zu einem Behördenschreiben ein. Beispiel: https://drive.google.com/file/d/FILE_ID/view',
+            rechtsgrundlage: [],
+            fehlende_informationen: null,
+            naechste_schritte: null,
+            wichtiger_hinweis: null,
+            quellen: [],
+            model_used: 'none',
+            tokens_used: {}
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (cleanId) body.file_id = cleanId;
     }
 
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
