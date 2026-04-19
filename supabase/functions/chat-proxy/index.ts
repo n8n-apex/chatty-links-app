@@ -39,6 +39,33 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (body.action === 'analyze_pdf') {
+      const driveMatch = body.message?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
+
+      if (!cleanId && !body.file_id) {
+        return new Response(
+          JSON.stringify({
+            status: 'success',
+            action: 'question',
+            frage: '',
+            bundesland: 'nicht erkannt',
+            antwort: 'Bitte fügen Sie einen gültigen Google Drive Link zu einem Behördenschreiben ein. Beispiel: https://drive.google.com/file/d/FILE_ID/view',
+            rechtsgrundlage: [],
+            fehlende_informationen: null,
+            naechste_schritte: null,
+            wichtiger_hinweis: null,
+            quellen: [],
+            model_used: 'none',
+            tokens_used: {}
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (cleanId) body.file_id = cleanId;
+    }
+
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
     if (!webhookUrl) {
       return new Response(
