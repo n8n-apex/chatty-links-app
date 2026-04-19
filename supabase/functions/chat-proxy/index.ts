@@ -30,12 +30,7 @@ Deno.serve(async (req) => {
         body.topic = body.message.replace('erstelle eine stellungnahme zum thema:', '').trim();
       } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
         body.action = 'analyze_pdf';
-        const driveMatch = body.message.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
-        body.file_id = cleanId || body.message.replace(/analysiere dieses behördenschreiben:?\s*/i, '').trim();
         body.file_name = 'Behördenschreiben.pdf';
-        body.state = 'Bayern';
-        delete body.question;
         body.state = 'Bayern';
         delete body.question;
       } else {
