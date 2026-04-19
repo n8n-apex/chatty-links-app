@@ -37,6 +37,82 @@ export interface StructuredPayload {
   entwurf_stellungnahme?: string;
 }
 
+export const structuredToPlainText = (data: StructuredPayload): string => {
+  const parts: string[] = [];
+
+  const pushSection = (label: string, value?: string | null) => {
+    const v = (value ?? '').toString().trim();
+    if (v) parts.push(`${label}:\n${v}`);
+  };
+
+  // B1/B2
+  if (data.antwort) parts.push(data.antwort.trim());
+
+  // B6
+  if (data.sachverhalt) pushSection('Sachverhalt', data.sachverhalt);
+  if (Array.isArray(data.kernargumente) && data.kernargumente.length > 0) {
+    const lines = data.kernargumente.map((k, i) => {
+      if (typeof k === 'string') return `${i + 1}. ${k}`;
+      const punkt = k.punkt || k.argument || '';
+      const arg = k.argument && k.punkt ? k.argument : '';
+      const rg = k.rechtsgrundlage ? ` (${k.rechtsgrundlage})` : '';
+      return `${i + 1}. ${punkt}${arg ? ` — ${arg}` : ''}${rg}`;
+    });
+    parts.push(`Kernargumente:\n${lines.join('\n')}`);
+  }
+  if (data.ergebnis) pushSection('Ergebnis', data.ergebnis);
+  if (data.entwurf_stellungnahme) pushSection('Entwurf Stellungnahme', data.entwurf_stellungnahme);
+
+  // B4
+  if (data.zusammenfassung) pushSection('Zusammenfassung', data.zusammenfassung);
+  if (data.gesamtbeurteilung) pushSection('Gesamtbeurteilung', data.gesamtbeurteilung);
+  if (Array.isArray(data.analyse_der_forderungen) && data.analyse_der_forderungen.length > 0) {
+    const lines = data.analyse_der_forderungen.map((f, i) => {
+      const forderung = f.forderung || '';
+      const bewertung = f.bewertung ? ` [${f.bewertung}]` : '';
+      const begr = f.begruendung ? `\n   Begründung: ${f.begruendung}` : '';
+      return `${i + 1}. ${forderung}${bewertung}${begr}`;
+    });
+    parts.push(`Analyse der Forderungen:\n${lines.join('\n')}`);
+  }
+  if (data.antwortschreiben_entwurf) pushSection('Antwortschreiben (Entwurf)', data.antwortschreiben_entwurf);
+
+  // Common extras
+  if (data.fehlende_informationen) pushSection('Fehlende Informationen', data.fehlende_informationen);
+  if (data.naechste_schritte) {
+    const ns = Array.isArray(data.naechste_schritte)
+      ? data.naechste_schritte.map((s, i) => `${i + 1}. ${s}`).join('\n')
+      : data.naechste_schritte;
+    pushSection('Nächste Schritte', ns);
+  }
+  if (data.wichtiger_hinweis) pushSection('Wichtiger Hinweis', data.wichtiger_hinweis);
+
+  if (Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0) {
+    const lines = data.rechtsgrundlage.map((r) => {
+      const p = r.paragraph || '';
+      const q = r.quelle ? ` (${r.quelle})` : '';
+      return `- ${p}${q}`.trim();
+    });
+    parts.push(`Rechtsgrundlage:\n${lines.join('\n')}`);
+  } else if (typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage.trim()) {
+    pushSection('Rechtsgrundlage', data.rechtsgrundlage);
+  }
+
+  if (Array.isArray(data.quellen) && data.quellen.length > 0) {
+    const lines = data.quellen.map((q) => {
+      if (typeof q === 'string') return `- ${q}`;
+      const file = q.file || '';
+      const state = q.state ? ` (${q.state})` : '';
+      return `- ${file}${state}`.trim();
+    });
+    parts.push(`Quellen:\n${lines.join('\n')}`);
+  } else if (typeof data.quellen === 'string' && data.quellen.trim()) {
+    pushSection('Quellen', data.quellen);
+  }
+
+  return parts.join('\n\n').trim();
+};
+
 export const tryParseStructured = (content: string): StructuredPayload | null => {
   if (!content || typeof content !== 'string') return null;
   const trimmed = content.trim();
