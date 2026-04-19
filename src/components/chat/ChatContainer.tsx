@@ -246,7 +246,24 @@ export const ChatContainer = () => {
       if (historyEnabled) loadConversations();
     } catch (error) {
       console.error('Fehler beim Senden:', error);
-      toast.error('Nachricht konnte nicht gesendet werden. Überprüfe die Webhook-Verbindung.');
+      const errorMessage: Message = {
+        id: crypto.randomUUID(),
+        content: JSON.stringify({
+          status: 'error',
+          action: 'question',
+          antwort: 'Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.',
+          rechtsgrundlage: [],
+          fehlende_informationen: null,
+          naechste_schritte: 'Bitte versuchen Sie es in wenigen Sekunden erneut.',
+          wichtiger_hinweis: null,
+          quellen: [],
+          model_used: 'none',
+          tokens_used: {}
+        }),
+        role: 'assistant',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
