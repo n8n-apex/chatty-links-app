@@ -150,8 +150,15 @@ const Collapsible = ({ title, children, defaultOpen = false }: { title: string; 
 };
 
 export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
-  // B6 - Stellungnahme
-  if (data.entwurf_stellungnahme || data.kernargumente) {
+  const hasKernargumente = Array.isArray(data.kernargumente) && data.kernargumente.length > 0;
+  const hasErgebnis = !!(data.ergebnis && String(data.ergebnis).trim());
+  const hasEntwurfStellung = !!(data.entwurf_stellungnahme && String(data.entwurf_stellungnahme).trim());
+  const hasAnalyseForderungen = Array.isArray(data.analyse_der_forderungen) && data.analyse_der_forderungen.length > 0;
+  const hasAntwortEntwurf = !!(data.antwortschreiben_entwurf && String(data.antwortschreiben_entwurf).trim());
+  const hasGesamtbeurteilung = !!(data.gesamtbeurteilung && String(data.gesamtbeurteilung).trim());
+
+  // B6 - Stellungnahme: only enter this branch if there's actual B6 content beyond sachverhalt
+  if (hasEntwurfStellung || hasKernargumente || hasErgebnis) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.sachverhalt && (
@@ -159,7 +166,7 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
             <p className="text-sm leading-relaxed text-foreground">{data.sachverhalt}</p>
           </Section>
         )}
-        {Array.isArray(data.kernargumente) && data.kernargumente.length > 0 && (
+        {hasKernargumente && (
           <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kernargumente</div>
             <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
@@ -201,8 +208,8 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
     );
   }
 
-  // B4 - Behördenschreiben Analyse
-  if (data.zusammenfassung || data.analyse_der_forderungen || data.antwortschreiben_entwurf) {
+  // B4 - Behördenschreiben Analyse: only enter if there's actual B4 content beyond zusammenfassung
+  if (hasAnalyseForderungen || hasAntwortEntwurf || hasGesamtbeurteilung) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.zusammenfassung && (
@@ -240,6 +247,20 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
             <Collapsible title="Antwortschreiben Entwurf">{data.antwortschreiben_entwurf}</Collapsible>
           </Section>
         )}
+        <Section>{renderCommonExtras(data)}</Section>
+      </motion.div>
+    );
+  }
+
+  // Plain fallback: only a sachverhalt or zusammenfassung text, no other structured content
+  if (!data.antwort && (data.sachverhalt || data.zusammenfassung)) {
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        <Section>
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+            {data.sachverhalt || data.zusammenfassung}
+          </p>
+        </Section>
         <Section>{renderCommonExtras(data)}</Section>
       </motion.div>
     );
