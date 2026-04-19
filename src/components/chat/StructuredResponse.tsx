@@ -252,6 +252,20 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
     );
   }
 
+  // Plain fallback: only a sachverhalt or zusammenfassung text, no other structured content
+  if (!data.antwort && (data.sachverhalt || data.zusammenfassung)) {
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        <Section>
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+            {data.sachverhalt || data.zusammenfassung}
+          </p>
+        </Section>
+        <Section>{renderCommonExtras(data)}</Section>
+      </motion.div>
+    );
+  }
+
   // B1/B2 - Rechtsfrage (default with antwort)
   return (
     <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
