@@ -163,18 +163,19 @@ export const ChatContainer = () => {
     await loadConversations();
   };
 
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
+  const toBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        // Strip data URL prefix to get pure base64
-        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        // Remove the data URL prefix (data:application/pdf;base64,)
+        const base64 = result.split(',')[1];
         resolve(base64);
       };
-      reader.onerror = () => reject(reader.error);
+      reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+  };
 
   const sendMessage = async (content: string, file?: File | null) => {
     const displayContent = file
@@ -204,7 +205,11 @@ export const ChatContainer = () => {
 
     if (file) {
       try {
-        const base64 = await fileToBase64(file);
+        const base64 = await toBase64(file);
+        console.log('base64 length:', base64.length);
+        if (!base64) {
+          throw new Error('Empty base64 result');
+        }
         payload = {
           ...payload,
           action: 'analyze_pdf',
