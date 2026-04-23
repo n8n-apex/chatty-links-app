@@ -163,45 +163,89 @@ export const ChatContainer = () => {
     await loadConversations();
   };
 
-  const sendMessage = async (content: string) => {
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Strip data URL prefix to get pure base64
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const sendMessage = async (content: string, file?: File | null) => {
+    const displayContent = file
+      ? content
+        ? `📎 [${file.name}] — ${content}`
+        : `📎 [${file.name}]`
+      : content;
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
-      content,
+      content: displayContent,
       role: 'user',
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
-    persistMessage('user', content);
+    persistMessage('user', displayContent);
 
     const sessionId = localStorage.getItem('chat-session-id') || crypto.randomUUID();
 
-    // Action detection
-    const msg = content.toLowerCase();
-    let action = 'question';
-    const extra: Record<string, string> = { question: content };
-    if (msg.startsWith('erstelle eine stellungnahme')) {
-      action = 'draft_statement';
-      extra.topic = content.replace(/erstelle eine stellungnahme zum thema:?/i, '').trim();
-      delete extra.question;
-    } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
-      action = 'analyze_pdf';
-      delete extra.question;
+    // Build payload
+    let payload: Record<string, unknown> = {
+      sessionId,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (file) {
+      try {
+        const base64 = await fileToBase64(file);
+        payload = {
+          ...payload,
+          action: 'analyze_pdf',
+          file_name: file.name,
+          file_base64: base64,
+          additional_question: content || null,
+          message: 'Analysiere dieses Behördenschreiben',
+        };
+      } catch (err) {
+        console.error('PDF konnte nicht gelesen werden:', err);
+        toast.error('PDF konnte nicht gelesen werden.');
+        setIsLoading(false);
+        return;
+      }
+    } else {
+      // Action detection (text-only flow, unchanged)
+      const msg = content.toLowerCase();
+      let action = 'question';
+      const extra: Record<string, string> = { question: content };
+      if (msg.startsWith('erstelle eine stellungnahme')) {
+        action = 'draft_statement';
+        extra.topic = content.replace(/erstelle eine stellungnahme zum thema:?/i, '').trim();
+        delete extra.question;
+      } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
+        action = 'analyze_pdf';
+        delete extra.question;
+      }
+      payload = {
+        ...payload,
+        message: content,
+        action,
+        ...extra,
+      };
     }
 
     const startTime = performance.now();
     try {
-      console.log('Sende Nachricht über Edge Function:', { message: content, sessionId, action });
+      console.log('Sende Nachricht über Edge Function:', { sessionId, action: payload.action, hasFile: !!file });
 
       const { data, error } = await supabase.functions.invoke('chat-proxy', {
-        body: {
-          message: content,
-          action,
-          ...extra,
-          sessionId: sessionId,
-          timestamp: new Date().toISOString(),
-        },
+        body: payload,
       });
 
       if (error) {
@@ -396,8 +440,8 @@ export const ChatContainer = () => {
           </div>
         </div>
         <ChatInput
-          onSendMessage={(msg) => {
-            sendMessage(msg);
+          onSendMessage={(msg, file) => {
+            sendMessage(msg, file);
             setInputValue('');
           }}
           isLoading={isLoading}
