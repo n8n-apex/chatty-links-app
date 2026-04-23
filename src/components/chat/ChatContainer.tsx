@@ -440,8 +440,8 @@ export const ChatContainer = () => {
           </div>
         </div>
         <ChatInput
-          onSendMessage={(msg) => {
-            sendMessage(msg);
+          onSendMessage={(msg, file) => {
+            sendMessage(msg, file);
             setInputValue('');
           }}
           isLoading={isLoading}
