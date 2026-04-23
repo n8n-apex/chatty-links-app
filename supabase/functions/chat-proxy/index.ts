@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       const driveMatch = body.message?.match(/\/d\/([a-zA-Z0-9_-]+)/);
       const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
 
-      if (!cleanId && !body.file_id) {
+      if (!cleanId && !body.file_id && !body.file_base64) {
         return new Response(
           JSON.stringify({
             status: 'success',
