@@ -205,7 +205,11 @@ export const ChatContainer = () => {
 
     if (file) {
       try {
-        const base64 = await fileToBase64(file);
+        const base64 = await toBase64(file);
+        console.log('base64 length:', base64.length);
+        if (!base64) {
+          throw new Error('Empty base64 result');
+        }
         payload = {
           ...payload,
           action: 'analyze_pdf',
