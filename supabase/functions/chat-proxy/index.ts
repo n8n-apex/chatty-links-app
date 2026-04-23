@@ -19,6 +19,31 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Detect local file path and return helpful error immediately
+    if (body.message?.match(/^\/Users\/|^C:\\|^\/home\//i)) {
+      return new Response(
+        JSON.stringify({
+          status: 'error',
+          action: 'question',
+          antwort: 'Es scheint, dass Sie einen lokalen Dateipfad eingefügt haben. Bitte laden Sie das Behördenschreiben zuerst in Google Drive hoch und fügen Sie dann den Google Drive Link hier ein. Beispiel: https://drive.google.com/file/d/FILE_ID/view',
+          rechtsgrundlage: [],
+          fehlende_informationen: null,
+          naechste_schritte: 'Laden Sie die PDF in Google Drive hoch und teilen Sie den Link.',
+          wichtiger_hinweis: null,
+          quellen: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Auto-detect Google Drive URL anywhere in the message
+    const driveMatch = body.message?.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && (!body.action || body.action === 'question')) {
+      body.action = 'analyze_pdf';
+      body.file_id = driveMatch[1].split('/')[0].split('?')[0];
+      body.file_name = 'Behördenschreiben.pdf';
+    }
+
     // Detect action from message content if not explicitly set
     if (body.message) {
       const msg = body.message.toLowerCase();
