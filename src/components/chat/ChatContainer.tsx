@@ -109,8 +109,12 @@ export const ChatContainer = () => {
       } else {
         setConversations([]);
       }
-      // Always start with a fresh empty conversation on mount/refresh
-      setConversationId(crypto.randomUUID());
+      // Always start with a fresh empty conversation on mount/refresh.
+      // The sessionId sent to n8n MUST equal the conversationId so that
+      // gpt_session_context starts clean for every new conversation.
+      const freshId = crypto.randomUUID();
+      setConversationId(freshId);
+      localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,15 +132,19 @@ export const ChatContainer = () => {
   };
 
   const handleNewConversation = () => {
+    // sessionId sent to n8n == conversationId, so a new conversation
+    // always means a fresh, empty gpt_session_context on the backend.
     const newId = crypto.randomUUID();
     setConversationId(newId);
+    localStorage.setItem("chat-session-id", newId);
     setMessages([]);
-    localStorage.setItem("chat-session-id", crypto.randomUUID());
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleSelectConversation = async (cid: string) => {
     setConversationId(cid);
+    // Keep n8n session aligned with the selected conversation.
+    localStorage.setItem("chat-session-id", cid);
     await loadConversationMessages(cid);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
@@ -190,7 +198,13 @@ export const ChatContainer = () => {
     setIsLoading(true);
     persistMessage("user", displayContent);
 
-    const sessionId = localStorage.getItem("chat-session-id") || crypto.randomUUID();
+    // sessionId sent to n8n is ALWAYS the current conversationId.
+    // This guarantees gpt_session_context is scoped to this conversation
+    // and that a new conversation = a brand-new, empty server-side session.
+    const sessionId = conversationId || crypto.randomUUID();
+    if (sessionId !== localStorage.getItem("chat-session-id")) {
+      localStorage.setItem("chat-session-id", sessionId);
+    }
 
     // Build payload
     let payload: Record<string, unknown> = {
