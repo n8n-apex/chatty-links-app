@@ -170,6 +170,9 @@ export const ChatContainer = () => {
         const result = reader.result as string;
         // Remove the data URL prefix (data:application/pdf;base64,)
         const base64 = result.split(',')[1];
+        console.log('[PDF DEBUG 1] FileReader onload fired');
+        console.log('[PDF DEBUG 2] base64 length:', base64?.length);
+        console.log('[PDF DEBUG 3] base64 preview:', base64?.substring(0, 80));
         resolve(base64);
       };
       reader.onerror = reject;
