@@ -251,6 +251,8 @@ export const ChatContainer = () => {
     const startTime = performance.now();
     try {
       console.log('Sende Nachricht über Edge Function:', { sessionId, action: payload.action, hasFile: !!file });
+      console.log('[PDF DEBUG 4] Sending message with file_base64 length:', (payload.file_base64 as string | undefined)?.length);
+      console.log('[PDF DEBUG 5] action:', payload.action);
 
       const { data, error } = await supabase.functions.invoke('chat-proxy', {
         body: payload,
