@@ -12,9 +12,12 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const id = localStorage.getItem('chat-session-id') || crypto.randomUUID();
-    localStorage.setItem('chat-session-id', id);
-    setSessionId(id);
+    const read = () => setSessionId(localStorage.getItem('chat-session-id') || '');
+    read();
+    // Poll so the displayed shortId reflects the current conversation's
+    // sessionId (the 'storage' event doesn't fire in the same tab).
+    const interval = setInterval(read, 500);
+    return () => clearInterval(interval);
   }, []);
 
   const shortId = sessionId.slice(0, 8);
