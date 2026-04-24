@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         action: body.action,
         file_id: body.file_id || null,
+        file_base64: body.file_base64 || null,
         file_name: body.file_name || 'Behördenschreiben.pdf',
         state: body.state || null,
         question: body.question || null,
