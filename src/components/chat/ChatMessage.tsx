@@ -1,14 +1,14 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
-import { Message } from '@/types/chat';
-import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from 'lucide-react';
-import { toast } from 'sonner';
-import { StructuredResponse, tryParseStructured, structuredToPlainText } from './StructuredResponse';
-import { ConfidenceIndicator } from './ConfidenceIndicator';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import { Message } from "@/types/chat";
+import { cn } from "@/lib/utils";
+import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from "lucide-react";
+import { toast } from "sonner";
+import { StructuredResponse, tryParseStructured, structuredToPlainText } from "./StructuredResponse";
+import { ConfidenceIndicator } from "./ConfidenceIndicator";
 
-export type FeedbackStatus = 'correct' | 'correction' | 'inaccurate' | 'note';
+export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
 interface ChatMessageProps {
   message: Message;
@@ -16,28 +16,29 @@ interface ChatMessageProps {
 }
 
 export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
-  const isUser = message.role === 'user';
+  const isUser = message.role === "user";
   const isAdmin = (() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
-    const role = params.get('role');
-    const email = params.get('email') || '';
-    const adminEmails = ['sebastian@umnutzung.de', 'preview@test.com'];
-    return role === 'admin' || adminEmails.includes(email.toLowerCase());
+    const role = params.get("role");
+    const isAdminParam = params.get("is_admin");
+    const email = params.get("email") || "";
+    const adminEmails = ["sebastian@umnutzung.de", "preview@test.com"];
+    return role === "admin" || isAdminParam === "true" || adminEmails.includes(email.toLowerCase());
   })();
   const [copied, setCopied] = useState(false);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
-  const [textareaOpen, setTextareaOpen] = useState<'correction' | 'note' | null>(null);
-  const [feedbackText, setFeedbackText] = useState('');
+  const [textareaOpen, setTextareaOpen] = useState<"correction" | "note" | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
 
   const structured = !isUser ? tryParseStructured(message.content) : null;
   const sourceCount = (() => {
     if (!structured) return 0;
     let count = 0;
     if (Array.isArray(structured.quellen)) count += structured.quellen.length;
-    else if (typeof structured.quellen === 'string' && structured.quellen.trim()) count += 1;
+    else if (typeof structured.quellen === "string" && structured.quellen.trim()) count += 1;
     if (Array.isArray(structured.rechtsgrundlage)) count += structured.rechtsgrundlage.length;
-    else if (typeof structured.rechtsgrundlage === 'string' && structured.rechtsgrundlage.trim()) count += 1;
+    else if (typeof structured.rechtsgrundlage === "string" && structured.rechtsgrundlage.trim()) count += 1;
     return count;
   })();
 
@@ -50,38 +51,38 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
 
   const handleDownload = (url: string) => {
     if (!url) {
-      toast.error('Download-Link fehlt');
+      toast.error("Download-Link fehlt");
       return;
     }
 
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const submitFeedback = async (status: FeedbackStatus, text?: string) => {
-    console.log('Feedback clicked:', status);
+    console.log("Feedback clicked:", status);
     try {
       await onFeedback?.(message.id, status, text);
       setActiveStatus(status);
       setTimeout(() => setActiveStatus(null), 2000);
     } catch (e) {
-      toast.error('Feedback konnte nicht gesendet werden');
+      toast.error("Feedback konnte nicht gesendet werden");
     }
   };
 
-  const handleQuickFeedback = (status: 'correct' | 'inaccurate') => {
+  const handleQuickFeedback = (status: "correct" | "inaccurate") => {
     submitFeedback(status);
   };
 
   const handleTextareaSubmit = () => {
     if (!textareaOpen || !feedbackText.trim()) return;
     submitFeedback(textareaOpen, feedbackText.trim());
-    setFeedbackText('');
+    setFeedbackText("");
     setTextareaOpen(null);
   };
 
@@ -89,40 +90,24 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={cn(
-        'group flex gap-3 px-4 py-3',
-        isUser ? 'flex-row-reverse' : 'flex-row'
-      )}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className={cn("group flex gap-3 px-4 py-3", isUser ? "flex-row-reverse" : "flex-row")}
     >
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-          isUser
-            ? 'gradient-primary shadow-glow'
-            : 'bg-secondary border border-border'
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          isUser ? "gradient-primary shadow-glow" : "bg-secondary border border-border",
         )}
       >
-        {isUser ? (
-          <User className="h-4 w-4 text-primary-foreground" />
-        ) : (
-          <Bot className="h-4 w-4 text-primary" />
-        )}
+        {isUser ? <User className="h-4 w-4 text-primary-foreground" /> : <Bot className="h-4 w-4 text-primary" />}
       </div>
 
-      <div
-        className={cn(
-          'flex max-w-[75%] flex-col gap-1',
-          isUser ? 'items-end' : 'items-start'
-        )}
-      >
+      <div className={cn("flex max-w-[75%] flex-col gap-1", isUser ? "items-end" : "items-start")}>
         <div className="relative">
           <div
             className={cn(
-              'rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
-              isUser
-                ? 'gradient-primary text-primary-foreground rounded-br-md'
-                : 'glass text-foreground rounded-bl-md'
+              "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+              isUser ? "gradient-primary text-primary-foreground rounded-br-md" : "glass text-foreground rounded-bl-md",
             )}
           >
             {isUser ? (
@@ -132,13 +117,15 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
                 {(message.imageUrl || /<\s*img\s/i.test(message.content)) && (
                   <div className="mb-2 relative group/img">
                     <img
-                      src={message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || ''}
+                      src={message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || ""}
                       alt="Generated image"
                       className="max-w-full rounded-lg"
-                      style={{ maxHeight: '400px' }}
+                      style={{ maxHeight: "400px" }}
                     />
                     <button
-                      onClick={() => handleDownload(message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || '')}
+                      onClick={() =>
+                        handleDownload(message.imageUrl || message.content.match(/src=['"](.*?)['"]/)?.[1] || "")
+                      }
                       className="absolute bottom-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-lg p-2 bg-background/80 backdrop-blur-sm border border-border text-foreground hover:bg-background shadow-sm cursor-pointer"
                       title="Bild herunterladen"
                     >
@@ -146,30 +133,42 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
                     </button>
                   </div>
                 )}
-                {!/<\s*img\s/i.test(message.content) && (() => {
-                  if (structured) {
-                    return <StructuredResponse data={structured} />;
-                  }
-                  return (
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
-                      <ReactMarkdown
-                        components={{
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-                          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-                          li: ({ children }) => <li className="mb-1">{children}</li>,
-                          h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
-                          h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
-                          h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
-                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
-                          code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>,
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
-                  );
-                })()}
+                {!/<\s*img\s/i.test(message.content) &&
+                  (() => {
+                    if (structured) {
+                      return <StructuredResponse data={structured} />;
+                    }
+                    return (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+                            ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
+                            h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
+                            h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
+                            a: ({ href, children }) => (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary underline"
+                              >
+                                {children}
+                              </a>
+                            ),
+                            code: ({ children }) => (
+                              <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                            ),
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  })()}
               </>
             )}
           </div>
@@ -181,7 +180,7 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
                 className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 title="Text kopieren"
               >
-              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
             </div>
           )}
@@ -191,26 +190,26 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           <div className="mt-1 w-full">
             <div className="flex items-center gap-1">
               <button
-                onClick={() => handleQuickFeedback('correct')}
+                onClick={() => handleQuickFeedback("correct")}
                 className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
-                  activeStatus === 'correct'
-                    ? 'bg-green-500/15 text-green-500'
-                    : 'text-muted-foreground hover:bg-green-500/10 hover:text-green-500'
+                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                  activeStatus === "correct"
+                    ? "bg-green-500/15 text-green-500"
+                    : "text-muted-foreground hover:bg-green-500/10 hover:text-green-500",
                 )}
                 title="Korrekt"
               >
-                {activeStatus === 'correct' ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                {activeStatus === "correct" ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
                 <span>Korrekt</span>
               </button>
 
               <button
-                onClick={() => setTextareaOpen(textareaOpen === 'correction' ? null : 'correction')}
+                onClick={() => setTextareaOpen(textareaOpen === "correction" ? null : "correction")}
                 className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
-                  textareaOpen === 'correction' || activeStatus === 'correction'
-                    ? 'bg-yellow-500/15 text-yellow-500'
-                    : 'text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500'
+                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                  textareaOpen === "correction" || activeStatus === "correction"
+                    ? "bg-yellow-500/15 text-yellow-500"
+                    : "text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500",
                 )}
                 title="Korrektur"
               >
@@ -219,12 +218,12 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
               </button>
 
               <button
-                onClick={() => handleQuickFeedback('inaccurate')}
+                onClick={() => handleQuickFeedback("inaccurate")}
                 className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
-                  activeStatus === 'inaccurate'
-                    ? 'bg-red-500/15 text-red-500'
-                    : 'text-muted-foreground hover:bg-red-500/10 hover:text-red-500'
+                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                  activeStatus === "inaccurate"
+                    ? "bg-red-500/15 text-red-500"
+                    : "text-muted-foreground hover:bg-red-500/10 hover:text-red-500",
                 )}
                 title="Ungenau"
               >
@@ -233,12 +232,12 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
               </button>
 
               <button
-                onClick={() => setTextareaOpen(textareaOpen === 'note' ? null : 'note')}
+                onClick={() => setTextareaOpen(textareaOpen === "note" ? null : "note")}
                 className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
-                  textareaOpen === 'note' || activeStatus === 'note'
-                    ? 'bg-blue-500/15 text-blue-500'
-                    : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500'
+                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                  textareaOpen === "note" || activeStatus === "note"
+                    ? "bg-blue-500/15 text-blue-500"
+                    : "text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500",
                 )}
                 title="Hinweis"
               >
@@ -251,21 +250,21 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
               {textareaOpen && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
+                  animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-2 overflow-hidden"
                 >
                   <textarea
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder={textareaOpen === 'correction' ? 'Was ist die Korrektur?' : 'Hinweis hinzufügen...'}
+                    placeholder={textareaOpen === "correction" ? "Was ist die Korrektur?" : "Hinweis hinzufügen..."}
                     className="w-full min-h-[60px] rounded-md border border-border bg-background/50 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   <div className="mt-1 flex justify-end gap-1">
                     <button
                       onClick={() => {
                         setTextareaOpen(null);
-                        setFeedbackText('');
+                        setFeedbackText("");
                       }}
                       className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50"
                     >
@@ -285,18 +284,16 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           </div>
         )}
 
-        {!isUser && sourceCount > 0 && (
-          <ConfidenceIndicator sources={sourceCount} className="px-2" />
-        )}
+        {!isUser && sourceCount > 0 && <ConfidenceIndicator sources={sourceCount} className="px-2" />}
 
         <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
           <span>
             {message.timestamp.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
+              hour: "2-digit",
+              minute: "2-digit",
             })}
           </span>
-          {!isUser && typeof message.durationMs === 'number' && (
+          {!isUser && typeof message.durationMs === "number" && (
             <span title="Antwortzeit">· Antwort in {(message.durationMs / 1000).toFixed(1)}s</span>
           )}
         </div>
