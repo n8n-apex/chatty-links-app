@@ -17,6 +17,14 @@ interface ChatMessageProps {
 
 export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
   const isUser = message.role === 'user';
+  const isAdmin = (() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    const role = params.get('role');
+    const email = params.get('email') || '';
+    const adminEmails = ['sebastian@umnutzung.de', 'preview@test.com'];
+    return role === 'admin' || adminEmails.includes(email.toLowerCase());
+  })();
   const [copied, setCopied] = useState(false);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
   const [textareaOpen, setTextareaOpen] = useState<'correction' | 'note' | null>(null);
@@ -179,7 +187,7 @@ export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
           )}
         </div>
 
-        {!isUser && (
+        {!isUser && isAdmin && (
           <div className="mt-1 w-full">
             <div className="flex items-center gap-1">
               <button
