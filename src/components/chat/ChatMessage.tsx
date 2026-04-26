@@ -13,19 +13,11 @@ export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 interface ChatMessageProps {
   message: Message;
   onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => void | Promise<void>;
+  isAdmin?: boolean;
 }
 
-export const ChatMessage = ({ message, onFeedback }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin = false }: ChatMessageProps) => {
   const isUser = message.role === "user";
-  const isAdmin = (() => {
-    if (typeof window === "undefined") return false;
-    const params = new URLSearchParams(window.location.search);
-    const role = params.get("role");
-    const isAdminParam = params.get("is_admin");
-    const email = params.get("email") || "";
-    const adminEmails = ["sebastian@umnutzung.de", "preview@test.com"];
-    return role === "admin" || isAdminParam === "true" || adminEmails.includes(email.toLowerCase());
-  })();
   const [copied, setCopied] = useState(false);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
   const [textareaOpen, setTextareaOpen] = useState<"correction" | "note" | null>(null);

@@ -23,6 +23,7 @@ export const ChatContainer = () => {
   const isUnresolvedEmail = currentUserEmail.includes("{{") || currentUserEmail.includes("}}");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
@@ -333,12 +334,13 @@ export const ChatContainer = () => {
   };
 
   const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
+    const params = new URLSearchParams(window.location.search);
+    const sig = params.get("sig") || "";
+
     try {
       console.log("Sending feedback:", { messageId, status });
 
-      // Find the message being rated
       const ratedMessage = messages.find((m) => m.id === messageId);
-      // Find the user message that preceded it
       const messageIndex = messages.findIndex((m) => m.id === messageId);
       const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
 
@@ -357,6 +359,7 @@ export const ChatContainer = () => {
           response_content: ratedMessage?.content || null,
           question: userMessage?.content || null,
           user_email: currentUserEmail,
+          sig: sig,
         }),
       });
       console.log("Feedback response:", response.status);
@@ -370,6 +373,37 @@ export const ChatContainer = () => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
     }
+  }, []);
+
+  // Server-verified admin check
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const email = params.get("email") || "";
+      const sig = params.get("sig") || "";
+
+      if (!email || !sig) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        const { data } = await supabase.functions.invoke("chat-proxy", {
+          body: { action: "check_admin", email, sig },
+        });
+
+        if (data && data.isAdmin === true) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (e) {
+        console.error("Admin check failed:", e);
+        setIsAdmin(false);
+      }
+    };
+
+    checkAdmin();
   }, []);
 
   return (
@@ -430,7 +464,7 @@ export const ChatContainer = () => {
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} />
+                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
                 <div ref={messagesEndRef} />
