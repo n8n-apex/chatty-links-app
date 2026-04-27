@@ -470,21 +470,30 @@ export const ChatContainer = () => {
 
         <div className="border-t border-border bg-background/80 px-4 pt-3 backdrop-blur-xl">
           <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
-            {[
-              { icon: MessageSquare, label: "Rechtsfrage", prefill: "Ich habe eine Baurechtsfrage: " },
-              { icon: FileText, label: "Stellungnahme", prefill: "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]" },
-              { icon: Search, label: "Behördenschreiben", prefill: "Analysiere dieses Behördenschreiben: " },
-            ].map(({ icon: Icon, label, prefill }) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => setInputValue(prefill)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground"
-              >
-                <Icon className="h-3 w-3" />
-                {label}
-              </button>
-            ))}
+            {(() => {
+              const hasB4Analysis = messages.some(
+                (m) => m.role === "ai" && typeof m.content === "string" && m.content.includes("Analyse der Forderungen")
+              );
+              const stellungnahmePrefill = hasB4Analysis
+                ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
+                : "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]";
+              const buttons = [
+                { icon: MessageSquare, label: "Rechtsfrage", prefill: "Ich habe eine Baurechtsfrage: " },
+                { icon: FileText, label: "Stellungnahme", prefill: stellungnahmePrefill },
+                { icon: Search, label: "Behördenschreiben", prefill: "Analysiere dieses Behördenschreiben: " },
+              ];
+              return buttons.map(({ icon: Icon, label, prefill }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setInputValue(prefill)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground"
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </button>
+              ));
+            })()}
           </div>
         </div>
         <ChatInput
