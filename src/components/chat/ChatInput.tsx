@@ -48,8 +48,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Bitte nur PDF-Dateien hochladen.');
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp|svg)$/.test(name);
+    if (!isPdf && !isImage) {
+      toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
