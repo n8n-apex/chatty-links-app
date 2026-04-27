@@ -356,7 +356,6 @@ export const ChatContainer = () => {
           response_content: ratedMessage?.content || null,
           question: userMessage?.content || null,
           user_email: currentUserEmail,
-          sig: sig,
         }),
       });
       console.log("Feedback response:", response.status);
