@@ -108,10 +108,20 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,application/pdf"
+              accept=".pdf,application/pdf,image/*"
               className="hidden"
               onChange={handleFileChange}
             />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              disabled={isLoading}
+              onClick={() => fileInputRef.current?.click()}
+              className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+              aria-label="Datei anhängen"
+              title="PDF oder Bild anhängen"
+            >
             <Button
               type="button"
               size="icon"
