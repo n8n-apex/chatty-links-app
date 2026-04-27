@@ -472,7 +472,7 @@ export const ChatContainer = () => {
           <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
             {(() => {
               const hasB4Analysis = messages.some(
-                (m) => m.role === "ai" && typeof m.content === "string" && m.content.includes("Analyse der Forderungen")
+                (m) => m.role === "assistant" && typeof m.content === "string" && m.content.includes("Analyse der Forderungen")
               );
               const stellungnahmePrefill = hasB4Analysis
                 ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
