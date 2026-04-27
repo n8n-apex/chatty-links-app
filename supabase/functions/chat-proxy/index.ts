@@ -185,33 +185,6 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === 'submit_feedback') {
-      // Verify HMAC signature before accepting feedback
-      const fbEmail = body.user_email || '';
-      const fbSig = body.sig || '';
-      const fbHmacSecret = Deno.env.get('HMAC_SECRET') || '';
-
-      if (fbHmacSecret && fbSig) {
-        const encoder = new TextEncoder();
-        const key = await crypto.subtle.importKey(
-          'raw',
-          encoder.encode(fbHmacSecret),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign']
-        );
-        const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(fbEmail));
-        const expectedSig = Array.from(new Uint8Array(signatureBuffer))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-
-        if (fbSig !== expectedSig) {
-          return new Response(
-            JSON.stringify({ error: 'unauthorized', message: 'Invalid signature' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
-
       try {
         await fetch(webhookUrl, {
           method: 'POST',
