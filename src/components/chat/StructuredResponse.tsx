@@ -57,18 +57,23 @@ export const structuredToPlainText = (data: StructuredPayload): string => {
   if (data.antwort) parts.push(data.antwort.trim());
 
   // B6
-  if (data.sachverhalt) pushSection('Sachverhalt', data.sachverhalt);
-  if (Array.isArray(data.kernargumente) && data.kernargumente.length > 0) {
-    const lines = data.kernargumente.map((k, i) => {
+  const b6Sachverhalt = data.projekt_und_sachverhalt || data.sachverhalt;
+  const b6Beurteilungsgrundlage = data.rechtliche_beurteilungsgrundlage || data.rechtliche_wuerdigung;
+  const b6Items = data.beurteilung_der_einzelfakten || data.kernargumente;
+  const b6Schluss = data.schlussfolgerung || data.ergebnis;
+  if (b6Sachverhalt) pushSection('1. Projekt und Sachverhalt', b6Sachverhalt);
+  if (b6Beurteilungsgrundlage) pushSection('2. Rechtliche Beurteilungsgrundlage', b6Beurteilungsgrundlage);
+  if (Array.isArray(b6Items) && b6Items.length > 0) {
+    const lines = b6Items.map((k, i) => {
       if (typeof k === 'string') return `${i + 1}. ${k}`;
-      const punkt = k.punkt || k.argument || '';
-      const arg = k.argument && k.punkt ? k.argument : '';
-      const rg = k.rechtsgrundlage ? ` (${k.rechtsgrundlage})` : '';
-      return `${i + 1}. ${punkt}${arg ? ` — ${arg}` : ''}${rg}`;
+      const title = (k as { fakt?: string; punkt?: string }).fakt || (k as { punkt?: string }).punkt || '';
+      const desc = (k as { beurteilung?: string; argument?: string }).beurteilung || (k as { argument?: string }).argument || '';
+      const rg = (k as { rechtsgrundlage?: string }).rechtsgrundlage ? ` (${(k as { rechtsgrundlage?: string }).rechtsgrundlage})` : '';
+      return `${i + 1}. ${title}${desc ? ` — ${desc}` : ''}${rg}`;
     });
-    parts.push(`Kernargumente:\n${lines.join('\n')}`);
+    parts.push(`3. Beurteilung der Einzelfakten:\n${lines.join('\n')}`);
   }
-  if (data.ergebnis) pushSection('Ergebnis', data.ergebnis);
+  if (b6Schluss) pushSection('4. Schlussfolgerung', b6Schluss);
   if (data.entwurf_stellungnahme) pushSection('Entwurf Stellungnahme', data.entwurf_stellungnahme);
 
   // B4
