@@ -376,16 +376,15 @@ export const ChatContainer = () => {
     const checkAdmin = async () => {
       const params = new URLSearchParams(window.location.search);
       const email = params.get("email") || "";
-      const sig = params.get("sig") || "";
 
-      if (!email || !sig) {
+      if (!email) {
         setIsAdmin(false);
         return;
       }
 
       try {
-        const { data } = await supabase.functions.invoke("chat-proxy", {
-          body: { action: "check_admin", email, sig },
+        const { data, error } = await supabase.functions.invoke("chat-proxy", {
+          body: { action: "check_admin", email },
         });
 
         if (data && data.isAdmin === true) {
