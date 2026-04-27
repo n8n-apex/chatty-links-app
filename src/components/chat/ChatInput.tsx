@@ -122,16 +122,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               aria-label="Datei anhängen"
               title="PDF oder Bild anhängen"
             >
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              disabled={isLoading}
-              onClick={() => fileInputRef.current?.click()}
-              className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              aria-label="PDF anhängen"
-              title="Behördenschreiben (PDF) anhängen"
-            >
               <Paperclip className="h-4 w-4" />
             </Button>
             <textarea
