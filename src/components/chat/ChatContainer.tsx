@@ -334,9 +334,6 @@ export const ChatContainer = () => {
   };
 
   const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
-    const params = new URLSearchParams(window.location.search);
-    const sig = params.get("sig") || "";
-
     try {
       console.log("Sending feedback:", { messageId, status });
 
