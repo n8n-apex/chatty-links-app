@@ -35,7 +35,14 @@ export interface StructuredPayload {
   kernargumente?: Array<string | { punkt?: string; argument?: string; rechtsgrundlage?: string; [key: string]: unknown }>;
   ergebnis?: string;
   entwurf_stellungnahme?: string;
-}
+  // B6 - new structure
+  projekt_und_sachverhalt?: string;
+  rechtliche_beurteilungsgrundlage?: string;
+  rechtliche_wuerdigung?: string;
+  beurteilung_der_einzelfakten?: Array<string | { fakt?: string; beurteilung?: string; punkt?: string; argument?: string; rechtsgrundlage?: string; [key: string]: unknown }>;
+  schlussfolgerung?: string;
+  kontext_ausreichend?: boolean;
+  fehlende_information?: string | null;
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
   const parts: string[] = [];
