@@ -138,6 +138,9 @@ export const tryParseStructured = (content: string): StructuredPayload | null =>
       obj.antwort ||
       obj.zusammenfassung ||
       obj.entwurf_stellungnahme ||
+      obj.projekt_und_sachverhalt ||
+      obj.beurteilung_der_einzelfakten ||
+      obj.schlussfolgerung ||
       obj.action === 'question'
     ) {
       return obj as StructuredPayload;
