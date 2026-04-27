@@ -35,6 +35,14 @@ export interface StructuredPayload {
   kernargumente?: Array<string | { punkt?: string; argument?: string; rechtsgrundlage?: string; [key: string]: unknown }>;
   ergebnis?: string;
   entwurf_stellungnahme?: string;
+  // B6 - new structure
+  projekt_und_sachverhalt?: string;
+  rechtliche_beurteilungsgrundlage?: string;
+  rechtliche_wuerdigung?: string;
+  beurteilung_der_einzelfakten?: Array<string | { fakt?: string; beurteilung?: string; punkt?: string; argument?: string; rechtsgrundlage?: string; [key: string]: unknown }>;
+  schlussfolgerung?: string;
+  kontext_ausreichend?: boolean;
+  fehlende_information?: string | null;
 }
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
@@ -49,18 +57,23 @@ export const structuredToPlainText = (data: StructuredPayload): string => {
   if (data.antwort) parts.push(data.antwort.trim());
 
   // B6
-  if (data.sachverhalt) pushSection('Sachverhalt', data.sachverhalt);
-  if (Array.isArray(data.kernargumente) && data.kernargumente.length > 0) {
-    const lines = data.kernargumente.map((k, i) => {
+  const b6Sachverhalt = data.projekt_und_sachverhalt || data.sachverhalt;
+  const b6Beurteilungsgrundlage = data.rechtliche_beurteilungsgrundlage || data.rechtliche_wuerdigung;
+  const b6Items = data.beurteilung_der_einzelfakten || data.kernargumente;
+  const b6Schluss = data.schlussfolgerung || data.ergebnis;
+  if (b6Sachverhalt) pushSection('1. Projekt und Sachverhalt', b6Sachverhalt);
+  if (b6Beurteilungsgrundlage) pushSection('2. Rechtliche Beurteilungsgrundlage', b6Beurteilungsgrundlage);
+  if (Array.isArray(b6Items) && b6Items.length > 0) {
+    const lines = b6Items.map((k, i) => {
       if (typeof k === 'string') return `${i + 1}. ${k}`;
-      const punkt = k.punkt || k.argument || '';
-      const arg = k.argument && k.punkt ? k.argument : '';
-      const rg = k.rechtsgrundlage ? ` (${k.rechtsgrundlage})` : '';
-      return `${i + 1}. ${punkt}${arg ? ` — ${arg}` : ''}${rg}`;
+      const title = (k as { fakt?: string; punkt?: string }).fakt || (k as { punkt?: string }).punkt || '';
+      const desc = (k as { beurteilung?: string; argument?: string }).beurteilung || (k as { argument?: string }).argument || '';
+      const rg = (k as { rechtsgrundlage?: string }).rechtsgrundlage ? ` (${(k as { rechtsgrundlage?: string }).rechtsgrundlage})` : '';
+      return `${i + 1}. ${title}${desc ? ` — ${desc}` : ''}${rg}`;
     });
-    parts.push(`Kernargumente:\n${lines.join('\n')}`);
+    parts.push(`3. Beurteilung der Einzelfakten:\n${lines.join('\n')}`);
   }
-  if (data.ergebnis) pushSection('Ergebnis', data.ergebnis);
+  if (b6Schluss) pushSection('4. Schlussfolgerung', b6Schluss);
   if (data.entwurf_stellungnahme) pushSection('Entwurf Stellungnahme', data.entwurf_stellungnahme);
 
   // B4
@@ -125,6 +138,9 @@ export const tryParseStructured = (content: string): StructuredPayload | null =>
       obj.antwort ||
       obj.zusammenfassung ||
       obj.entwurf_stellungnahme ||
+      obj.projekt_und_sachverhalt ||
+      obj.beurteilung_der_einzelfakten ||
+      obj.schlussfolgerung ||
       obj.action === 'question'
     ) {
       return obj as StructuredPayload;
@@ -226,34 +242,50 @@ const Collapsible = ({ title, children, defaultOpen = false }: { title: string; 
 };
 
 export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
-  const hasKernargumente = Array.isArray(data.kernargumente) && data.kernargumente.length > 0;
-  const hasErgebnis = !!(data.ergebnis && String(data.ergebnis).trim());
+  const b6Sachverhalt = data.projekt_und_sachverhalt || data.sachverhalt;
+  const b6Beurteilungsgrundlage = data.rechtliche_beurteilungsgrundlage || data.rechtliche_wuerdigung;
+  const b6Items = (data.beurteilung_der_einzelfakten || data.kernargumente) as
+    | Array<string | { fakt?: string; beurteilung?: string; punkt?: string; argument?: string; rechtsgrundlage?: string }>
+    | undefined;
+  const b6Schluss = data.schlussfolgerung || data.ergebnis;
+
+  const hasB6Items = Array.isArray(b6Items) && b6Items.length > 0;
+  const hasB6Schluss = !!(b6Schluss && String(b6Schluss).trim());
   const hasEntwurfStellung = !!(data.entwurf_stellungnahme && String(data.entwurf_stellungnahme).trim());
   const hasAnalyseForderungen = Array.isArray(data.analyse_der_forderungen) && data.analyse_der_forderungen.length > 0;
   const hasAntwortEntwurf = !!(data.antwortschreiben_entwurf && String(data.antwortschreiben_entwurf).trim());
   const hasGesamtbeurteilung = !!(data.gesamtbeurteilung && String(data.gesamtbeurteilung).trim());
 
-  // B6 - Stellungnahme: only enter this branch if there's actual B6 content beyond sachverhalt
-  if (hasEntwurfStellung || hasKernargumente || hasErgebnis) {
+  // B6 - Stellungnahme
+  if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
-        {data.sachverhalt && (
+        {b6Sachverhalt && (
           <Section>
-            <p className="text-sm leading-relaxed text-foreground">{data.sachverhalt}</p>
+            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Projekt und Sachverhalt</div>
+            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Sachverhalt}</p>
           </Section>
         )}
-        {hasKernargumente && (
+        {b6Beurteilungsgrundlage && (
           <Section>
-            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kernargumente</div>
+            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. Rechtliche Beurteilungsgrundlage</div>
+            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Beurteilungsgrundlage}</p>
+          </Section>
+        )}
+        {hasB6Items && (
+          <Section>
+            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Beurteilung der Einzelfakten</div>
             <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
-              {data.kernargumente.map((arg, i) => {
+              {b6Items!.map((arg, i) => {
                 if (typeof arg === 'string') {
                   return <li key={i} className="leading-relaxed">{arg}</li>;
                 }
+                const title = arg.fakt || arg.punkt;
+                const desc = arg.beurteilung || arg.argument;
                 return (
                   <li key={i} className="leading-relaxed">
-                    {arg.punkt && <div className="font-medium">{arg.punkt}</div>}
-                    {arg.argument && <div className="text-muted-foreground">{arg.argument}</div>}
+                    {title && <div className="font-medium">{title}</div>}
+                    {desc && <div className="text-muted-foreground">{desc}</div>}
                     {arg.rechtsgrundlage && (
                       <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>
                     )}
@@ -263,11 +295,11 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
             </ol>
           </Section>
         )}
-        {data.ergebnis && (
+        {b6Schluss && (
           <Section>
             <div className="border-l-2 border-border pl-3 py-1">
-              <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">✅ Ergebnis</div>
-              <div className="text-sm text-foreground">{data.ergebnis}</div>
+              <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
+              <div className="text-sm text-foreground whitespace-pre-wrap">{b6Schluss}</div>
             </div>
           </Section>
         )}

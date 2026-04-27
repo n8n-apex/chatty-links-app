@@ -477,7 +477,7 @@ export const ChatContainer = () => {
           <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
             {[
               { icon: MessageSquare, label: "Rechtsfrage", prefill: "Ich habe eine Baurechtsfrage: " },
-              { icon: FileText, label: "Stellungnahme", prefill: "Erstelle eine Stellungnahme zum Thema: " },
+              { icon: FileText, label: "Stellungnahme", prefill: "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]" },
               { icon: Search, label: "Behördenschreiben", prefill: "Analysiere dieses Behördenschreiben: " },
             ].map(({ icon: Icon, label, prefill }) => (
               <button
