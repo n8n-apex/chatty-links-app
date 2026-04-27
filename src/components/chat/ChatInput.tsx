@@ -48,8 +48,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Bitte nur PDF-Dateien hochladen.');
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp|svg)$/.test(name);
+    if (!isPdf && !isImage) {
+      toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -105,7 +108,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,application/pdf"
+              accept=".pdf,application/pdf,image/*"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -116,8 +119,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               disabled={isLoading}
               onClick={() => fileInputRef.current?.click()}
               className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              aria-label="PDF anhängen"
-              title="Behördenschreiben (PDF) anhängen"
+              aria-label="Datei anhängen"
+              title="PDF oder Bild anhängen"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
