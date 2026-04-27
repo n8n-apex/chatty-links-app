@@ -43,6 +43,7 @@ export interface StructuredPayload {
   schlussfolgerung?: string;
   kontext_ausreichend?: boolean;
   fehlende_information?: string | null;
+}
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
   const parts: string[] = [];
