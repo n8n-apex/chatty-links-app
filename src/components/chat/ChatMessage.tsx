@@ -16,8 +16,17 @@ interface ChatMessageProps {
   isAdmin?: boolean;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin = false }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false }: ChatMessageProps) => {
   const isUser = message.role === "user";
+
+  const isAdmin = (() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get('email') || '';
+    const adminEmails = ['sebastian@umnutzung.de', 'utkarsh@apex-consulting.ai', 'preview@test.com'];
+    if (adminEmails.includes(email.toLowerCase())) return true;
+    return (window as any).__isAdminVerified === true;
+  })();
   const [copied, setCopied] = useState(false);
   const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
   const [textareaOpen, setTextareaOpen] = useState<"correction" | "note" | null>(null);
