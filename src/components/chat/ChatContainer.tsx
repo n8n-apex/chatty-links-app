@@ -471,9 +471,18 @@ export const ChatContainer = () => {
         <div className="border-t border-border bg-background/80 px-4 pt-3 backdrop-blur-xl">
           <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
             {(() => {
-              const hasB4Analysis = messages.some(
-                (m) => m.role === "assistant" && typeof m.content === "string" && m.content.includes("Analyse der Forderungen")
-              );
+              const hasB4Analysis = messages.some((m) => {
+                if (m.role !== "assistant") return false;
+                const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+                const lower = content.toLowerCase();
+                return (
+                  lower.includes("analyse der forderungen") ||
+                  lower.includes("behördenschreiben") ||
+                  lower.includes("behoerdenschreiben") ||
+                  lower.includes("analyze_pdf")
+                );
+              });
+              console.log("[Stellungnahme] hasB4Analysis =", hasB4Analysis, "messages:", messages.length);
               const stellungnahmePrefill = hasB4Analysis
                 ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
                 : "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]";
