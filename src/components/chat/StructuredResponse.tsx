@@ -466,7 +466,14 @@ const renderCommonExtras = (data: StructuredPayload) => {
     ? [data.quellen]
     : [];
   const konf = konfidenzStyle(data.konfidenz);
-  if (quellen.length === 0 && !konf) return null;
+  // Filter validated === false and dedupe (handled by QuelleList)
+  const arr = Array.isArray(data.quellen)
+    ? data.quellen
+    : typeof data.quellen === 'string' && data.quellen
+    ? [data.quellen]
+    : [];
+  const visibleCount = arr.filter((q) => typeof q === 'string' || q.validated !== false).length;
+  if (visibleCount === 0 && !konf) return null;
   return (
     <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
       {konf && (
@@ -475,31 +482,10 @@ const renderCommonExtras = (data: StructuredPayload) => {
           <span>{konf.label}</span>
         </div>
       )}
-      {quellen.length > 0 && (
+      {visibleCount > 0 && (
         <div className="flex flex-col gap-1">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
-          <div className="flex flex-col gap-1">
-            {quellen.map((q, i) => {
-              let label: string;
-              if (typeof q === 'string') {
-                label = q;
-              } else if (q.display) {
-                label = q.display;
-              } else {
-                label = [q.paragraph, q.source_file || q.file, q.state, q.document_type || q.type]
-                  .filter(Boolean)
-                  .join(' · ') || JSON.stringify(q);
-              }
-              return (
-                <span
-                  key={i}
-                  className="inline-flex items-center self-start rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground"
-                >
-                  {label}
-                </span>
-              );
-            })}
-          </div>
+          <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} />
         </div>
       )}
     </div>
