@@ -33,9 +33,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((message.trim() || attachedFile) && !isLoading) {
-      onSendMessage(message.trim(), attachedFile);
+      const trimmedZiel = ziel.trim();
+      onSendMessage(message.trim(), attachedFile, trimmedZiel || undefined);
       setMessage('');
       setAttachedFile(null);
+      setZiel('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
