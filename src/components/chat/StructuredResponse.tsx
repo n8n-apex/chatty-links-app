@@ -460,11 +460,6 @@ const konfidenzStyle = (k?: string): { dot: string; label: string } | null => {
 };
 
 const renderCommonExtras = (data: StructuredPayload) => {
-  const quellen = Array.isArray(data.quellen)
-    ? data.quellen
-    : typeof data.quellen === 'string' && data.quellen
-    ? [data.quellen]
-    : [];
   const konf = konfidenzStyle(data.konfidenz);
   // Filter validated === false and dedupe (handled by QuelleList)
   const arr = Array.isArray(data.quellen)
@@ -472,7 +467,7 @@ const renderCommonExtras = (data: StructuredPayload) => {
     : typeof data.quellen === 'string' && data.quellen
     ? [data.quellen]
     : [];
-  const visibleCount = arr.filter((q) => typeof q === 'string' || q.validated !== false).length;
+  const visibleCount = arr.filter((q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false).length;
   if (visibleCount === 0 && !konf) return null;
   return (
     <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
