@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface ChatInputProps {
-  onSendMessage: (message: string, file?: File | null) => void;
+  onSendMessage: (message: string, file?: File | null, ziel?: string) => void;
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
@@ -15,7 +15,9 @@ interface ChatInputProps {
 export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [ziel, setZiel] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const zielRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Use controlled input if inputValue is provided
