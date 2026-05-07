@@ -185,7 +185,7 @@ export const ChatContainer = () => {
     });
   };
 
-  const sendMessage = async (content: string, file?: File | null) => {
+  const sendMessage = async (content: string, file?: File | null, ziel?: string) => {
     const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
 
     const userMessage: Message = {
