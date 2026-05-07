@@ -228,6 +228,9 @@ export const ChatContainer = () => {
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
         };
+        if (ziel && ziel.trim()) {
+          (payload as Record<string, unknown>).ziel = ziel.trim();
+        }
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("PDF konnte nicht gelesen werden.");
