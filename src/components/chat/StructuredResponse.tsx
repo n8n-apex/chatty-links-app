@@ -249,6 +249,16 @@ const Collapsible = ({ title, children, defaultOpen = false }: { title: string; 
 };
 
 export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
+  // B4 — Behördenschreiben analysis (full structured view)
+  const isB4 =
+    data.action === 'analyze_pdf' ||
+    !!(data as BehoerdenAnalysisData).analyse_der_forderungen ||
+    !!(data as BehoerdenAnalysisData).antwortschreiben_entwurf ||
+    !!(data as BehoerdenAnalysisData).gesamtbeurteilung;
+  if (isB4) {
+    return <BehoerdenAnalysis data={data as BehoerdenAnalysisData} />;
+  }
+
   const b6Sachverhalt = data.projekt_und_sachverhalt || data.sachverhalt;
   const b6Beurteilungsgrundlage = data.rechtliche_beurteilungsgrundlage || data.rechtliche_wuerdigung;
   const b6Items = (data.beurteilung_der_einzelfakten || data.kernargumente) as
