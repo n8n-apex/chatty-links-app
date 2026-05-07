@@ -23,7 +23,8 @@ export interface StructuredPayload {
   fehlende_informationen?: string | null;
   naechste_schritte?: string | string[] | null;
   wichtiger_hinweis?: string | null;
-  quellen?: Array<string | { file?: string; state?: string; type?: string; [key: string]: unknown }> | string;
+  quellen?: Array<string | { file?: string; source_file?: string; state?: string; type?: string; document_type?: string; paragraph?: string; display?: string; [key: string]: unknown }> | string;
+  konfidenz?: 'hoch' | 'mittel' | 'niedrig' | 'unzureichend' | string;
   action?: string;
   // B4 - Behördenschreiben Analyse
   zusammenfassung?: string;
