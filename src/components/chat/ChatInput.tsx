@@ -81,6 +81,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     }
   }, [message]);
 
+  // Auto-grow Ziel textarea (3-6 rows ≈ 72-144 px at text-sm)
+  useEffect(() => {
+    if (zielRef.current) {
+      zielRef.current.style.height = 'auto';
+      zielRef.current.style.height = `${Math.min(
+        Math.max(zielRef.current.scrollHeight, 72),
+        144
+      )}px`;
+    }
+  }, [ziel, attachedFile]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
