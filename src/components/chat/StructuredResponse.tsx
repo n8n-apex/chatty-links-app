@@ -23,7 +23,8 @@ export interface StructuredPayload {
   fehlende_informationen?: string | null;
   naechste_schritte?: string | string[] | null;
   wichtiger_hinweis?: string | null;
-  quellen?: Array<string | { file?: string; state?: string; type?: string; [key: string]: unknown }> | string;
+  quellen?: Array<string | { file?: string; source_file?: string; state?: string; type?: string; document_type?: string; paragraph?: string; display?: string; [key: string]: unknown }> | string;
+  konfidenz?: 'hoch' | 'mittel' | 'niedrig' | 'unzureichend' | string;
   action?: string;
   // B4 - Behördenschreiben Analyse
   zusammenfassung?: string;
@@ -432,25 +433,60 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
   );
 };
 
+const konfidenzStyle = (k?: string): { dot: string; label: string } | null => {
+  if (!k) return null;
+  const v = k.toLowerCase();
+  if (v === 'hoch') return { dot: 'bg-green-500', label: 'Konfidenz: hoch' };
+  if (v === 'mittel') return { dot: 'bg-yellow-500', label: 'Konfidenz: mittel' };
+  if (v === 'niedrig') return { dot: 'bg-red-500', label: 'Konfidenz: niedrig' };
+  if (v === 'unzureichend') return { dot: 'bg-muted-foreground', label: 'Konfidenz: unzureichend' };
+  return { dot: 'bg-muted-foreground', label: `Konfidenz: ${k}` };
+};
+
 const renderCommonExtras = (data: StructuredPayload) => {
   const quellen = Array.isArray(data.quellen)
     ? data.quellen
     : typeof data.quellen === 'string' && data.quellen
     ? [data.quellen]
     : [];
-  if (quellen.length === 0) return null;
+  const konf = konfidenzStyle(data.konfidenz);
+  if (quellen.length === 0 && !konf) return null;
   return (
-    <div className="mt-1 flex flex-wrap gap-1.5 border-t border-border pt-2">
-      {quellen.map((q, i) => {
-        const label = typeof q === 'string'
-          ? q
-          : [q.file, q.state, q.type].filter(Boolean).join(' · ') || JSON.stringify(q);
-        return (
-          <span key={i} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-            {label}
-          </span>
-        );
-      })}
+    <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
+      {konf && (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={cn('h-2 w-2 rounded-full', konf.dot)} />
+          <span>{konf.label}</span>
+        </div>
+      )}
+      {quellen.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
+          <div className="flex flex-col gap-1">
+            {quellen.map((q, i) => {
+              let label: string;
+              if (typeof q === 'string') {
+                label = q;
+              } else if (q.display) {
+                label = q.display;
+              } else {
+                label = [q.paragraph, q.source_file || q.file, q.state, q.document_type || q.type]
+                  .filter(Boolean)
+                  .join(' · ') || JSON.stringify(q);
+              }
+              return (
+                <span
+                  key={i}
+                  className="inline-flex items-center self-start rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground"
+                >
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
