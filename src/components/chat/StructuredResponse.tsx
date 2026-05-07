@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, FileText, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { QuelleList } from './QuelleList';
+import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 
 interface Rechtsgrundlage {
   paragraph?: string;
