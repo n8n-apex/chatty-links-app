@@ -185,7 +185,7 @@ export const ChatContainer = () => {
     });
   };
 
-  const sendMessage = async (content: string, file?: File | null) => {
+  const sendMessage = async (content: string, file?: File | null, ziel?: string) => {
     const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
 
     const userMessage: Message = {
@@ -228,6 +228,9 @@ export const ChatContainer = () => {
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
         };
+        if (ziel && ziel.trim()) {
+          (payload as Record<string, unknown>).ziel = ziel.trim();
+        }
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("PDF konnte nicht gelesen werden.");
@@ -506,8 +509,8 @@ export const ChatContainer = () => {
           </div>
         </div>
         <ChatInput
-          onSendMessage={(msg, file) => {
-            sendMessage(msg, file);
+          onSendMessage={(msg, file, ziel) => {
+            sendMessage(msg, file, ziel);
             setInputValue("");
           }}
           isLoading={isLoading}

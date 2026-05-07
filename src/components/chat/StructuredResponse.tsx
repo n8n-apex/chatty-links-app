@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, FileText, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { QuelleList } from './QuelleList';
+import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 
 interface Rechtsgrundlage {
   paragraph?: string;
@@ -142,7 +144,11 @@ export const tryParseStructured = (content: string): StructuredPayload | null =>
       obj.projekt_und_sachverhalt ||
       obj.beurteilung_der_einzelfakten ||
       obj.schlussfolgerung ||
-      obj.action === 'question'
+      obj.analyse_der_forderungen ||
+      obj.antwortschreiben_entwurf ||
+      obj.action === 'question' ||
+      obj.action === 'analyze_pdf' ||
+      obj.action === 'draft_statement'
     ) {
       return obj as StructuredPayload;
     }
@@ -243,6 +249,16 @@ const Collapsible = ({ title, children, defaultOpen = false }: { title: string; 
 };
 
 export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
+  // B4 — Behördenschreiben analysis (full structured view)
+  const isB4 =
+    data.action === 'analyze_pdf' ||
+    !!(data as BehoerdenAnalysisData).analyse_der_forderungen ||
+    !!(data as BehoerdenAnalysisData).antwortschreiben_entwurf ||
+    !!(data as BehoerdenAnalysisData).gesamtbeurteilung;
+  if (isB4) {
+    return <BehoerdenAnalysis data={data as BehoerdenAnalysisData} />;
+  }
+
   const b6Sachverhalt = data.projekt_und_sachverhalt || data.sachverhalt;
   const b6Beurteilungsgrundlage = data.rechtliche_beurteilungsgrundlage || data.rechtliche_wuerdigung;
   const b6Items = (data.beurteilung_der_einzelfakten || data.kernargumente) as
@@ -444,13 +460,15 @@ const konfidenzStyle = (k?: string): { dot: string; label: string } | null => {
 };
 
 const renderCommonExtras = (data: StructuredPayload) => {
-  const quellen = Array.isArray(data.quellen)
+  const konf = konfidenzStyle(data.konfidenz);
+  // Filter validated === false and dedupe (handled by QuelleList)
+  const arr = Array.isArray(data.quellen)
     ? data.quellen
     : typeof data.quellen === 'string' && data.quellen
     ? [data.quellen]
     : [];
-  const konf = konfidenzStyle(data.konfidenz);
-  if (quellen.length === 0 && !konf) return null;
+  const visibleCount = arr.filter((q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false).length;
+  if (visibleCount === 0 && !konf) return null;
   return (
     <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
       {konf && (
@@ -459,31 +477,10 @@ const renderCommonExtras = (data: StructuredPayload) => {
           <span>{konf.label}</span>
         </div>
       )}
-      {quellen.length > 0 && (
+      {visibleCount > 0 && (
         <div className="flex flex-col gap-1">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
-          <div className="flex flex-col gap-1">
-            {quellen.map((q, i) => {
-              let label: string;
-              if (typeof q === 'string') {
-                label = q;
-              } else if (q.display) {
-                label = q.display;
-              } else {
-                label = [q.paragraph, q.source_file || q.file, q.state, q.document_type || q.type]
-                  .filter(Boolean)
-                  .join(' · ') || JSON.stringify(q);
-              }
-              return (
-                <span
-                  key={i}
-                  className="inline-flex items-center self-start rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-foreground"
-                >
-                  {label}
-                </span>
-              );
-            })}
-          </div>
+          <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} />
         </div>
       )}
     </div>
