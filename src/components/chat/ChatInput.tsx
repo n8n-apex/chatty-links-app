@@ -198,6 +198,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           Drücke <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Enter</kbd> zum Senden,{' '}
           <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> für neue Zeile
         </p>
+        <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
+          Unterstützte Formate: PDF, JPG, PNG. Auch Fotos von Bescheiden.
+        </p>
       </form>
     </motion.div>
   );
