@@ -118,12 +118,39 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </button>
           </div>
         )}
+        {attachedFile && (
+          <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
+            <label htmlFor="ziel-textarea" className="text-xs font-medium text-foreground">
+              Ziel der Antwort (optional)
+            </label>
+            <textarea
+              id="ziel-textarea"
+              ref={zielRef}
+              value={ziel}
+              onChange={(e) => {
+                if (e.target.value.length <= 1000) setZiel(e.target.value);
+              }}
+              maxLength={1000}
+              placeholder="Was möchten Sie mit der Antwort erreichen? Z.B. 'Forderung abwehren', 'Auflagen verhandeln', 'Befreiung erwirken'"
+              rows={3}
+              disabled={isLoading}
+              className="mt-1 w-full resize-none rounded-md border border-border bg-background/60 px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              style={{ minHeight: 72, maxHeight: 144 }}
+            />
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">
+                Lassen Sie das Feld leer, um eine allgemeine rechtliche Bewertung zu erhalten.
+              </span>
+              <span className="shrink-0 text-[10px] text-muted-foreground">{ziel.length}/1000</span>
+            </div>
+          </div>
+        )}
         <div className="glass rounded-2xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
           <div className="flex items-end gap-2">
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,application/pdf,image/*"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -135,7 +162,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               onClick={() => fileInputRef.current?.click()}
               className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
               aria-label="Datei anhängen"
-              title="PDF oder Bild anhängen"
+              title="PDF oder Bild anhängen (PDF, JPG, PNG, WebP)"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
