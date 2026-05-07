@@ -509,8 +509,8 @@ export const ChatContainer = () => {
           </div>
         </div>
         <ChatInput
-          onSendMessage={(msg, file) => {
-            sendMessage(msg, file);
+          onSendMessage={(msg, file, ziel) => {
+            sendMessage(msg, file, ziel);
             setInputValue("");
           }}
           isLoading={isLoading}
