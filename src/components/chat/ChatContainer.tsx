@@ -339,34 +339,67 @@ export const ChatContainer = () => {
     }
   };
 
-  const handleFeedback = async (messageId: string, status: string, correctedText?: string) => {
+  const handleFeedback = async (
+    messageId: string,
+    status: "correct" | "inaccurate" | "correction" | "note",
+    correctedText?: string,
+  ): Promise<boolean> => {
+    const ratedMessage = messages.find((m) => m.id === messageId);
+    const messageIndex = messages.findIndex((m) => m.id === messageId);
+    const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
+
+    // Try to extract structured fields from the assistant message content
+    let usedChunkIds: string[] = ratedMessage?.usedChunkIds || [];
+    let usedParagraphs: string[] = ratedMessage?.usedParagraphs || [];
+    let responseContent: string = ratedMessage?.content || "";
     try {
-      console.log("Sending feedback:", { messageId, status });
+      const trimmed = (ratedMessage?.content || "").trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        const parsed = JSON.parse(trimmed);
+        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (obj && typeof obj === "object") {
+          if (Array.isArray(obj.used_chunk_ids) && obj.used_chunk_ids.length) usedChunkIds = obj.used_chunk_ids;
+          if (Array.isArray(obj.used_paragraphs) && obj.used_paragraphs.length) usedParagraphs = obj.used_paragraphs;
+          responseContent = obj.antwort || obj.entwurf_stellungnahme || obj.antwortschreiben_entwurf || responseContent;
+        }
+      }
+    } catch { /* ignore */ }
 
-      const ratedMessage = messages.find((m) => m.id === messageId);
-      const messageIndex = messages.findIndex((m) => m.id === messageId);
-      const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
+    const payload: Record<string, unknown> = {
+      action: "submit_feedback",
+      status,
+      response_id: messageId,
+      sessionId: localStorage.getItem("chat-session-id") || conversationId || "",
+      question: userMessage?.content || "",
+      response_content: responseContent,
+      used_chunk_ids: usedChunkIds,
+      used_paragraphs: usedParagraphs,
+      user_email: currentUserEmail || "",
+    };
+    if (status === "correction" || status === "note") {
+      payload.corrected_text = correctedText || "";
+    }
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-proxy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          action: "submit_feedback",
-          response_id: messageId,
-          status: status,
-          corrected_text: correctedText || null,
-          sessionId: localStorage.getItem("chat-session-id"),
-          response_content: ratedMessage?.content || null,
-          question: userMessage?.content || null,
-          user_email: currentUserEmail,
-        }),
-      });
-      console.log("Feedback response:", response.status);
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", { body: payload });
+      if (error) throw new Error(error.message);
+      if (data && data.success === false) throw new Error(data.error || "feedback failed");
+
+      const successToasts: Record<string, string> = {
+        correct: "Vielen Dank! Die zitierten Quellen wurden als verifiziert markiert.",
+        inaccurate: "Notiert. Die zitierten Quellen werden in zukünftigen Antworten zurückgestuft.",
+        correction: "Vielen Dank! Ihre Korrektur wird in zukünftigen Antworten priorisiert verwendet.",
+        note: "Notiz gespeichert.",
+      };
+      toast.success(successToasts[status], { duration: 4000 });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, feedbackSubmitted: status } : m)),
+      );
+      return true;
     } catch (e) {
       console.error("Feedback error:", e);
+      toast.error("Feedback konnte nicht gespeichert werden. Bitte erneut versuchen.");
+      return false;
     }
   };
 
