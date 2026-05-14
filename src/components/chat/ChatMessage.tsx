@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
@@ -7,12 +7,13 @@ import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } fro
 import { toast } from "sonner";
 import { StructuredResponse, tryParseStructured, structuredToPlainText } from "./StructuredResponse";
 import { ConfidenceIndicator } from "./ConfidenceIndicator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
 interface ChatMessageProps {
   message: Message;
-  onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => void | Promise<void>;
+  onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => Promise<boolean> | void | Promise<void>;
   isAdmin?: boolean;
 }
 
@@ -25,12 +26,15 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
     const email = params.get('email') || '';
     const adminEmails = ['sebastian@umnutzung.de', 'utkarsh@apex-consulting.ai', 'preview@test.com'];
     if (adminEmails.includes(email.toLowerCase())) return true;
-    return (window as any).__isAdminVerified === true;
+    return (window as unknown as { __isAdminVerified?: boolean }).__isAdminVerified === true;
   })();
   const [copied, setCopied] = useState(false);
-  const [activeStatus, setActiveStatus] = useState<FeedbackStatus | null>(null);
-  const [textareaOpen, setTextareaOpen] = useState<"correction" | "note" | null>(null);
-  const [feedbackText, setFeedbackText] = useState("");
+  const [modal, setModal] = useState<null | "correction" | "note">(null);
+  const [modalText, setModalText] = useState("");
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submitted = !!message.feedbackSubmitted;
 
   const structured = !isUser ? tryParseStructured(message.content) : null;
   const sourceCount = (() => {
@@ -55,7 +59,6 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
       toast.error("Download-Link fehlt");
       return;
     }
-
     const link = document.createElement("a");
     link.href = url;
     link.target = "_blank";
@@ -65,27 +68,41 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
     document.body.removeChild(link);
   };
 
-  const submitFeedback = async (status: FeedbackStatus, text?: string) => {
-    console.log("Feedback clicked:", status);
+  const submit = async (status: FeedbackStatus, text?: string) => {
+    if (submitting || submitted) return;
+    setSubmitting(true);
     try {
-      await onFeedback?.(message.id, status, text);
-      setActiveStatus(status);
-      setTimeout(() => setActiveStatus(null), 2000);
-    } catch (e) {
-      toast.error("Feedback konnte nicht gesendet werden");
+      const result = await onFeedback?.(message.id, status, text);
+      // result may be void or boolean; if explicitly false, treat as failure
+      if (result === false) return;
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleQuickFeedback = (status: "correct" | "inaccurate") => {
-    submitFeedback(status);
+  const openModal = (kind: "correction" | "note") => {
+    setModal(kind);
+    setModalText("");
+    setModalError(null);
   };
 
-  const handleTextareaSubmit = () => {
-    if (!textareaOpen || !feedbackText.trim()) return;
-    submitFeedback(textareaOpen, feedbackText.trim());
-    setFeedbackText("");
-    setTextareaOpen(null);
+  const handleModalSubmit = async () => {
+    const trimmed = modalText.trim();
+    if (!trimmed) {
+      setModalError(
+        modal === "correction"
+          ? "Bitte geben Sie die korrigierte Antwort ein"
+          : "Bitte geben Sie eine Notiz ein",
+      );
+      return;
+    }
+    await submit(modal as FeedbackStatus, trimmed);
+    setModal(null);
+    setModalText("");
   };
+
+  const fbBtnBase =
+    "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <motion.div
@@ -151,12 +168,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
                             h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
                             h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
                             a: ({ href, children }) => (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary underline"
-                              >
+                              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">
                                 {children}
                               </a>
                             ),
@@ -191,24 +203,26 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
           <div className="mt-1 w-full">
             <div className="flex items-center gap-1">
               <button
-                onClick={() => handleQuickFeedback("correct")}
+                onClick={() => submit("correct")}
+                disabled={submitted || submitting}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-                  activeStatus === "correct"
+                  fbBtnBase,
+                  message.feedbackSubmitted === "correct"
                     ? "bg-green-500/15 text-green-500"
                     : "text-muted-foreground hover:bg-green-500/10 hover:text-green-500",
                 )}
                 title="Korrekt"
               >
-                {activeStatus === "correct" ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                {message.feedbackSubmitted === "correct" ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
                 <span>Korrekt</span>
               </button>
 
               <button
-                onClick={() => setTextareaOpen(textareaOpen === "correction" ? null : "correction")}
+                onClick={() => openModal("correction")}
+                disabled={submitted || submitting}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-                  textareaOpen === "correction" || activeStatus === "correction"
+                  fbBtnBase,
+                  message.feedbackSubmitted === "correction"
                     ? "bg-yellow-500/15 text-yellow-500"
                     : "text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500",
                 )}
@@ -219,10 +233,11 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
               </button>
 
               <button
-                onClick={() => handleQuickFeedback("inaccurate")}
+                onClick={() => submit("inaccurate")}
+                disabled={submitted || submitting}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-                  activeStatus === "inaccurate"
+                  fbBtnBase,
+                  message.feedbackSubmitted === "inaccurate"
                     ? "bg-red-500/15 text-red-500"
                     : "text-muted-foreground hover:bg-red-500/10 hover:text-red-500",
                 )}
@@ -233,55 +248,20 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
               </button>
 
               <button
-                onClick={() => setTextareaOpen(textareaOpen === "note" ? null : "note")}
+                onClick={() => openModal("note")}
+                disabled={submitted || submitting}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-                  textareaOpen === "note" || activeStatus === "note"
+                  fbBtnBase,
+                  message.feedbackSubmitted === "note"
                     ? "bg-blue-500/15 text-blue-500"
                     : "text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500",
                 )}
-                title="Hinweis"
+                title="Notiz"
               >
                 <StickyNote className="h-3.5 w-3.5" />
-                <span>Hinweis</span>
+                <span>Notiz</span>
               </button>
             </div>
-
-            <AnimatePresence>
-              {textareaOpen && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 overflow-hidden"
-                >
-                  <textarea
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                    placeholder={textareaOpen === "correction" ? "Was ist die Korrektur?" : "Hinweis hinzufügen..."}
-                    className="w-full min-h-[60px] rounded-md border border-border bg-background/50 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <div className="mt-1 flex justify-end gap-1">
-                    <button
-                      onClick={() => {
-                        setTextareaOpen(null);
-                        setFeedbackText("");
-                      }}
-                      className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50"
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      onClick={handleTextareaSubmit}
-                      disabled={!feedbackText.trim()}
-                      className="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Senden
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         )}
 
@@ -289,16 +269,52 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
         <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
           <span>
-            {message.timestamp.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
           {!isUser && typeof message.durationMs === "number" && (
             <span title="Antwortzeit">· Antwort in {(message.durationMs / 1000).toFixed(1)}s</span>
           )}
         </div>
       </div>
+
+      <Dialog open={modal !== null} onOpenChange={(o) => { if (!o) { setModal(null); setModalText(""); setModalError(null); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {modal === "correction" ? "Korrekte Antwort eingeben" : "Notiz für das Team"}
+            </DialogTitle>
+          </DialogHeader>
+          <textarea
+            value={modalText}
+            onChange={(e) => { setModalText(e.target.value); if (modalError) setModalError(null); }}
+            rows={5}
+            placeholder={
+              modal === "correction"
+                ? "Geben Sie die korrekte Antwort ein…"
+                : "Ihre Notiz für das Team…"
+            }
+            className="w-full min-h-[120px] rounded-md border border-border bg-background/50 p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          {modalError && <p className="text-xs text-destructive">{modalError}</p>}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => { setModal(null); setModalText(""); setModalError(null); }}
+              className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50"
+            >
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              onClick={handleModalSubmit}
+              disabled={submitting}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Senden
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };

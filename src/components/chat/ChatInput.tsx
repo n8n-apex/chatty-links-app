@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Sparkles, Paperclip, X } from 'lucide-react';
+import { Send, Sparkles, Paperclip, X, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatInputProps {
   onSendMessage: (message: string, file?: File | null, ziel?: string) => void;
@@ -16,6 +17,10 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [ziel, setZiel] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const zielRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +74,66 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const removeFile = () => {
     setAttachedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = r.result as string;
+        resolve(s.split(',')[1] || '');
+      };
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+
+  const startRecording = async () => {
+    if (recording || transcribing || isLoading) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      recordedChunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        if (blob.size === 0) return;
+        setTranscribing(true);
+        try {
+          const base64 = await blobToBase64(blob);
+          const { data, error } = await supabase.functions.invoke('chat-proxy', {
+            body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm' },
+          });
+          if (error) throw new Error(error.message);
+          if (data?.error) throw new Error(data.error);
+          const text = (data?.text || '').trim();
+          if (text) {
+            setMessage(message ? `${message} ${text}` : text);
+          } else {
+            toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
+          }
+        } catch (err) {
+          console.error('Transcription error:', err);
+          toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch (err) {
+      console.error('Mic access error:', err);
+      toast.error('Mikrofon-Zugriff verweigert.');
+    }
+  };
+
+  const stopRecording = () => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setRecording(false);
   };
 
   useEffect(() => {
@@ -145,6 +210,15 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </div>
           </div>
         )}
+        {recording && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-500">
+            <span className="relative inline-flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+            </span>
+            <span>Aufnahme läuft… (klick zum Stoppen)</span>
+          </div>
+        )}
         <div className="glass rounded-2xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
           <div className="flex items-end gap-2">
             <input
@@ -179,6 +253,30 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                 'min-h-[40px] max-h-[150px]'
               )}
             />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              disabled={isLoading || transcribing}
+              onClick={recording ? stopRecording : startRecording}
+              className={cn(
+                'h-10 w-10 shrink-0 rounded-xl',
+                recording ? 'text-red-500 hover:text-red-500' : 'text-muted-foreground hover:text-foreground',
+              )}
+              aria-label={recording ? 'Aufnahme stoppen' : 'Spracheingabe'}
+              title={recording ? 'Aufnahme läuft… (klick zum Stoppen)' : 'Spracheingabe (Deutsch)'}
+            >
+              {recording ? (
+                <span className="relative inline-flex h-3 w-3 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/60" />
+                  <Square className="h-3 w-3 fill-red-500 text-red-500" />
+                </span>
+              ) : transcribing ? (
+                <Sparkles className="h-4 w-4 animate-pulse" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </Button>
             <Button
               type="submit"
               size="icon"

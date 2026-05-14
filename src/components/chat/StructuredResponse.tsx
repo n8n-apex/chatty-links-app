@@ -396,24 +396,7 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
           <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
         </Section>
       )}
-      {Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0 && (
-        <Section>
-          <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
-          <div className="flex flex-wrap gap-1.5">
-            {data.rechtsgrundlage.map((r, i) => (
-              <ParagraphBadge key={i} paragraph={r.paragraph} quelle={r.quelle} />
-            ))}
-          </div>
-        </Section>
-      )}
-      {typeof data.rechtsgrundlage === 'string' && (
-        <Section>
-          <div className="text-xs text-foreground">
-            <span className="font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage: </span>
-            {data.rechtsgrundlage}
-          </div>
-        </Section>
-      )}
+      {/* Rechtsgrundlage + Quellen are rendered together in renderCommonExtras to avoid duplicate headings */}
       {data.fehlende_informationen && (
         <Section>
           <div className="border-l-2 border-border pl-3 py-1">
@@ -461,26 +444,70 @@ const konfidenzStyle = (k?: string): { dot: string; label: string } | null => {
 
 const renderCommonExtras = (data: StructuredPayload) => {
   const konf = konfidenzStyle(data.konfidenz);
-  // Filter validated === false and dedupe (handled by QuelleList)
-  const arr = Array.isArray(data.quellen)
+
+  // Build paragraph list (rechtsgrundlage takes precedence; else derive from quellen[].paragraph)
+  let paragraphs: Array<{ paragraph?: string; quelle?: string }> = [];
+  if (Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0) {
+    paragraphs = data.rechtsgrundlage.map((r) =>
+      typeof r === 'string' ? { paragraph: r } : { paragraph: r.paragraph, quelle: r.quelle as string | undefined },
+    );
+  } else if (typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage.trim()) {
+    paragraphs = [{ paragraph: data.rechtsgrundlage }];
+  } else if (Array.isArray(data.quellen)) {
+    const seen = new Set<string>();
+    for (const q of data.quellen) {
+      if (typeof q === 'string') continue;
+      if ((q as { validated?: boolean }).validated === false) continue;
+      const p = q.paragraph;
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      paragraphs.push({ paragraph: p });
+    }
+  }
+  // Dedupe paragraphs
+  const seenP = new Set<string>();
+  paragraphs = paragraphs.filter((p) => {
+    const key = `${p.paragraph || ''}|${p.quelle || ''}`;
+    if (!p.paragraph || seenP.has(key)) return false;
+    seenP.add(key);
+    return true;
+  });
+
+  const quellenArr = Array.isArray(data.quellen)
     ? data.quellen
     : typeof data.quellen === 'string' && data.quellen
     ? [data.quellen]
     : [];
-  const visibleCount = arr.filter((q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false).length;
-  if (visibleCount === 0 && !konf) return null;
+  const visibleQuellen = quellenArr.filter(
+    (q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false,
+  );
+
+  if (paragraphs.length === 0 && visibleQuellen.length === 0 && !konf) return null;
+
   return (
-    <div className="mt-1 flex flex-col gap-2 border-t border-border pt-2">
+    <div className="mt-1 flex flex-col gap-3 border-t border-border pt-2">
+      {(paragraphs.length > 0 || visibleQuellen.length > 0) && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
+          {paragraphs.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {paragraphs.map((p, i) => (
+                <ParagraphBadge key={i} paragraph={p.paragraph} quelle={p.quelle} />
+              ))}
+            </div>
+          )}
+          {visibleQuellen.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
+              <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} />
+            </div>
+          )}
+        </div>
+      )}
       {konf && (
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span className={cn('h-2 w-2 rounded-full', konf.dot)} />
           <span>{konf.label}</span>
-        </div>
-      )}
-      {visibleCount > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
-          <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} />
         </div>
       )}
     </div>
