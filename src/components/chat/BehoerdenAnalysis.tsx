@@ -181,6 +181,15 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
   const genFiktion = data.genehmigungsfiktion;
   const showGenFiktion = !!(genFiktion && genFiktion.anwendbar === true);
 
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const hasLegacyDetail =
+    !!data.zusammenfassung ||
+    forderungen.length > 0 ||
+    rechtsgrundlageArr.length > 0 ||
+    naechsteSchritteArr.length > 0 ||
+    showGenFiktion;
+
   return (
     <motion.div
       className="flex flex-col gap-5"
@@ -188,7 +197,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       initial="hidden"
       animate="show"
     >
-      {/* Section 1: Header */}
+      {/* Header */}
       <Sec>
         <div className="rounded-xl border border-border bg-background/40 p-4">
           <div className="text-base font-semibold text-foreground">Behördenschreiben Analyse</div>
@@ -209,7 +218,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         </div>
       </Sec>
 
-      {/* Section 2: Dokumentdetails */}
+      {/* Dokumentdetails */}
       {showDetails && (
         <Sec>
           <SectionHeading>Dokumentdetails</SectionHeading>
@@ -221,147 +230,174 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         </Sec>
       )}
 
-      {/* Section 3: Stellungnahme */}
-      {(data.projekt_und_sachverhalt ||
-        data.rechtliche_beurteilungsgrundlage ||
-        beurteilung.length > 0 ||
-        data.schlussfolgerung) && (
+      {/* 1. Projekt und Sachverhalt */}
+      {data.projekt_und_sachverhalt && (
         <Sec>
-          <SectionHeading>Stellungnahme</SectionHeading>
-          <div className="flex flex-col gap-4 rounded-lg border border-border bg-background/30 p-4">
-            {data.projekt_und_sachverhalt && (
-              <div>
-                <SubHeading>3.1 Projekt und Sachverhalt</SubHeading>
-                <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">
-                  {data.projekt_und_sachverhalt}
-                </p>
-              </div>
-            )}
-            {data.rechtliche_beurteilungsgrundlage && (
-              <div>
-                <SubHeading>3.2 Rechtliche Beurteilungsgrundlage</SubHeading>
-                <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">
-                  {data.rechtliche_beurteilungsgrundlage}
-                </p>
-              </div>
-            )}
-            {beurteilung.length > 0 && (
-              <div>
-                <SubHeading>3.3 Beurteilung der Einzelfakten</SubHeading>
-                <div className="mt-2 flex flex-col gap-2">
-                  {beurteilung.map((item, i) => (
-                    <div key={i} className="rounded-md border border-border bg-background/40 p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        {item.fakt && <div className="text-sm font-semibold text-foreground">{item.fakt}</div>}
-                        {item.beurteilung && (
-                          <Pill label={item.beurteilung} className={beurteilungClass(item.beurteilung)} />
-                        )}
-                      </div>
-                      {item.rechtsgrundlage && (
-                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{item.rechtsgrundlage}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {data.schlussfolgerung && (
-              <div className="rounded-md border-l-2 border-primary bg-primary/5 px-3 py-2">
-                <SubHeading>3.4 Schlussfolgerung</SubHeading>
-                <p className="mt-1 text-sm font-medium leading-relaxed text-foreground whitespace-pre-line">
-                  {data.schlussfolgerung}
-                </p>
-              </div>
-            )}
-          </div>
+          <SectionHeading>1. Projekt und Sachverhalt</SectionHeading>
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+            {data.projekt_und_sachverhalt}
+          </p>
         </Sec>
       )}
 
-      {/* Section 4: Zusammenfassung */}
-      {data.zusammenfassung && (
+      {/* 2. Rechtliche Beurteilungsgrundlage */}
+      {data.rechtliche_beurteilungsgrundlage && (
         <Sec>
-          <SectionHeading>Zusammenfassung</SectionHeading>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">{data.zusammenfassung}</p>
+          <SectionHeading>2. Rechtliche Beurteilungsgrundlage</SectionHeading>
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+            {data.rechtliche_beurteilungsgrundlage}
+          </p>
         </Sec>
       )}
 
-      {/* Section 5: Detailanalyse */}
-      {forderungen.length > 0 && (
+      {/* 3. Beurteilung der Einzelfakten */}
+      {beurteilung.length > 0 && (
         <Sec>
-          <SectionHeading>Analyse der Forderungen</SectionHeading>
+          <SectionHeading>3. Beurteilung der Einzelfakten</SectionHeading>
           <div className="flex flex-col gap-2">
-            {forderungen.map((f, i) => {
-              const beurt = (f.beurteilung || f.bewertung) as string | undefined;
-              const begr = f.begruendung_mit_quelle || f.begruendung;
-              return (
-                <div key={i} className="rounded-md border border-border bg-background/30 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    {f.forderung && <div className="text-sm font-semibold text-foreground">{f.forderung}</div>}
-                    {beurt && <Pill label={beurt} className={beurteilungClass(beurt)} />}
+            {beurteilung.map((item, i) => (
+              <div key={i} className="rounded-md border border-border bg-background/40 p-3">
+                {item.fakt && (
+                  <div className="text-sm">
+                    <span className="font-semibold text-muted-foreground">Fakt: </span>
+                    <span className="text-foreground">{item.fakt}</span>
                   </div>
-                  {begr && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>
-                  )}
-                  {f.fehlende_information && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      <span className="font-semibold">Fehlende Information:</span> {f.fehlende_information}
-                    </p>
-                  )}
-                  {f.gegenargument && (
-                    <div className="mt-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">Gegenargument</div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-foreground">{f.gegenargument}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Sec>
-      )}
-
-      {/* Section 6: Rechtsgrundlage */}
-      {rechtsgrundlageArr.length > 0 && (
-        <Sec>
-          <SectionHeading>Rechtsgrundlage</SectionHeading>
-          <div className="flex flex-wrap gap-1.5">
-            {rechtsgrundlageArr.map((r, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
-              >
-                {r}
-              </span>
+                )}
+                {item.beurteilung && (
+                  <div className="mt-1 flex items-baseline gap-2 text-sm">
+                    <span className="font-semibold text-muted-foreground">Beurteilung:</span>
+                    <Pill label={item.beurteilung} className={beurteilungClass(item.beurteilung)} />
+                  </div>
+                )}
+                {item.rechtsgrundlage && (
+                  <div className="mt-1 text-sm">
+                    <span className="font-semibold text-muted-foreground">Rechtsgrundlage: </span>
+                    <span className="text-foreground">{item.rechtsgrundlage}</span>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </Sec>
       )}
 
-      {/* Section 7: Genehmigungsfiktion */}
-      {showGenFiktion && (
+      {/* 4. Schlussfolgerung */}
+      {data.schlussfolgerung && (
         <Sec>
-          <SectionHeading>Genehmigungsfiktion</SectionHeading>
-          <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
-            {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
-            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
-            <DetailRow
-              label="Eingetreten"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <span className={cn('h-2 w-2 rounded-full', genFiktion!.eingetreten ? 'bg-green-500' : 'bg-red-500')} />
-                  {genFiktion!.eingetreten ? 'Ja' : 'Nein'}
-                </span>
-              }
-            />
-            {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+          <SectionHeading>4. Schlussfolgerung</SectionHeading>
+          <div className="rounded-md border-l-2 border-primary bg-primary/5 px-3 py-2">
+            <p className="text-sm font-medium leading-relaxed text-foreground whitespace-pre-line">
+              {data.schlussfolgerung}
+            </p>
           </div>
         </Sec>
       )}
 
-      {/* Section 8: Antwortschreiben Entwurf */}
+      {/* Detailanalyse — collapsible legacy */}
+      {hasLegacyDetail && (
+        <Sec>
+          <div className="rounded-lg border border-border bg-background/30">
+            <button
+              type="button"
+              onClick={() => setDetailOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/30"
+            >
+              <span>Detailanalyse anzeigen</span>
+              {detailOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+            {detailOpen && (
+              <div className="flex flex-col gap-4 border-t border-border p-3">
+                {data.zusammenfassung && (
+                  <div>
+                    <SubHeading>Zusammenfassung</SubHeading>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">{data.zusammenfassung}</p>
+                  </div>
+                )}
+                {forderungen.length > 0 && (
+                  <div>
+                    <SubHeading>Analyse der Forderungen</SubHeading>
+                    <div className="mt-2 flex flex-col gap-2">
+                      {forderungen.map((f, i) => {
+                        const beurt = (f.beurteilung || f.bewertung) as string | undefined;
+                        const begr = f.begruendung_mit_quelle || f.begruendung;
+                        return (
+                          <div key={i} className="rounded-md border border-border bg-background/40 p-3">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              {f.forderung && <div className="text-sm font-semibold text-foreground">{f.forderung}</div>}
+                              {beurt && <Pill label={beurt} className={beurteilungClass(beurt)} />}
+                            </div>
+                            {begr && <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>}
+                            {f.fehlende_information && (
+                              <p className="mt-1.5 text-xs text-muted-foreground">
+                                <span className="font-semibold">Fehlende Information:</span> {f.fehlende_information}
+                              </p>
+                            )}
+                            {f.gegenargument && (
+                              <div className="mt-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">Gegenargument</div>
+                                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{f.gegenargument}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {rechtsgrundlageArr.length > 0 && (
+                  <div>
+                    <SubHeading>Rechtsgrundlage</SubHeading>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {rechtsgrundlageArr.map((r, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
+                        >
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {showGenFiktion && (
+                  <div>
+                    <SubHeading>Genehmigungsfiktion</SubHeading>
+                    <div className="mt-1.5 grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
+                      {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
+                      {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+                      <DetailRow
+                        label="Eingetreten"
+                        value={
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={cn('h-2 w-2 rounded-full', genFiktion!.eingetreten ? 'bg-green-500' : 'bg-red-500')} />
+                            {genFiktion!.eingetreten ? 'Ja' : 'Nein'}
+                          </span>
+                        }
+                      />
+                      {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+                    </div>
+                  </div>
+                )}
+                {naechsteSchritteArr.length > 0 && (
+                  <div>
+                    <SubHeading>Nächste Schritte</SubHeading>
+                    <ol className="ml-5 mt-1.5 list-decimal space-y-1 text-sm text-foreground">
+                      {naechsteSchritteArr.map((s, i) => (
+                        <li key={i} className="leading-relaxed">{s}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Sec>
+      )}
+
+      {/* Antwortschreiben Entwurf */}
       {data.antwortschreiben_entwurf && (
         <Sec>
-          <SectionHeading>Antwortschreiben (Entwurf)</SectionHeading>
+          <SectionHeading>Antwortschreiben-Entwurf</SectionHeading>
           <div className="relative rounded-lg border border-border bg-background p-5">
             <button
               type="button"
@@ -379,19 +415,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         </Sec>
       )}
 
-      {/* Section 9: Nächste Schritte */}
-      {naechsteSchritteArr.length > 0 && (
-        <Sec>
-          <SectionHeading>Nächste Schritte</SectionHeading>
-          <ol className="ml-5 list-decimal space-y-1 text-sm text-foreground">
-            {naechsteSchritteArr.map((s, i) => (
-              <li key={i} className="leading-relaxed">{s}</li>
-            ))}
-          </ol>
-        </Sec>
-      )}
-
-      {/* Section 10: Quellen */}
+      {/* Quellen */}
       {Array.isArray(data.quellen) && data.quellen.length > 0 && (
         <Sec>
           <SectionHeading>Quellen</SectionHeading>
@@ -399,7 +423,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         </Sec>
       )}
 
-      {/* Section 11: Footer */}
+      {/* Footer */}
       {(data.retrieval_summary || formattedTimestamp) && (
         <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 border-t border-border pt-2 text-[10px] text-muted-foreground">
           {data.retrieval_summary && <span>{data.retrieval_summary}</span>}
