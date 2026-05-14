@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Sparkles, Paperclip, X } from 'lucide-react';
+import { Send, Sparkles, Paperclip, X, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatInputProps {
   onSendMessage: (message: string, file?: File | null, ziel?: string) => void;
