@@ -245,6 +245,30 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               )}
             />
             <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              disabled={isLoading || transcribing}
+              onClick={recording ? stopRecording : startRecording}
+              className={cn(
+                'h-10 w-10 shrink-0 rounded-xl',
+                recording ? 'text-red-500 hover:text-red-500' : 'text-muted-foreground hover:text-foreground',
+              )}
+              aria-label={recording ? 'Aufnahme stoppen' : 'Spracheingabe'}
+              title={recording ? 'Aufnahme läuft… (klick zum Stoppen)' : 'Spracheingabe (Deutsch)'}
+            >
+              {recording ? (
+                <span className="relative inline-flex h-3 w-3 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/60" />
+                  <Square className="h-3 w-3 fill-red-500 text-red-500" />
+                </span>
+              ) : transcribing ? (
+                <Sparkles className="h-4 w-4 animate-pulse" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
               type="submit"
               size="icon"
               variant="glow"
