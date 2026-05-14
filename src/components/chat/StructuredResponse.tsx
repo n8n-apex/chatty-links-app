@@ -396,24 +396,7 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
           <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
         </Section>
       )}
-      {Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0 && (
-        <Section>
-          <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
-          <div className="flex flex-wrap gap-1.5">
-            {data.rechtsgrundlage.map((r, i) => (
-              <ParagraphBadge key={i} paragraph={r.paragraph} quelle={r.quelle} />
-            ))}
-          </div>
-        </Section>
-      )}
-      {typeof data.rechtsgrundlage === 'string' && (
-        <Section>
-          <div className="text-xs text-foreground">
-            <span className="font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage: </span>
-            {data.rechtsgrundlage}
-          </div>
-        </Section>
-      )}
+      {/* Rechtsgrundlage + Quellen are rendered together in renderCommonExtras to avoid duplicate headings */}
       {data.fehlende_informationen && (
         <Section>
           <div className="border-l-2 border-border pl-3 py-1">
