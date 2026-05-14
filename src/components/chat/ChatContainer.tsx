@@ -277,19 +277,20 @@ export const ChatContainer = () => {
 
       console.log("n8n Antwort:", data);
 
-      // Flexible Antwort-Erkennung: unterstützt verschachtelte JSON und Arrays
       let responseText: string;
       let imageUrl: string | undefined;
+      let usedChunkIds: string[] = [];
+      let usedParagraphs: string[] = [];
 
       const parsed = Array.isArray(data) ? data[0] : data;
 
       if (typeof data === "string") {
         responseText = data;
       } else if (parsed && typeof parsed === "object") {
-        // Extract imageUrl if present
         imageUrl = parsed.imageUrl || parsed.image_url || undefined;
-        // Handle Baurecht GPT structured response
-        if (parsed.action === "question" || parsed.antwort) {
+        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
+        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
+        if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
           responseText = JSON.stringify(parsed);
         } else {
           responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
@@ -305,6 +306,8 @@ export const ChatContainer = () => {
         timestamp: new Date(),
         imageUrl,
         durationMs: performance.now() - startTime,
+        usedChunkIds,
+        usedParagraphs,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
