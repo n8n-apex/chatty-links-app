@@ -67,6 +67,59 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- TRANSCRIBE AUDIO via OpenAI Whisper ---
+    if (body.action === 'transcribe_audio') {
+      const openaiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiKey) {
+        return new Response(
+          JSON.stringify({ error: 'openai_key_missing', text: '' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      try {
+        const audioB64: string = body.audio_base64 || '';
+        const mime: string = body.mime_type || 'audio/webm';
+        if (!audioB64) {
+          return new Response(
+            JSON.stringify({ error: 'missing_audio', text: '' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const bin = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+        const blob = new Blob([bin], { type: mime });
+        const fd = new FormData();
+        fd.append('file', blob, 'audio.webm');
+        fd.append('model', 'whisper-1');
+        fd.append('language', 'de');
+
+        const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${openaiKey}` },
+          body: fd,
+        });
+        const txt = await resp.text();
+        if (!resp.ok) {
+          console.error('Whisper error', resp.status, txt);
+          return new Response(
+            JSON.stringify({ error: 'whisper_failed', detail: txt, text: '' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        let parsed: any;
+        try { parsed = JSON.parse(txt); } catch { parsed = { text: txt }; }
+        return new Response(
+          JSON.stringify({ text: parsed.text || '' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('transcribe_audio error', e);
+        return new Response(
+          JSON.stringify({ error: String(e), text: '' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     if (body.action !== 'submit_feedback' && (!message || typeof message !== 'string')) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
@@ -100,7 +153,7 @@ Deno.serve(async (req) => {
     }
 
     // Detect action from message content if not explicitly set
-    if (body.message) {
+    if (body.message && !body.action) {
       const msg = body.message.toLowerCase();
       if (msg.startsWith('ich habe eine baurechtsfrage') || msg.includes('?')) {
         body.action = 'question';
@@ -110,8 +163,8 @@ Deno.serve(async (req) => {
         body.topic = body.message.replace('erstelle eine stellungnahme zum thema:', '').trim();
       } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
         body.action = 'analyze_pdf';
-        body.file_name = 'Behördenschreiben.pdf';
-        body.state = 'Bayern';
+        body.file_name = body.file_name || 'Behördenschreiben.pdf';
+        body.state = body.state || 'Bayern';
         delete body.question;
       } else {
         body.action = 'question';
@@ -163,7 +216,7 @@ Deno.serve(async (req) => {
         'saarland': 'Saarland', 'saarbrücken': 'Saarland',
         'rheinland': 'Rheinland-Pfalz', 'mainz': 'Rheinland-Pfalz',
       };
-      const msgLower = body.message.toLowerCase();
+      const msgLower = (body.message || '').toLowerCase();
       let detectedState = body.state || null;
       if (!detectedState) {
         for (const [keyword, state] of Object.entries(stateMap)) {
@@ -186,7 +239,7 @@ Deno.serve(async (req) => {
 
     if (body.action === 'submit_feedback') {
       try {
-        await fetch(webhookUrl, {
+        const fbResp = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -197,16 +250,29 @@ Deno.serve(async (req) => {
             sessionId: body.sessionId,
             response_content: body.response_content || null,
             question: body.question || null,
-            user_email: body.user_email || null
+            user_email: body.user_email || null,
+            used_chunk_ids: Array.isArray(body.used_chunk_ids) ? body.used_chunk_ids : [],
+            used_paragraphs: Array.isArray(body.used_paragraphs) ? body.used_paragraphs : [],
           }),
         });
+        const fbText = await fbResp.text();
+        if (!fbResp.ok) {
+          return new Response(
+            JSON.stringify({ success: false, error: `Webhook ${fbResp.status}`, detail: fbText }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ success: true, message: fbText || 'Feedback gespeichert' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       } catch (e) {
         console.error('Feedback forward error:', e);
+        return new Response(
+          JSON.stringify({ success: false, error: String(e) }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-      return new Response(
-        JSON.stringify({ success: true }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
     console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
@@ -222,12 +288,11 @@ Deno.serve(async (req) => {
         state: body.state || null,
         question: body.question || null,
         topic: body.topic || null,
+        statement_type: body.statement_type || (body.action === 'draft_statement' ? 'Stellungnahme' : null),
+        ziel: body.ziel || null,
         message: body.message,
         sessionId: body.sessionId,
         timestamp: body.timestamp,
-        response_id: body.response_id || null,
-        status: body.status || null,
-        corrected_text: body.corrected_text || null,
       }),
     })
 
@@ -241,7 +306,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Try to parse as JSON, fall back to plain text
     let data: unknown
     try {
       data = JSON.parse(rawText)
