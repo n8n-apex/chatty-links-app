@@ -210,6 +210,15 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </div>
           </div>
         )}
+        {recording && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-500">
+            <span className="relative inline-flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+            </span>
+            <span>Aufnahme läuft… (klick zum Stoppen)</span>
+          </div>
+        )}
         <div className="glass rounded-2xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
           <div className="flex items-end gap-2">
             <input
