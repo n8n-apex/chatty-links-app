@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
 
