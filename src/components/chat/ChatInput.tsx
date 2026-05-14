@@ -76,6 +76,66 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = r.result as string;
+        resolve(s.split(',')[1] || '');
+      };
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+
+  const startRecording = async () => {
+    if (recording || transcribing || isLoading) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      recordedChunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        if (blob.size === 0) return;
+        setTranscribing(true);
+        try {
+          const base64 = await blobToBase64(blob);
+          const { data, error } = await supabase.functions.invoke('chat-proxy', {
+            body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm' },
+          });
+          if (error) throw new Error(error.message);
+          if (data?.error) throw new Error(data.error);
+          const text = (data?.text || '').trim();
+          if (text) {
+            setMessage(message ? `${message} ${text}` : text);
+          } else {
+            toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
+          }
+        } catch (err) {
+          console.error('Transcription error:', err);
+          toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch (err) {
+      console.error('Mic access error:', err);
+      toast.error('Mikrofon-Zugriff verweigert.');
+    }
+  };
+
+  const stopRecording = () => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setRecording(false);
+  };
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
