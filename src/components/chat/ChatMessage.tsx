@@ -294,9 +294,15 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {modal === "correction" ? "Korrekte Antwort eingeben" : "Notiz für das Team"}
+              {modal === "correction" ? "Bitte geben Sie die korrekte Antwort ein" : "Notiz für das Team"}
             </DialogTitle>
           </DialogHeader>
+          {modal === "correction" && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground max-h-40 overflow-y-auto whitespace-pre-wrap">
+              <div className="mb-1 font-medium text-foreground/80">Ursprüngliche Antwort</div>
+              {structured ? structuredToPlainText(structured) : message.content}
+            </div>
+          )}
           <textarea
             value={modalText}
             onChange={(e) => { setModalText(e.target.value); if (modalError) setModalError(null); }}
@@ -320,14 +326,15 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
             <button
               type="button"
               onClick={handleModalSubmit}
-              disabled={submitting}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={submitting || modalText.trim().length === 0}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Senden
+              {modal === "correction" ? "Speichern" : "Senden"}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </motion.div>
   );
 };
