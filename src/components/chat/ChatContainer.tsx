@@ -292,6 +292,8 @@ export const ChatContainer = () => {
       let imageUrl: string | undefined;
       let usedChunkIds: string[] = [];
       let usedParagraphs: string[] = [];
+      let responseId: string | undefined;
+      let needsClarification = false;
 
       const parsed = Array.isArray(data) ? data[0] : data;
 
@@ -301,6 +303,8 @@ export const ChatContainer = () => {
         imageUrl = parsed.imageUrl || parsed.image_url || undefined;
         if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
         if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
+        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
+        if (parsed.needs_clarification === true) needsClarification = true;
         if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
           responseText = JSON.stringify(parsed);
         } else {
@@ -317,12 +321,14 @@ export const ChatContainer = () => {
         timestamp: new Date(),
         imageUrl,
         durationMs: performance.now() - startTime,
+        responseId,
         usedChunkIds,
         usedParagraphs,
+        needsClarification,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      persistMessage("ai", responseText);
+      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
       // Refresh sidebar list (title/lastAt) after a successful exchange
       if (historyEnabled) loadConversations();
     } catch (error) {
@@ -359,12 +365,17 @@ export const ChatContainer = () => {
     const messageIndex = messages.findIndex((m) => m.id === messageId);
     const userMessage = messageIndex > 0 ? messages[messageIndex - 1] : null;
 
+    if (!ratedMessage) return false;
+
+    // Use the backend response_id when available; fall back to local id only as a last resort.
+    const backendResponseId = ratedMessage.responseId;
+
     // Try to extract structured fields from the assistant message content
-    let usedChunkIds: string[] = ratedMessage?.usedChunkIds || [];
-    let usedParagraphs: string[] = ratedMessage?.usedParagraphs || [];
-    let responseContent: string = ratedMessage?.content || "";
+    let usedChunkIds: string[] = ratedMessage.usedChunkIds || [];
+    let usedParagraphs: string[] = ratedMessage.usedParagraphs || [];
+    let responseContent: string = ratedMessage.content || "";
     try {
-      const trimmed = (ratedMessage?.content || "").trim();
+      const trimmed = (ratedMessage.content || "").trim();
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
         const parsed = JSON.parse(trimmed);
         const obj = Array.isArray(parsed) ? parsed[0] : parsed;
@@ -379,7 +390,8 @@ export const ChatContainer = () => {
     const payload: Record<string, unknown> = {
       action: "submit_feedback",
       status,
-      response_id: messageId,
+      response_id: backendResponseId || messageId,
+      session_id: localStorage.getItem("chat-session-id") || conversationId || "",
       sessionId: localStorage.getItem("chat-session-id") || conversationId || "",
       question: userMessage?.content || "",
       response_content: responseContent,
@@ -387,9 +399,13 @@ export const ChatContainer = () => {
       used_paragraphs: usedParagraphs,
       user_email: currentUserEmail || "",
     };
-    if (status === "correction" || status === "note") {
+    // corrected_text is ONLY sent on the correction path (per backend contract)
+    if (status === "correction") {
       payload.corrected_text = correctedText || "";
     }
+
+    // Optimistic UI: mark immediately, roll back on failure
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, feedbackSubmitted: status } : m)));
 
     try {
       const { data, error } = await supabase.functions.invoke("chat-proxy", { body: payload });
@@ -403,16 +419,16 @@ export const ChatContainer = () => {
         note: "Notiz gespeichert.",
       };
       toast.success(successToasts[status], { duration: 4000 });
-      setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, feedbackSubmitted: status } : m)),
-      );
       return true;
     } catch (e) {
-      console.error("Feedback error:", e);
+      console.error("Feedback error:", e, "payload:", payload);
+      // Roll back optimistic state
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, feedbackSubmitted: undefined } : m)));
       toast.error("Feedback konnte nicht gespeichert werden. Bitte erneut versuchen.");
       return false;
     }
   };
+
 
   // Session ID initialisieren
   useEffect(() => {
