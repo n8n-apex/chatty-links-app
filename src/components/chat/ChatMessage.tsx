@@ -216,14 +216,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
             <div className="flex items-center gap-1">
               <button
                 onClick={() => submit("correct")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Korrekt"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "correct"
                     ? "bg-green-500/15 text-green-500"
                     : "text-muted-foreground hover:bg-green-500/10 hover:text-green-500",
                 )}
-                title="Korrekt"
               >
                 {message.feedbackSubmitted === "correct" ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
                 <span>Korrekt</span>
@@ -231,14 +231,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => openModal("correction")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Korrektur"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "correction"
                     ? "bg-yellow-500/15 text-yellow-500"
                     : "text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500",
                 )}
-                title="Korrektur"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 <span>Korrektur</span>
@@ -246,14 +246,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => submit("inaccurate")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Ungenau"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "inaccurate"
                     ? "bg-red-500/15 text-red-500"
                     : "text-muted-foreground hover:bg-red-500/10 hover:text-red-500",
                 )}
-                title="Ungenau"
               >
                 <X className="h-3.5 w-3.5" />
                 <span>Ungenau</span>
@@ -261,18 +261,19 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => openModal("note")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || noteDisabled}
+                title={noteDisabled ? legacyTitle : "Notiz"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "note"
                     ? "bg-blue-500/15 text-blue-500"
                     : "text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500",
                 )}
-                title="Notiz"
               >
                 <StickyNote className="h-3.5 w-3.5" />
                 <span>Notiz</span>
               </button>
+
             </div>
           </div>
         )}
