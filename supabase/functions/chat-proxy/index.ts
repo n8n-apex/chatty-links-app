@@ -239,21 +239,27 @@ Deno.serve(async (req) => {
 
     if (body.action === 'submit_feedback') {
       try {
+        const sessionId = body.session_id || body.sessionId || null;
+        const fwd: Record<string, unknown> = {
+          action: 'submit_feedback',
+          response_id: body.response_id,
+          status: body.status,
+          session_id: sessionId,
+          sessionId,
+          response_content: body.response_content || null,
+          question: body.question || null,
+          user_email: body.user_email || null,
+          used_chunk_ids: Array.isArray(body.used_chunk_ids) ? body.used_chunk_ids : [],
+          used_paragraphs: Array.isArray(body.used_paragraphs) ? body.used_paragraphs : [],
+        };
+        // corrected_text is ONLY forwarded for status='correction' (per backend contract)
+        if (body.status === 'correction' && typeof body.corrected_text === 'string' && body.corrected_text.trim().length > 0) {
+          fwd.corrected_text = body.corrected_text;
+        }
         const fbResp = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'submit_feedback',
-            response_id: body.response_id,
-            status: body.status,
-            corrected_text: body.corrected_text || null,
-            sessionId: body.sessionId,
-            response_content: body.response_content || null,
-            question: body.question || null,
-            user_email: body.user_email || null,
-            used_chunk_ids: Array.isArray(body.used_chunk_ids) ? body.used_chunk_ids : [],
-            used_paragraphs: Array.isArray(body.used_paragraphs) ? body.used_paragraphs : [],
-          }),
+          body: JSON.stringify(fwd),
         });
         const fbText = await fbResp.text();
         if (!fbResp.ok) {
@@ -274,6 +280,7 @@ Deno.serve(async (req) => {
         );
       }
     }
+
 
     console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
 

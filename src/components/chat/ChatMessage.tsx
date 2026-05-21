@@ -36,7 +36,19 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
   const submitted = !!message.feedbackSubmitted;
 
+  // Feedback gating (CHANGE 6 + 7):
+  // - Legacy messages (no backend response_id stored) → disable all 4 buttons
+  // - Clarification or chunk-less answers → disable Korrekt/Korrektur/Ungenau, keep Notiz
+  const hasResponseId = !!message.responseId;
+  const hasChunks = Array.isArray(message.usedChunkIds) && message.usedChunkIds.length > 0;
+  const isLegacy = !isUser && !hasResponseId;
+  const chunkActionsDisabled = isLegacy || !hasChunks;
+  const noteDisabled = isLegacy;
+  const legacyTitle = "Feedback nicht verfügbar für ältere Nachrichten";
+  const noChunksTitle = "Keine Quellen-Chunks für Feedback verfügbar";
+
   const structured = !isUser ? tryParseStructured(message.content) : null;
+
   const sourceCount = (() => {
     if (!structured) return 0;
     let count = 0;
@@ -204,14 +216,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
             <div className="flex items-center gap-1">
               <button
                 onClick={() => submit("correct")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Korrekt"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "correct"
                     ? "bg-green-500/15 text-green-500"
                     : "text-muted-foreground hover:bg-green-500/10 hover:text-green-500",
                 )}
-                title="Korrekt"
               >
                 {message.feedbackSubmitted === "correct" ? <Check className="h-3.5 w-3.5" /> : <ThumbsUp className="h-3.5 w-3.5" />}
                 <span>Korrekt</span>
@@ -219,14 +231,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => openModal("correction")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Korrektur"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "correction"
                     ? "bg-yellow-500/15 text-yellow-500"
                     : "text-muted-foreground hover:bg-yellow-500/10 hover:text-yellow-500",
                 )}
-                title="Korrektur"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 <span>Korrektur</span>
@@ -234,14 +246,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => submit("inaccurate")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || chunkActionsDisabled}
+                title={isLegacy ? legacyTitle : !hasChunks ? noChunksTitle : "Ungenau"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "inaccurate"
                     ? "bg-red-500/15 text-red-500"
                     : "text-muted-foreground hover:bg-red-500/10 hover:text-red-500",
                 )}
-                title="Ungenau"
               >
                 <X className="h-3.5 w-3.5" />
                 <span>Ungenau</span>
@@ -249,18 +261,19 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
               <button
                 onClick={() => openModal("note")}
-                disabled={submitted || submitting}
+                disabled={submitted || submitting || noteDisabled}
+                title={noteDisabled ? legacyTitle : "Notiz"}
                 className={cn(
                   fbBtnBase,
                   message.feedbackSubmitted === "note"
                     ? "bg-blue-500/15 text-blue-500"
                     : "text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500",
                 )}
-                title="Notiz"
               >
                 <StickyNote className="h-3.5 w-3.5" />
                 <span>Notiz</span>
               </button>
+
             </div>
           </div>
         )}
@@ -281,9 +294,15 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {modal === "correction" ? "Korrekte Antwort eingeben" : "Notiz für das Team"}
+              {modal === "correction" ? "Bitte geben Sie die korrekte Antwort ein" : "Notiz für das Team"}
             </DialogTitle>
           </DialogHeader>
+          {modal === "correction" && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground max-h-40 overflow-y-auto whitespace-pre-wrap">
+              <div className="mb-1 font-medium text-foreground/80">Ursprüngliche Antwort</div>
+              {structured ? structuredToPlainText(structured) : message.content}
+            </div>
+          )}
           <textarea
             value={modalText}
             onChange={(e) => { setModalText(e.target.value); if (modalError) setModalError(null); }}
@@ -307,14 +326,15 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
             <button
               type="button"
               onClick={handleModalSubmit}
-              disabled={submitting}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={submitting || modalText.trim().length === 0}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Senden
+              {modal === "correction" ? "Speichern" : "Senden"}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </motion.div>
   );
 };

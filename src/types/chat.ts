@@ -6,11 +6,14 @@ export interface Message {
   imageUrl?: string;
   durationMs?: number;
   // Metadata for feedback flow (B3/B4/B6 responses)
+  responseId?: string;          // backend's response_id (resp_…)
   usedChunkIds?: string[];
   usedParagraphs?: string[];
+  needsClarification?: boolean; // true for clarification answers (no chunks)
   // Track feedback already submitted on this assistant message
   feedbackSubmitted?: 'correct' | 'inaccurate' | 'correction' | 'note';
 }
+
 
 export interface ChatConfig {
   webhookUrl: string;
