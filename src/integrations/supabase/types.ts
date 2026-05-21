@@ -20,7 +20,10 @@ export type Database = {
           conversation_id: string | null
           created_at: string
           id: string
+          response_id: string | null
           role: string
+          used_chunk_ids: Json | null
+          used_paragraphs: Json | null
           user_email: string | null
         }
         Insert: {
@@ -28,7 +31,10 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string
           id?: string
+          response_id?: string | null
           role: string
+          used_chunk_ids?: Json | null
+          used_paragraphs?: Json | null
           user_email?: string | null
         }
         Update: {
@@ -36,7 +42,10 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string
           id?: string
+          response_id?: string | null
           role?: string
+          used_chunk_ids?: Json | null
+          used_paragraphs?: Json | null
           user_email?: string | null
         }
         Relationships: []
