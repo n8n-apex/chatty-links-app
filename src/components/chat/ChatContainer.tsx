@@ -97,6 +97,9 @@ export const ChatContainer = () => {
         content: row.content,
         role: row.role === "ai" ? "assistant" : "user",
         timestamp: new Date(row.created_at),
+        responseId: row.response_id || undefined,
+        usedChunkIds: Array.isArray(row.used_chunk_ids) ? row.used_chunk_ids : undefined,
+        usedParagraphs: Array.isArray(row.used_paragraphs) ? row.used_paragraphs : undefined,
       }));
       setMessages(restored);
     },
@@ -121,16 +124,24 @@ export const ChatContainer = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
 
-  const persistMessage = async (role: "user" | "ai", content: string) => {
+  const persistMessage = async (
+    role: "user" | "ai",
+    content: string,
+    meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
+  ) => {
     if (!currentUserEmail || !content || !conversationId) return;
     const { error } = await supabase.from("chat_messages").insert({
       user_email: currentUserEmail,
       role,
       content,
       conversation_id: conversationId,
-    });
+      response_id: meta?.responseId ?? null,
+      used_chunk_ids: meta?.usedChunkIds ?? null,
+      used_paragraphs: meta?.usedParagraphs ?? null,
+    } as any);
     if (error) console.error("Fehler beim Speichern der Nachricht:", error);
   };
+
 
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
