@@ -36,7 +36,19 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
 
   const submitted = !!message.feedbackSubmitted;
 
+  // Feedback gating (CHANGE 6 + 7):
+  // - Legacy messages (no backend response_id stored) → disable all 4 buttons
+  // - Clarification or chunk-less answers → disable Korrekt/Korrektur/Ungenau, keep Notiz
+  const hasResponseId = !!message.responseId;
+  const hasChunks = Array.isArray(message.usedChunkIds) && message.usedChunkIds.length > 0;
+  const isLegacy = !isUser && !hasResponseId;
+  const chunkActionsDisabled = isLegacy || !hasChunks;
+  const noteDisabled = isLegacy;
+  const legacyTitle = "Feedback nicht verfügbar für ältere Nachrichten";
+  const noChunksTitle = "Keine Quellen-Chunks für Feedback verfügbar";
+
   const structured = !isUser ? tryParseStructured(message.content) : null;
+
   const sourceCount = (() => {
     if (!structured) return 0;
     let count = 0;
