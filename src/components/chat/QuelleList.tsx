@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { ExternalLink } from 'lucide-react';
 
 export interface Quelle {
   paragraph?: string;
@@ -8,6 +9,8 @@ export interface Quelle {
   document_type?: string;
   type?: string;
   chunk_id?: string | null;
+  drive_file_id?: string | null;
+  source_url?: string | null;
   display?: string;
   validated?: boolean;
   [key: string]: unknown;
