@@ -256,6 +256,10 @@ Deno.serve(async (req) => {
         if (body.status === 'correction' && typeof body.corrected_text === 'string' && body.corrected_text.trim().length > 0) {
           fwd.corrected_text = body.corrected_text;
         }
+        // message is forwarded for status='note' (freeform admin note)
+        if (body.status === 'note' && typeof body.message === 'string' && body.message.trim().length > 0) {
+          fwd.message = body.message;
+        }
         const fbResp = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
