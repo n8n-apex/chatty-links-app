@@ -1,0 +1,164 @@
+// Edge function: chat-history
+// Centralizes all reads/writes to chat_messages so that the table can be locked
+// down at the RLS layer (no public anon access). The frontend passes the
+// learner email as a parameter; the function uses the service role to scope
+// every query/mutation to that email's rows ONLY.
+//
+// Residual risk (documented honestly): there is no real authentication in this
+// app — the email comes from a LearningSuite URL parameter. This function
+// therefore cannot prove the caller IS that user. What it DOES prevent vs. the
+// previous setup:
+//   * Anonymous bulk enumeration of every user's emails + chat content.
+//   * Anonymous wipe of the entire chat_messages table.
+// An attacker who already knows a specific email can still query/delete that
+// user's chats. Fixing that requires introducing real auth (out of scope).
+
+import { createClient } from 'npm:@supabase/supabase-js@2.45.0'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+const isNonEmptyString = (v: unknown): v is string =>
+  typeof v === 'string' && v.trim().length > 0
+
+const isUuid = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
+const isLegacyOrUuid = (v: unknown): v is string =>
+  v === 'legacy' || isUuid(v)
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return json({ error: 'method_not_allowed' }, 405)
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !serviceKey) {
+    return json({ error: 'server_misconfigured' }, 500)
+  }
+  const supabase = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false },
+  })
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return json({ error: 'invalid_json' }, 400)
+  }
+
+  const action = body.action
+  const userEmail = body.user_email
+  if (!isNonEmptyString(userEmail)) {
+    return json({ error: 'missing_user_email' }, 400)
+  }
+  // Reject placeholder/unresolved LearningSuite tokens.
+  if (userEmail.includes('{{') || userEmail.includes('}}')) {
+    return json({ error: 'unresolved_user_email' }, 400)
+  }
+
+  try {
+    if (action === 'list_conversations') {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('id, content, role, conversation_id, created_at')
+        .eq('user_email', userEmail)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return json({ success: true, rows: data ?? [] })
+    }
+
+    if (action === 'load_messages') {
+      const cid = body.conversation_id
+      if (!isLegacyOrUuid(cid)) {
+        return json({ error: 'invalid_conversation_id' }, 400)
+      }
+      let q = supabase
+        .from('chat_messages')
+        .select(
+          'id, content, role, conversation_id, created_at, response_id, used_chunk_ids, used_paragraphs',
+        )
+        .eq('user_email', userEmail)
+        .order('created_at', { ascending: true })
+      q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
+      const { data, error } = await q
+      if (error) throw error
+      return json({ success: true, rows: data ?? [] })
+    }
+
+    if (action === 'save_message') {
+      const role = body.role
+      const content = body.content
+      const conversationId = body.conversation_id
+      if (role !== 'user' && role !== 'ai') {
+        return json({ error: 'invalid_role' }, 400)
+      }
+      if (!isNonEmptyString(content)) {
+        return json({ error: 'invalid_content' }, 400)
+      }
+      if (!isUuid(conversationId)) {
+        return json({ error: 'invalid_conversation_id' }, 400)
+      }
+      const responseId =
+        typeof body.response_id === 'string' ? body.response_id : null
+      const usedChunkIds = Array.isArray(body.used_chunk_ids)
+        ? body.used_chunk_ids
+        : null
+      const usedParagraphs = Array.isArray(body.used_paragraphs)
+        ? body.used_paragraphs
+        : null
+
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .insert({
+          user_email: userEmail,
+          role,
+          content,
+          conversation_id: conversationId,
+          response_id: responseId,
+          used_chunk_ids: usedChunkIds,
+          used_paragraphs: usedParagraphs,
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      return json({ success: true, id: data?.id })
+    }
+
+    if (action === 'delete_conversation') {
+      const cid = body.conversation_id
+      if (!isLegacyOrUuid(cid)) {
+        return json({ error: 'invalid_conversation_id' }, 400)
+      }
+      let q = supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_email', userEmail)
+      q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
+      const { error } = await q
+      if (error) throw error
+      return json({ success: true })
+    }
+
+    return json({ error: 'unknown_action' }, 400)
+  } catch (e) {
+    console.error('chat-history error:', e)
+    return json({ error: 'internal_error', detail: String(e) }, 500)
+  }
+})

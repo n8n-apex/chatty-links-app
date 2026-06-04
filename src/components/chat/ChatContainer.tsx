@@ -41,23 +41,27 @@ export const ChatContainer = () => {
     scrollToBottom();
   }, [messages, isLoading, scrollToBottom]);
 
+  // All chat_messages access is routed through the chat-history edge function,
+  // which uses the service role and scopes every operation to a single
+  // user_email. The table itself is locked down (no anon GRANTs / no policies).
+  const callHistory = useCallback(async (payload: Record<string, unknown>) => {
+    const { data, error } = await supabase.functions.invoke("chat-history", { body: payload });
+    if (error) {
+      console.error("chat-history error:", error);
+      return null;
+    }
+    return data as any;
+  }, []);
+
   // Load conversations list for the current user
   const loadConversations = useCallback(async () => {
     if (!currentUserEmail) return [] as ConversationSummary[];
-    const { data, error } = await supabase
-      .from("chat_messages")
-      .select("*")
-      .eq("user_email", currentUserEmail)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Fehler beim Laden des Verlaufs:", error);
-      return [];
-    }
+    const data = await callHistory({ action: "list_conversations", user_email: currentUserEmail });
+    if (!data?.success) return [];
 
     const map = new Map<string, { firstUserMsg?: string; lastAt: Date }>();
-    for (const row of data || []) {
-      const cid = (row as any).conversation_id || "legacy";
+    for (const row of (data.rows as any[]) || []) {
+      const cid = row.conversation_id || "legacy";
       const existing = map.get(cid) || { lastAt: new Date(row.created_at) };
       if (!existing.firstUserMsg && row.role === "user") {
         existing.firstUserMsg = row.content;
@@ -74,25 +78,18 @@ export const ChatContainer = () => {
     list.sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
     setConversations(list);
     return list;
-  }, [currentUserEmail]);
+  }, [currentUserEmail, callHistory]);
 
   const loadConversationMessages = useCallback(
     async (cid: string) => {
       if (!currentUserEmail) return;
-      let query = supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("user_email", currentUserEmail)
-        .order("created_at", { ascending: true });
-
-      query = cid === "legacy" ? query.is("conversation_id", null) : query.eq("conversation_id", cid);
-
-      const { data, error } = await query;
-      if (error) {
-        console.error("Fehler beim Laden der Nachrichten:", error);
-        return;
-      }
-      const restored: Message[] = (data || []).map((row: any) => ({
+      const data = await callHistory({
+        action: "load_messages",
+        user_email: currentUserEmail,
+        conversation_id: cid,
+      });
+      if (!data?.success) return;
+      const restored: Message[] = ((data.rows as any[]) || []).map((row: any) => ({
         id: row.id,
         content: row.content,
         role: row.role === "ai" ? "assistant" : "user",
@@ -103,7 +100,7 @@ export const ChatContainer = () => {
       }));
       setMessages(restored);
     },
-    [currentUserEmail],
+    [currentUserEmail, callHistory],
   );
 
   useEffect(() => {
@@ -130,7 +127,8 @@ export const ChatContainer = () => {
     meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
   ) => {
     if (!currentUserEmail || !content || !conversationId) return;
-    const { error } = await supabase.from("chat_messages").insert({
+    const data = await callHistory({
+      action: "save_message",
       user_email: currentUserEmail,
       role,
       content,
@@ -138,8 +136,8 @@ export const ChatContainer = () => {
       response_id: meta?.responseId ?? null,
       used_chunk_ids: meta?.usedChunkIds ?? null,
       used_paragraphs: meta?.usedParagraphs ?? null,
-    } as any);
-    if (error) console.error("Fehler beim Speichern der Nachricht:", error);
+    });
+    if (!data?.success) console.error("Fehler beim Speichern der Nachricht");
   };
 
 
@@ -163,11 +161,12 @@ export const ChatContainer = () => {
 
   const handleDeleteConversation = async (cid: string) => {
     if (!currentUserEmail) return;
-    let query = supabase.from("chat_messages").delete().eq("user_email", currentUserEmail);
-    query = cid === "legacy" ? query.is("conversation_id", null) : query.eq("conversation_id", cid);
-    const { error } = await query;
-    if (error) {
-      console.error("Fehler beim Löschen:", error);
+    const data = await callHistory({
+      action: "delete_conversation",
+      user_email: currentUserEmail,
+      conversation_id: cid,
+    });
+    if (!data?.success) {
       toast.error("Gespräch konnte nicht gelöscht werden.");
       return;
     }
@@ -178,6 +177,7 @@ export const ChatContainer = () => {
     }
     await loadConversations();
   };
+
 
   const toBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
