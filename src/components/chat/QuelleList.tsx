@@ -37,16 +37,17 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
     ? [quellen]
     : [];
 
-  // Filter validated === false, build labels, dedupe by label
+  // Filter validated === false, dedupe by label, keep objects for link rendering
   const seen = new Set<string>();
-  const items: string[] = [];
+  const items: Array<{ label: string; url?: string | null }> = [];
   for (const q of arr) {
     if (typeof q !== 'string' && q && q.validated === false) continue;
     const label = labelFor(q);
     if (!label) continue;
     if (seen.has(label)) continue;
     seen.add(label);
-    items.push(label);
+    const url = typeof q !== 'string' ? q.source_url : null;
+    items.push({ label, url });
   }
 
   if (items.length === 0) return null;
@@ -58,12 +59,25 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
         className,
       )}
     >
-      {items.map((label, i) => (
+      {items.map((item, i) => (
         <span
           key={i}
           className="inline-flex items-start self-start rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-snug text-foreground"
         >
-          {label}
+          {item.url ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {item.label}
+              <ExternalLink className="h-2.5 w-2.5 opacity-70" />
+            </a>
+          ) : (
+            item.label
+          )}
         </span>
       ))}
     </div>
