@@ -80,13 +80,13 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
     document.body.removeChild(link);
   };
 
-  const submit = async (status: FeedbackStatus, text?: string) => {
-    if (submitting || submitted) return;
+  const submit = async (status: FeedbackStatus, text?: string): Promise<boolean> => {
+    if (submitting || submitted) return false;
     setSubmitting(true);
     try {
       const result = await onFeedback?.(message.id, status, text);
-      // result may be void or boolean; if explicitly false, treat as failure
-      if (result === false) return;
+      // result may be void or boolean; treat anything but explicit false as success
+      return result !== false;
     } finally {
       setSubmitting(false);
     }
@@ -108,9 +108,13 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
       );
       return;
     }
-    await submit(modal as FeedbackStatus, trimmed);
-    setModal(null);
-    setModalText("");
+    const ok = await submit(modal as FeedbackStatus, trimmed);
+    if (ok) {
+      setModal(null);
+      setModalText("");
+      setModalError(null);
+    }
+    // On failure: keep modal open + preserve typed text so admin can retry.
   };
 
   const fbBtnBase =

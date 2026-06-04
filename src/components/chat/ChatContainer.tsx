@@ -359,7 +359,7 @@ export const ChatContainer = () => {
   const handleFeedback = async (
     messageId: string,
     status: "correct" | "inaccurate" | "correction" | "note",
-    correctedText?: string,
+    text?: string,
   ): Promise<boolean> => {
     const ratedMessage = messages.find((m) => m.id === messageId);
     const messageIndex = messages.findIndex((m) => m.id === messageId);
@@ -401,7 +401,11 @@ export const ChatContainer = () => {
     };
     // corrected_text is ONLY sent on the correction path (per backend contract)
     if (status === "correction") {
-      payload.corrected_text = correctedText || "";
+      payload.corrected_text = text || "";
+    }
+    // message is sent on the note path (freeform admin note)
+    if (status === "note") {
+      payload.message = text || "";
     }
 
     // Optimistic UI: mark immediately, roll back on failure
