@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Send, Sparkles, Paperclip, X, Mic, Square } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Send, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -13,12 +13,16 @@ interface ChatInputProps {
   onInputChange?: (value: string) => void;
 }
 
+type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
+
 export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [ziel, setZiel] = useState('');
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
+  const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const awaitingAnswerRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -35,6 +39,20 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     }
   };
 
+  // Watch parent isLoading to transition submitting -> done
+  useEffect(() => {
+    if (awaitingAnswerRef.current && !isLoading) {
+      awaitingAnswerRef.current = false;
+      setAudioStatus('done');
+      // brief done-flash then clear
+      const t = setTimeout(() => {
+        setAudioStatus('idle');
+        setAudioTranscript(null);
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [isLoading]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((message.trim() || attachedFile) && !isLoading) {
@@ -44,6 +62,12 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       setAttachedFile(null);
       setZiel('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+      // Clear any prior audio status when user manually sends
+      if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
+        setAudioStatus('idle');
+        setAudioTranscript(null);
+        setAudioError(null);
+      }
     }
   };
 
@@ -88,19 +112,26 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     });
 
   const startRecording = async () => {
-    if (recording || transcribing || isLoading) return;
+    if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting' || isLoading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       recordedChunksRef.current = [];
+      // Reset prior state for a fresh recording
+      setAudioTranscript(null);
+      setAudioError(null);
       mr.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
       };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) return;
-        setTranscribing(true);
+        if (blob.size === 0) {
+          setAudioStatus('error');
+          setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
+          return;
+        }
+        setAudioStatus('transcribing');
         try {
           const base64 = await blobToBase64(blob);
           const { data, error } = await supabase.functions.invoke('chat-proxy', {
@@ -109,21 +140,34 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           if (error) throw new Error(error.message);
           if (data?.error) throw new Error(data.error);
           const text = (data?.text || '').trim();
-          if (text) {
-            setMessage(message ? `${message} ${text}` : text);
+          if (!text) {
+            setAudioStatus('error');
+            setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
+            return;
+          }
+          // Keep transcript visible through submitting
+          setAudioTranscript(text);
+          const combined = message ? `${message} ${text}` : text;
+          setMessage(combined);
+          // Auto-submit if no file attachment workflow is open
+          if (!attachedFile) {
+            setAudioStatus('submitting');
+            awaitingAnswerRef.current = true;
+            onSendMessage(combined, null, undefined);
+            setMessage('');
           } else {
-            toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
+            // With attachment, leave it to the user to press send
+            setAudioStatus('idle');
           }
         } catch (err) {
           console.error('Transcription error:', err);
-          toast.error('Spracherkennung fehlgeschlagen. Bitte erneut versuchen.');
-        } finally {
-          setTranscribing(false);
+          setAudioStatus('error');
+          setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
         }
       };
       mediaRecorderRef.current = mr;
       mr.start();
-      setRecording(true);
+      setAudioStatus('recording');
     } catch (err) {
       console.error('Mic access error:', err);
       toast.error('Mikrofon-Zugriff verweigert.');
@@ -133,7 +177,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const stopRecording = () => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') mr.stop();
-    setRecording(false);
+    // Immediately reflect transition; onstop will set transcribing/error
+    setAudioStatus('transcribing');
   };
 
   useEffect(() => {
@@ -156,6 +201,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       )}px`;
     }
   }, [ziel, attachedFile]);
+
+  const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
+  const recording = audioStatus === 'recording';
+  const transcribing = audioStatus === 'transcribing';
+  const submitting = audioStatus === 'submitting';
 
   return (
     <motion.div
@@ -210,15 +260,67 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </div>
           </div>
         )}
-        {recording && (
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-500">
-            <span className="relative inline-flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-            </span>
-            <span>Aufnahme läuft… (klick zum Stoppen)</span>
-          </div>
-        )}
+
+        {/* Unified audio status region — single fixed slot, never collapses to blank between phases */}
+        <AnimatePresence initial={false} mode="wait">
+          {showStatusBar && (
+            <motion.div
+              key={audioStatus}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              role="status"
+              aria-live="polite"
+              className={cn(
+                'mb-2 rounded-xl border px-3 py-2 text-xs',
+                recording && 'border-red-500/30 bg-red-500/10 text-red-500',
+                transcribing && 'border-primary/30 bg-primary/10 text-primary',
+                submitting && 'border-primary/30 bg-primary/10 text-foreground',
+                audioStatus === 'error' && 'border-destructive/40 bg-destructive/10 text-destructive',
+              )}
+            >
+              {recording && (
+                <div className="flex items-center gap-2">
+                  <span className="relative inline-flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                  </span>
+                  <span>Aufnahme läuft… (klick zum Stoppen)</span>
+                </div>
+              )}
+              {transcribing && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Wird transkribiert…</span>
+                </div>
+              )}
+              {submitting && (
+                <div className="flex flex-col gap-1.5">
+                  {audioTranscript && (
+                    <div className="text-foreground/90 italic">„{audioTranscript}“</div>
+                  )}
+                  <div className="flex items-center gap-2 text-primary">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Antwort wird erstellt…</span>
+                  </div>
+                </div>
+              )}
+              {audioStatus === 'error' && (
+                <div className="flex flex-col gap-1.5">
+                  {audioTranscript && (
+                    <div className="text-foreground/90 italic">„{audioTranscript}“</div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span>{audioError || 'Es ist ein Fehler aufgetreten. Bitte erneut versuchen.'}</span>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="glass rounded-2xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
           <div className="flex items-end gap-2">
             <input
@@ -257,7 +359,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               type="button"
               size="icon"
               variant="ghost"
-              disabled={isLoading || transcribing}
+              disabled={isLoading || transcribing || submitting}
               onClick={recording ? stopRecording : startRecording}
               className={cn(
                 'h-10 w-10 shrink-0 rounded-xl',
@@ -271,8 +373,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/60" />
                   <Square className="h-3 w-3 fill-red-500 text-red-500" />
                 </span>
-              ) : transcribing ? (
-                <Sparkles className="h-4 w-4 animate-pulse" />
+              ) : transcribing || submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Mic className="h-4 w-4" />
               )}
