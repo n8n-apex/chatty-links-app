@@ -637,6 +637,29 @@ export const ChatContainer = () => {
             })()}
           </div>
         </div>
+        {isEditDraftMode && lastAssistant && (
+          <div className="border-t border-border bg-primary/5 px-4 py-2 backdrop-blur-xl">
+            <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 text-xs">
+              <span className="flex items-center gap-2 text-primary">
+                <Pencil className="h-3 w-3" />
+                Änderung am Entwurf — z. B. „mach den dritten Absatz schärfer“
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditDraftDismissed((prev) => {
+                  const next = new Set(prev);
+                  next.add(lastAssistant.id);
+                  return next;
+                })}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                aria-label="Bearbeitungsmodus verlassen"
+                title="Bearbeitungsmodus verlassen"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         <ChatInput
           onSendMessage={(msg, file, ziel) => {
             sendMessage(msg, file, ziel);
