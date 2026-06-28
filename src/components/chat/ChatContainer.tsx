@@ -250,21 +250,10 @@ export const ChatContainer = () => {
         return;
       }
     } else if (isEditDraftMode) {
-      // Conversational edit of the most recent draft
-      payload = {
-        ...payload,
-        action: "draft_statement",
-        mode: "edit",
-        topic: content,
-        message: content,
-      };
-      if (lastAssistant) {
-        setEditDraftDismissed((prev) => {
-          const next = new Set(prev);
-          next.add(lastAssistant.id);
-          return next;
-        });
-      }
+      // Should never reach here: edit-mode input is routed to handleEditDraft.
+      // Guard anyway so we never accidentally send chat history through the Q&A path.
+      setIsLoading(false);
+      return;
     } else {
       // Action detection (text-only flow, unchanged)
       const msg = content.toLowerCase();
