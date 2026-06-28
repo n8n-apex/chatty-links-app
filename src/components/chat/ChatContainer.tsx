@@ -24,6 +24,7 @@ export const ChatContainer = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
