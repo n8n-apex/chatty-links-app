@@ -455,6 +455,83 @@ export const ChatContainer = () => {
   const lastAssistantDraft = lastAssistant ? extractDraft(lastAssistant.content) : null;
   const isEditDraftMode = !!(lastAssistant && lastAssistantDraft && !editDraftDismissed.has(lastAssistant.id));
 
+  // --- Conversational draft edit: dedicated request, no chat history attached ---
+  const handleEditDraft = async (instruction: string) => {
+    const text = (instruction || "").trim();
+    if (!text) return;
+    const sessionId = conversationId || localStorage.getItem("chat-session-id") || "";
+    if (!sessionId) {
+      toast.error("Keine Session aktiv.");
+      return;
+    }
+    // Snapshot the draft message we are about to update BEFORE adding any new messages,
+    // so we don't accidentally target a fresh user bubble.
+    const targetAssistant = [...messages].reverse().find((m) => m.role === "assistant" && extractDraft(m.content));
+    if (!targetAssistant) return;
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      content: text,
+      role: "user",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+    persistMessage("user", text);
+
+    const startTime = performance.now();
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", {
+        body: {
+          action: "draft_statement",
+          mode: "edit",
+          sessionId,
+          topic: text,
+        },
+      });
+      if (error) throw new Error(error.message);
+
+      const parsed = Array.isArray(data) ? data[0] : data;
+      let responseText: string;
+      let usedChunkIds: string[] = [];
+      let usedParagraphs: string[] = [];
+      let responseId: string | undefined;
+      if (parsed && typeof parsed === "object") {
+        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
+        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
+        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
+        responseText = JSON.stringify(parsed);
+      } else {
+        responseText = typeof data === "string" ? data : JSON.stringify(data);
+      }
+
+      // Replace the existing draft message content in place (not a new bubble).
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === targetAssistant.id
+            ? {
+                ...m,
+                content: responseText,
+                timestamp: new Date(),
+                durationMs: performance.now() - startTime,
+                responseId: responseId ?? m.responseId,
+                usedChunkIds: usedChunkIds.length ? usedChunkIds : m.usedChunkIds,
+                usedParagraphs: usedParagraphs.length ? usedParagraphs : m.usedParagraphs,
+                feedbackSubmitted: undefined,
+              }
+            : m,
+        ),
+      );
+      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
+      if (historyEnabled) loadConversations();
+    } catch (e) {
+      console.error("Draft edit error:", e);
+      toast.error("Entwurf konnte nicht aktualisiert werden.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSaveStatement = async (
     messageId: string,
     newText: string,
