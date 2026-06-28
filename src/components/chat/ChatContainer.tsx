@@ -728,7 +728,11 @@ export const ChatContainer = () => {
         )}
         <ChatInput
           onSendMessage={(msg, file, ziel) => {
-            sendMessage(msg, file, ziel);
+            if (!file && isEditDraftMode) {
+              handleEditDraft(msg);
+            } else {
+              sendMessage(msg, file, ziel);
+            }
             setInputValue("");
           }}
           isLoading={isLoading}
