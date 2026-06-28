@@ -434,8 +434,53 @@ export const ChatContainer = () => {
     }
   };
 
+  // --- Draft helpers (entwurf_stellungnahme) ---
+  const extractDraft = (content: string): string | null => {
+    try {
+      const trimmed = (content || "").trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+      const parsed = JSON.parse(trimmed);
+      const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+      const d = obj?.entwurf_stellungnahme;
+      return typeof d === "string" && d.trim() ? d : null;
+    } catch { return null; }
+  };
 
-  // Session ID initialisieren
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const lastAssistantDraft = lastAssistant ? extractDraft(lastAssistant.content) : null;
+  const isEditDraftMode = !!(lastAssistant && lastAssistantDraft && !editDraftDismissed.has(lastAssistant.id));
+
+  const handleSaveStatement = async (
+    messageId: string,
+    newText: string,
+  ): Promise<true | { error: string }> => {
+    const sessionId = conversationId || localStorage.getItem("chat-session-id") || "";
+    if (!sessionId) return { error: "Keine Session aktiv." };
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", {
+        body: { action: "save_statement", sessionId, statement_text: newText },
+      });
+      if (error) return { error: error.message };
+      const saved = data && (data.saved === true || data.status === "success");
+      if (!saved) return { error: data?.error || "Speichern fehlgeschlagen" };
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        try {
+          const trimmed = (m.content || "").trim();
+          if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return m;
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed[0] = { ...parsed[0], entwurf_stellungnahme: newText };
+            return { ...m, content: JSON.stringify(parsed) };
+          }
+          return { ...m, content: JSON.stringify({ ...parsed, entwurf_stellungnahme: newText }) };
+        } catch { return m; }
+      }));
+      return true;
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  };
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
