@@ -173,7 +173,20 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
                 {!/<\s*img\s/i.test(message.content) &&
                   (() => {
                     if (structured) {
-                      return <StructuredResponse data={structured} />;
+                      return (
+                        <StructuredResponse
+                          data={hasDraft && isEditingDraft ? { ...structured, entwurf_stellungnahme: draftText } : structured}
+                          draftEditor={hasDraft ? {
+                            isEditing: isEditingDraft,
+                            value: draftText,
+                            onChange: (v) => { setDraftText(v); if (draftError) setDraftError(null); },
+                            onSave: handleSaveDraft,
+                            onCancel: () => { setIsEditingDraft(false); setDraftError(null); },
+                            saving: draftSaving,
+                            error: draftError,
+                          } : undefined}
+                        />
+                      );
                     }
                     return (
                       <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
@@ -214,9 +227,24 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
+              {hasDraft && !isEditingDraft && (
+                <button
+                  onClick={() => {
+                    setDraftText(structured?.entwurf_stellungnahme || "");
+                    setDraftError(null);
+                    setIsEditingDraft(true);
+                  }}
+                  className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  title="Entwurf bearbeiten"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           )}
         </div>
+
+
 
         {!isUser && isAdmin && (
           <div className="mt-1 w-full">
