@@ -591,7 +591,7 @@ export const ChatContainer = () => {
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} />
+                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} onSaveStatement={handleSaveStatement} />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
                 <div ref={messagesEndRef} />
