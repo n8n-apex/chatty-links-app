@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Menu, MessageSquare, FileText, Search } from "lucide-react";
+import { Menu, MessageSquare, FileText, Search, Pencil, X } from "lucide-react";
 import { Message } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
@@ -24,6 +24,7 @@ export const ChatContainer = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
@@ -248,6 +249,22 @@ export const ChatContainer = () => {
         setIsLoading(false);
         return;
       }
+    } else if (isEditDraftMode) {
+      // Conversational edit of the most recent draft
+      payload = {
+        ...payload,
+        action: "draft_statement",
+        mode: "edit",
+        topic: content,
+        message: content,
+      };
+      if (lastAssistant) {
+        setEditDraftDismissed((prev) => {
+          const next = new Set(prev);
+          next.add(lastAssistant.id);
+          return next;
+        });
+      }
     } else {
       // Action detection (text-only flow, unchanged)
       const msg = content.toLowerCase();
@@ -433,8 +450,53 @@ export const ChatContainer = () => {
     }
   };
 
+  // --- Draft helpers (entwurf_stellungnahme) ---
+  const extractDraft = (content: string): string | null => {
+    try {
+      const trimmed = (content || "").trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+      const parsed = JSON.parse(trimmed);
+      const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+      const d = obj?.entwurf_stellungnahme;
+      return typeof d === "string" && d.trim() ? d : null;
+    } catch { return null; }
+  };
 
-  // Session ID initialisieren
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const lastAssistantDraft = lastAssistant ? extractDraft(lastAssistant.content) : null;
+  const isEditDraftMode = !!(lastAssistant && lastAssistantDraft && !editDraftDismissed.has(lastAssistant.id));
+
+  const handleSaveStatement = async (
+    messageId: string,
+    newText: string,
+  ): Promise<true | { error: string }> => {
+    const sessionId = conversationId || localStorage.getItem("chat-session-id") || "";
+    if (!sessionId) return { error: "Keine Session aktiv." };
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", {
+        body: { action: "save_statement", sessionId, statement_text: newText },
+      });
+      if (error) return { error: error.message };
+      const saved = data && (data.saved === true || data.status === "success");
+      if (!saved) return { error: data?.error || "Speichern fehlgeschlagen" };
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m;
+        try {
+          const trimmed = (m.content || "").trim();
+          if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return m;
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed[0] = { ...parsed[0], entwurf_stellungnahme: newText };
+            return { ...m, content: JSON.stringify(parsed) };
+          }
+          return { ...m, content: JSON.stringify({ ...parsed, entwurf_stellungnahme: newText }) };
+        } catch { return m; }
+      }));
+      return true;
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  };
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
@@ -529,7 +591,7 @@ export const ChatContainer = () => {
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} />
+                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} onSaveStatement={handleSaveStatement} />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
                 <div ref={messagesEndRef} />
@@ -575,6 +637,29 @@ export const ChatContainer = () => {
             })()}
           </div>
         </div>
+        {isEditDraftMode && lastAssistant && (
+          <div className="border-t border-border bg-primary/5 px-4 py-2 backdrop-blur-xl">
+            <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 text-xs">
+              <span className="flex items-center gap-2 text-primary">
+                <Pencil className="h-3 w-3" />
+                Änderung am Entwurf — z. B. „mach den dritten Absatz schärfer“
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditDraftDismissed((prev) => {
+                  const next = new Set(prev);
+                  next.add(lastAssistant.id);
+                  return next;
+                })}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                aria-label="Bearbeitungsmodus verlassen"
+                title="Bearbeitungsmodus verlassen"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         <ChatInput
           onSendMessage={(msg, file, ziel) => {
             sendMessage(msg, file, ziel);

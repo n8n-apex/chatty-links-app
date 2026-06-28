@@ -248,7 +248,48 @@ const Collapsible = ({ title, children, defaultOpen = false }: { title: string; 
   );
 };
 
-export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
+export interface DraftEditorProps {
+  isEditing: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+  error: string | null;
+}
+
+const DraftEditor = ({ value, onChange, onSave, onCancel, saving, error }: DraftEditorProps) => (
+  <div className="flex flex-col gap-2">
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      rows={12}
+      disabled={saving}
+      className="w-full min-h-[240px] resize-y rounded-md border border-border bg-background/60 p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+    />
+    {error && <p className="text-xs text-destructive">{error}</p>}
+    <div className="flex justify-end gap-2">
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={saving}
+        className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+      >
+        Abbrechen
+      </button>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving || value.trim().length === 0}
+        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {saving ? 'Speichert…' : 'Speichern'}
+      </button>
+    </div>
+  </div>
+);
+
+export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayload; draftEditor?: DraftEditorProps }) => {
   // B4 — Behördenschreiben analysis (full structured view)
   const isB4 =
     data.action === 'analyze_pdf' ||
@@ -322,7 +363,9 @@ export const StructuredResponse = ({ data }: { data: StructuredPayload }) => {
         )}
         {data.entwurf_stellungnahme && (
           <Section>
-            <Collapsible title="Entwurf Stellungnahme">{data.entwurf_stellungnahme}</Collapsible>
+            <Collapsible title="Entwurf Stellungnahme" defaultOpen={draftEditor?.isEditing}>
+              {draftEditor?.isEditing ? <DraftEditor {...draftEditor} /> : data.entwurf_stellungnahme}
+            </Collapsible>
           </Section>
         )}
         <Section>{renderCommonExtras(data)}</Section>

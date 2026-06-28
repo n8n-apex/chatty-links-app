@@ -15,9 +15,10 @@ interface ChatMessageProps {
   message: Message;
   onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => Promise<boolean> | void | Promise<void>;
   isAdmin?: boolean;
+  onSaveStatement?: (messageId: string, newText: string) => Promise<true | { error: string }>;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false, onSaveStatement }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
   const isAdmin = (() => {
@@ -33,6 +34,10 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
   const [modalText, setModalText] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const submitted = !!message.feedbackSubmitted;
 
@@ -46,6 +51,31 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
   const noChunksTitle = "Keine Quellen-Chunks für Feedback verfügbar";
 
   const structured = !isUser ? tryParseStructured(message.content) : null;
+  const hasDraft = !!(structured && typeof structured.entwurf_stellungnahme === "string" && structured.entwurf_stellungnahme.trim().length > 0 && onSaveStatement);
+
+  const handleSaveDraft = async () => {
+    if (!onSaveStatement) return;
+    const trimmed = draftText.trim();
+    if (!trimmed) {
+      setDraftError("Der Entwurf darf nicht leer sein.");
+      return;
+    }
+    setDraftSaving(true);
+    setDraftError(null);
+    try {
+      const result = await onSaveStatement(message.id, trimmed);
+      if (result === true) {
+        setIsEditingDraft(false);
+        toast.success("Gespeichert");
+      } else {
+        setDraftError(result?.error || "Speichern fehlgeschlagen");
+      }
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setDraftSaving(false);
+    }
+  };
 
   const sourceCount = (() => {
     if (!structured) return 0;
@@ -168,7 +198,20 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
                 {!/<\s*img\s/i.test(message.content) &&
                   (() => {
                     if (structured) {
-                      return <StructuredResponse data={structured} />;
+                      return (
+                        <StructuredResponse
+                          data={hasDraft && isEditingDraft ? { ...structured, entwurf_stellungnahme: draftText } : structured}
+                          draftEditor={hasDraft ? {
+                            isEditing: isEditingDraft,
+                            value: draftText,
+                            onChange: (v) => { setDraftText(v); if (draftError) setDraftError(null); },
+                            onSave: handleSaveDraft,
+                            onCancel: () => { setIsEditingDraft(false); setDraftError(null); },
+                            saving: draftSaving,
+                            error: draftError,
+                          } : undefined}
+                        />
+                      );
                     }
                     return (
                       <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
@@ -209,9 +252,24 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
+              {hasDraft && !isEditingDraft && (
+                <button
+                  onClick={() => {
+                    setDraftText(structured?.entwurf_stellungnahme || "");
+                    setDraftError(null);
+                    setIsEditingDraft(true);
+                  }}
+                  className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  title="Entwurf bearbeiten"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           )}
         </div>
+
+
 
         {!isUser && isAdmin && (
           <div className="mt-1 w-full">

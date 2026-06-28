@@ -237,6 +237,54 @@ Deno.serve(async (req) => {
       )
     }
 
+    // --- SAVE EDITED STATEMENT (manual pencil-edit) ---
+    if (body.action === 'save_statement') {
+      try {
+        const sessionId = body.sessionId || body.session_id || null;
+        const statementText = typeof body.statement_text === 'string' ? body.statement_text : '';
+        if (!sessionId) {
+          return new Response(
+            JSON.stringify({ status: 'error', saved: false, error: 'missing_session_id' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (!statementText.trim()) {
+          return new Response(
+            JSON.stringify({ status: 'error', saved: false, error: 'empty_statement' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const resp = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_statement',
+            sessionId,
+            statement_text: statementText,
+          }),
+        });
+        const txt = await resp.text();
+        if (!resp.ok) {
+          return new Response(
+            JSON.stringify({ status: 'error', saved: false, error: `Webhook ${resp.status}`, detail: txt }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        let parsed: any;
+        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', saved: true, raw: txt }; }
+        return new Response(
+          JSON.stringify(parsed),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('save_statement error:', e);
+        return new Response(
+          JSON.stringify({ status: 'error', saved: false, error: String(e) }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     if (body.action === 'submit_feedback') {
       try {
         const sessionId = body.session_id || body.sessionId || null;
@@ -301,6 +349,7 @@ Deno.serve(async (req) => {
         topic: body.topic || null,
         statement_type: body.statement_type || (body.action === 'draft_statement' ? 'Stellungnahme' : null),
         ziel: body.ziel || null,
+        mode: body.mode || null,
         message: body.message,
         sessionId: body.sessionId,
         timestamp: body.timestamp,
