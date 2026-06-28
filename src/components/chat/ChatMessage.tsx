@@ -15,9 +15,10 @@ interface ChatMessageProps {
   message: Message;
   onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => Promise<boolean> | void | Promise<void>;
   isAdmin?: boolean;
+  onSaveStatement?: (messageId: string, newText: string) => Promise<true | { error: string }>;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false, onSaveStatement }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
   const isAdmin = (() => {
@@ -33,6 +34,10 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
   const [modalText, setModalText] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const submitted = !!message.feedbackSubmitted;
 
