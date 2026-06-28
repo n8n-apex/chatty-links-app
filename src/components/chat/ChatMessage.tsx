@@ -51,6 +51,31 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
   const noChunksTitle = "Keine Quellen-Chunks für Feedback verfügbar";
 
   const structured = !isUser ? tryParseStructured(message.content) : null;
+  const hasDraft = !!(structured && typeof structured.entwurf_stellungnahme === "string" && structured.entwurf_stellungnahme.trim().length > 0 && onSaveStatement);
+
+  const handleSaveDraft = async () => {
+    if (!onSaveStatement) return;
+    const trimmed = draftText.trim();
+    if (!trimmed) {
+      setDraftError("Der Entwurf darf nicht leer sein.");
+      return;
+    }
+    setDraftSaving(true);
+    setDraftError(null);
+    try {
+      const result = await onSaveStatement(message.id, trimmed);
+      if (result === true) {
+        setIsEditingDraft(false);
+        toast.success("Gespeichert");
+      } else {
+        setDraftError(result?.error || "Speichern fehlgeschlagen");
+      }
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setDraftSaving(false);
+    }
+  };
 
   const sourceCount = (() => {
     if (!structured) return 0;
