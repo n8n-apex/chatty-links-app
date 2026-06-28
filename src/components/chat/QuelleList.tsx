@@ -19,7 +19,8 @@ export interface Quelle {
 const labelFor = (q: string | Quelle): string => {
   if (typeof q === 'string') return q;
   if (q.display && q.display.trim()) return q.display.trim();
-  return [q.paragraph, q.source_file || q.file, q.state, q.document_type || q.type]
+  // Prefer a structured citation: paragraph · source_file · state
+  return [q.paragraph, q.source_file || q.file, q.state]
     .filter(Boolean)
     .join(' · ');
 };
