@@ -237,6 +237,49 @@ Deno.serve(async (req) => {
       )
     }
 
+    // --- CONVERSATIONAL DRAFT EDIT (dedicated, no chat history) ---
+    if (body.action === 'draft_statement' && body.mode === 'edit') {
+      try {
+        const sessionId = body.sessionId || body.session_id || null;
+        const topic = typeof body.topic === 'string' ? body.topic : '';
+        if (!sessionId) {
+          return new Response(
+            JSON.stringify({ status: 'error', error: 'missing_session_id' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const resp = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'draft_statement',
+            mode: 'edit',
+            sessionId,
+            topic,
+          }),
+        });
+        const txt = await resp.text();
+        if (!resp.ok) {
+          return new Response(
+            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        let parsed: unknown;
+        try { parsed = JSON.parse(txt); } catch { parsed = { output: txt }; }
+        return new Response(
+          JSON.stringify(parsed),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('draft_statement edit error:', e);
+        return new Response(
+          JSON.stringify({ status: 'error', error: String(e) }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // --- SAVE EDITED STATEMENT (manual pencil-edit) ---
     if (body.action === 'save_statement') {
       try {
