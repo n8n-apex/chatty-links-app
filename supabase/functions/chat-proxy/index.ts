@@ -349,6 +349,7 @@ Deno.serve(async (req) => {
         topic: body.topic || null,
         statement_type: body.statement_type || (body.action === 'draft_statement' ? 'Stellungnahme' : null),
         ziel: body.ziel || null,
+        mode: body.mode || null,
         message: body.message,
         sessionId: body.sessionId,
         timestamp: body.timestamp,
