@@ -363,7 +363,9 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
         )}
         {data.entwurf_stellungnahme && (
           <Section>
-            <Collapsible title="Entwurf Stellungnahme">{data.entwurf_stellungnahme}</Collapsible>
+            <Collapsible title="Entwurf Stellungnahme" defaultOpen={draftEditor?.isEditing}>
+              {draftEditor?.isEditing ? <DraftEditor {...draftEditor} /> : data.entwurf_stellungnahme}
+            </Collapsible>
           </Section>
         )}
         <Section>{renderCommonExtras(data)}</Section>
