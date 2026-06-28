@@ -249,6 +249,22 @@ export const ChatContainer = () => {
         setIsLoading(false);
         return;
       }
+    } else if (isEditDraftMode) {
+      // Conversational edit of the most recent draft
+      payload = {
+        ...payload,
+        action: "draft_statement",
+        mode: "edit",
+        topic: content,
+        message: content,
+      };
+      if (lastAssistant) {
+        setEditDraftDismissed((prev) => {
+          const next = new Set(prev);
+          next.add(lastAssistant.id);
+          return next;
+        });
+      }
     } else {
       // Action detection (text-only flow, unchanged)
       const msg = content.toLowerCase();
