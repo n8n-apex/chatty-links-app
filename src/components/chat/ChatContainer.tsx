@@ -571,6 +571,7 @@ export const ChatContainer = () => {
           mode: "edit",
           sessionId,
           topic: text,
+          ...(projectRef ? { project_ref: projectRef } : {}),
         },
       });
       if (error) throw new Error(error.message);
