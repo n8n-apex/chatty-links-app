@@ -217,17 +217,22 @@ export const ChatContainer = () => {
     return "behoerdenschreiben";
   };
 
-  const sendMessage = async (content: string, file?: File | null, ziel?: string) => {
+  const sendMessage = async (content: string, file?: File | null, ziel?: string, sourceType?: 'rechtsquelle' | 'kontext' | 'analyze') => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
     if (sessionId !== localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", sessionId);
     }
 
-    // === NEW: upload_source path (Rechtsfrage / Stellungnahme + attachment) ===
+    // === upload_source path (Rechtsquelle / Kontext attachments) ===
+    // Triggered when a file is attached AND the user picked a non-analyze source type.
+    // Falls back to legacy mode-based detection if no sourceType passed (default rechtsquelle).
     if (file) {
       const mode = detectMode(content);
-      if (mode === "rechtsfrage" || mode === "stellungnahme") {
+      const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
+        sourceType ?? (mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+
+      if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
         // Show a user bubble noting the attachment
         const userMessage: Message = {
           id: crypto.randomUUID(),
@@ -245,9 +250,11 @@ export const ChatContainer = () => {
           const { data, error } = await supabase.functions.invoke("chat-proxy", {
             body: {
               action: "upload_source",
+              source_type: effectiveSourceType,
               sessionId,
               file_name: file.name,
               file_base64: base64,
+              ...(projectRef ? { project_ref: projectRef } : {}),
             },
           });
           if (error) throw new Error(error.message);
@@ -284,6 +291,7 @@ export const ChatContainer = () => {
         return;
       }
     }
+
 
     // === Existing flow (analyze_pdf for Behördenschreiben + text Q&A) ===
     const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
