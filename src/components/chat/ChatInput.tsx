@@ -257,7 +257,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       animate={{ opacity: 1, y: 0 }}
       className="border-t border-border bg-background/80 backdrop-blur-xl p-4"
     >
-      <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+      <form
+        onSubmit={handleSubmit}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          'mx-auto max-w-3xl rounded-2xl transition-all',
+          isDragOver && 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-primary/5',
+        )}
+      >
         {attachedFile && (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">
             <span className="flex min-w-0 items-center gap-2">
