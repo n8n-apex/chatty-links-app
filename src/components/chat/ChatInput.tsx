@@ -6,11 +6,15 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
+export type SourceType = 'rechtsquelle' | 'kontext' | 'analyze';
+export type ChatMode = 'rechtsfrage' | 'stellungnahme' | 'behoerdenschreiben';
+
 interface ChatInputProps {
-  onSendMessage: (message: string, file?: File | null, ziel?: string) => void;
+  onSendMessage: (message: string, file?: File | null, ziel?: string, sourceType?: SourceType) => void;
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
+  mode?: ChatMode;
 }
 
 type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
