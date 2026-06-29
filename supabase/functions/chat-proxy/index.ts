@@ -123,7 +123,9 @@ Deno.serve(async (req) => {
     const skipMessageCheck =
       body.action === 'submit_feedback' ||
       body.action === 'save_statement' ||
+      body.action === 'upload_source' ||
       (body.action === 'draft_statement' && body.mode === 'edit');
+
     if (!skipMessageCheck && (!message || typeof message !== 'string')) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
