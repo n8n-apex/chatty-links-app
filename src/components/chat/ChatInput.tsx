@@ -63,11 +63,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     }
   }, [isLoading]);
 
+  // Keep the default source type in sync with the active mode whenever a new
+  // file is attached, but allow the user to override it via the picker.
+  useEffect(() => {
+    if (attachedFile) {
+      setSourceType(mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+    }
+  }, [attachedFile, mode]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((message.trim() || attachedFile) && !isLoading) {
       const trimmedZiel = ziel.trim();
-      onSendMessage(message.trim(), attachedFile, trimmedZiel || undefined);
+      onSendMessage(message.trim(), attachedFile, trimmedZiel || undefined, attachedFile ? sourceType : undefined);
       setMessage('');
       setAttachedFile(null);
       setZiel('');
