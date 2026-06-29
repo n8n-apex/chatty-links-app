@@ -20,6 +20,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
+
   const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const awaitingAnswerRef = useRef(false);
