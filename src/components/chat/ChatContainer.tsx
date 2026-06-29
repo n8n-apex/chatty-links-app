@@ -660,6 +660,35 @@ export const ChatContainer = () => {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   };
+
+  // --- PROJECT PICKER: bind a chat to a Google Drive project folder ---
+  const bindProject = async (ref: string) => {
+    const cleanRef = (ref || "").trim();
+    if (!cleanRef) return;
+    setProjectRef(cleanRef);
+    setProjectStatus("loading");
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", {
+        body: { action: "ingest_project", project_ref: cleanRef },
+      });
+      if (error) throw new Error(error.message);
+      const parsed = Array.isArray(data) ? data[0] : data;
+      const ok = parsed && (parsed.status === "success" || parsed.success === true);
+      if (!ok) throw new Error(parsed?.error || "ingest_failed");
+      setProjectStatus("linked");
+      toast.success("Projekt verknüpft");
+    } catch (e) {
+      console.error("ingest_project error:", e);
+      setProjectStatus("error");
+      setProjectRef(null);
+      toast.error("Projekt konnte nicht eingelesen werden.");
+    }
+  };
+
+  const unlinkProject = () => {
+    setProjectRef(null);
+    setProjectStatus("idle");
+  };
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
