@@ -98,6 +98,47 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     setAttachedFile(file);
   };
 
+  const acceptDroppedFile = (file: File) => {
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp|svg)$/.test(name);
+    if (!isPdf && !isImage) {
+      toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Datei ist zu groß. Maximal 20 MB erlaubt.');
+      return;
+    }
+    setAttachedFile(file);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragOver(true);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragOver(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragOver(false);
+    if (isLoading) return;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) acceptDroppedFile(file);
+  };
+
+
   const removeFile = () => {
     setAttachedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
