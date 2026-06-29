@@ -8,6 +8,7 @@ import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
 import { EmptyState } from "./EmptyState";
 import { ConversationSidebar, ConversationSummary } from "./ConversationSidebar";
+import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
