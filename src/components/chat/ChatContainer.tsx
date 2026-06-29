@@ -8,6 +8,7 @@ import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
 import { EmptyState } from "./EmptyState";
 import { ConversationSidebar, ConversationSummary } from "./ConversationSidebar";
+import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -25,6 +26,8 @@ export const ChatContainer = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
+  const [projectRef, setProjectRef] = useState<string | null>(null);
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
@@ -214,17 +217,22 @@ export const ChatContainer = () => {
     return "behoerdenschreiben";
   };
 
-  const sendMessage = async (content: string, file?: File | null, ziel?: string) => {
+  const sendMessage = async (content: string, file?: File | null, ziel?: string, sourceType?: 'rechtsquelle' | 'kontext' | 'analyze') => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
     if (sessionId !== localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", sessionId);
     }
 
-    // === NEW: upload_source path (Rechtsfrage / Stellungnahme + attachment) ===
+    // === upload_source path (Rechtsquelle / Kontext attachments) ===
+    // Triggered when a file is attached AND the user picked a non-analyze source type.
+    // Falls back to legacy mode-based detection if no sourceType passed (default rechtsquelle).
     if (file) {
       const mode = detectMode(content);
-      if (mode === "rechtsfrage" || mode === "stellungnahme") {
+      const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
+        sourceType ?? (mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+
+      if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
         // Show a user bubble noting the attachment
         const userMessage: Message = {
           id: crypto.randomUUID(),
@@ -242,9 +250,11 @@ export const ChatContainer = () => {
           const { data, error } = await supabase.functions.invoke("chat-proxy", {
             body: {
               action: "upload_source",
+              source_type: effectiveSourceType,
               sessionId,
               file_name: file.name,
               file_base64: base64,
+              ...(projectRef ? { project_ref: projectRef } : {}),
             },
           });
           if (error) throw new Error(error.message);
@@ -282,6 +292,7 @@ export const ChatContainer = () => {
       }
     }
 
+
     // === Existing flow (analyze_pdf for Behördenschreiben + text Q&A) ===
     const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
 
@@ -300,6 +311,7 @@ export const ChatContainer = () => {
     let payload: Record<string, unknown> = {
       sessionId,
       timestamp: new Date().toISOString(),
+      ...(projectRef ? { project_ref: projectRef } : {}),
     };
 
     if (file) {
@@ -559,6 +571,7 @@ export const ChatContainer = () => {
           mode: "edit",
           sessionId,
           topic: text,
+          ...(projectRef ? { project_ref: projectRef } : {}),
         },
       });
       if (error) throw new Error(error.message);
@@ -647,6 +660,35 @@ export const ChatContainer = () => {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   };
+
+  // --- PROJECT PICKER: bind a chat to a Google Drive project folder ---
+  const bindProject = async (ref: string) => {
+    const cleanRef = (ref || "").trim();
+    if (!cleanRef) return;
+    setProjectRef(cleanRef);
+    setProjectStatus("loading");
+    try {
+      const { data, error } = await supabase.functions.invoke("chat-proxy", {
+        body: { action: "ingest_project", project_ref: cleanRef },
+      });
+      if (error) throw new Error(error.message);
+      const parsed = Array.isArray(data) ? data[0] : data;
+      const ok = parsed && (parsed.status === "success" || parsed.success === true);
+      if (!ok) throw new Error(parsed?.error || "ingest_failed");
+      setProjectStatus("linked");
+      toast.success("Projekt verknüpft");
+    } catch (e) {
+      console.error("ingest_project error:", e);
+      setProjectStatus("error");
+      setProjectRef(null);
+      toast.error("Projekt konnte nicht eingelesen werden.");
+    }
+  };
+
+  const unlinkProject = () => {
+    setProjectRef(null);
+    setProjectStatus("idle");
+  };
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
@@ -734,6 +776,14 @@ export const ChatContainer = () => {
           </div>
         </div>
 
+        <ProjectPicker
+          projectRef={projectRef}
+          status={projectStatus}
+          onBind={bindProject}
+          onUnlink={unlinkProject}
+        />
+
+
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
             {messages.length === 0 ? (
@@ -811,19 +861,21 @@ export const ChatContainer = () => {
           </div>
         )}
         <ChatInput
-          onSendMessage={(msg, file, ziel) => {
+          onSendMessage={(msg, file, ziel, sourceType) => {
             if (!file && isEditDraftMode) {
               handleEditDraft(msg);
             } else {
-              sendMessage(msg, file, ziel);
+              sendMessage(msg, file, ziel, sourceType);
             }
             setInputValue("");
           }}
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
+          mode={detectMode(inputValue)}
         />
       </div>
     </div>
   );
 };
+
