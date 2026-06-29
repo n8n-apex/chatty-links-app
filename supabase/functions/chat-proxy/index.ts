@@ -120,7 +120,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (body.action !== 'submit_feedback' && (!message || typeof message !== 'string')) {
+    const skipMessageCheck =
+      body.action === 'submit_feedback' ||
+      body.action === 'save_statement' ||
+      (body.action === 'draft_statement' && body.mode === 'edit');
+    if (!skipMessageCheck && (!message || typeof message !== 'string')) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
