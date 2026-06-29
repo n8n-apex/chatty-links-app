@@ -19,9 +19,12 @@ interface ChatInputProps {
 
 type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
 
-export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, mode = 'behoerdenschreiben' }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [sourceType, setSourceType] = useState<SourceType>(
+    mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle'
+  );
   const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
