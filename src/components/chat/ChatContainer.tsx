@@ -776,6 +776,14 @@ export const ChatContainer = () => {
           </div>
         </div>
 
+        <ProjectPicker
+          projectRef={projectRef}
+          status={projectStatus}
+          onBind={bindProject}
+          onUnlink={unlinkProject}
+        />
+
+
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
             {messages.length === 0 ? (
