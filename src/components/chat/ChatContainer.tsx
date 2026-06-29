@@ -861,19 +861,21 @@ export const ChatContainer = () => {
           </div>
         )}
         <ChatInput
-          onSendMessage={(msg, file, ziel) => {
+          onSendMessage={(msg, file, ziel, sourceType) => {
             if (!file && isEditDraftMode) {
               handleEditDraft(msg);
             } else {
-              sendMessage(msg, file, ziel);
+              sendMessage(msg, file, ziel, sourceType);
             }
             setInputValue("");
           }}
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
+          mode={detectMode(inputValue)}
         />
       </div>
     </div>
   );
 };
+
