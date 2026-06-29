@@ -311,6 +311,7 @@ export const ChatContainer = () => {
     let payload: Record<string, unknown> = {
       sessionId,
       timestamp: new Date().toISOString(),
+      ...(projectRef ? { project_ref: projectRef } : {}),
     };
 
     if (file) {
