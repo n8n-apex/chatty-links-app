@@ -25,6 +25,15 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
   const [sourceType, setSourceType] = useState<SourceType>(
     mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle'
   );
+  // Reset default source type when the active mode changes, but only while no file is attached
+  // (so user choice isn't overridden mid-attachment).
+  useEffect(() => {
+    setSourceType((current) => {
+      if (mode === 'behoerdenschreiben') return current === 'kontext' || current === 'rechtsquelle' ? current : 'analyze';
+      // rechtsfrage / stellungnahme: analyze isn't available — fall back to rechtsquelle
+      return current === 'analyze' ? 'rechtsquelle' : current;
+    });
+  }, [mode]);
   const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
