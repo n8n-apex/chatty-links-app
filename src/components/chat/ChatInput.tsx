@@ -302,7 +302,47 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
             </button>
           </div>
         )}
-        {attachedFile && (
+        {attachedFile && (() => {
+          // Visibility per mode:
+          //   rechtsfrage / stellungnahme → only Rechtsquelle & Kontext
+          //   behoerdenschreiben → all three, default analyze
+          const options: { value: SourceType; label: string }[] = [
+            { value: 'rechtsquelle', label: 'Rechtsquelle (verbindliches Ortsrecht)' },
+            { value: 'kontext', label: 'Kontext (Sachverhalt, kein Recht)' },
+          ];
+          if (mode === 'behoerdenschreiben') {
+            options.push({ value: 'analyze', label: 'Behördenschreiben analysieren' });
+          }
+          return (
+            <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
+              <div className="mb-1.5 text-xs font-medium text-foreground">Was ist diese Datei?</div>
+              <div className="flex flex-col gap-1">
+                {options.map((o) => (
+                  <label
+                    key={o.value}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors',
+                      sourceType === o.value
+                        ? 'border-primary/50 bg-primary/10 text-foreground'
+                        : 'border-border bg-background/40 text-muted-foreground hover:border-border hover:bg-muted/40',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="source-type"
+                      value={o.value}
+                      checked={sourceType === o.value}
+                      onChange={() => setSourceType(o.value)}
+                      className="h-3 w-3 accent-primary"
+                    />
+                    <span>{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+        {attachedFile && sourceType === 'analyze' && (
           <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
             <label htmlFor="ziel-textarea" className="text-xs font-medium text-foreground">
               Ziel der Antwort (optional)
