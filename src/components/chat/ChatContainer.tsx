@@ -464,11 +464,6 @@ export const ChatContainer = () => {
       toast.error("Keine Session aktiv.");
       return;
     }
-    // Snapshot the draft message we are about to update BEFORE adding any new messages,
-    // so we don't accidentally target a fresh user bubble.
-    const targetAssistant = [...messages].reverse().find((m) => m.role === "assistant" && extractDraft(m.content));
-    if (!targetAssistant) return;
-
     const userMessage: Message = {
       id: crypto.randomUUID(),
       content: text,
@@ -491,37 +486,49 @@ export const ChatContainer = () => {
       });
       if (error) throw new Error(error.message);
 
+      console.log("[DRAFT EDIT] n8n response:", data);
+
       const parsed = Array.isArray(data) ? data[0] : data;
       let responseText: string;
       let usedChunkIds: string[] = [];
       let usedParagraphs: string[] = [];
       let responseId: string | undefined;
+
       if (parsed && typeof parsed === "object") {
         if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
         if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
         if (typeof parsed.response_id === "string") responseId = parsed.response_id;
-        responseText = JSON.stringify(parsed);
+
+        // If backend returned a wrapped { output: "..." } where output is a JSON string with the draft, unwrap it.
+        let draftObj: Record<string, unknown> = parsed;
+        if (!parsed.entwurf_stellungnahme && typeof parsed.output === "string") {
+          try {
+            const inner = JSON.parse(parsed.output);
+            const innerObj = Array.isArray(inner) ? inner[0] : inner;
+            if (innerObj && typeof innerObj === "object" && innerObj.entwurf_stellungnahme) {
+              draftObj = { ...parsed, ...innerObj };
+            }
+          } catch { /* keep parsed */ }
+        }
+        // Ensure the action marker so tryParseStructured/StructuredResponse render this as a draft.
+        if (!draftObj.action) draftObj = { ...draftObj, action: "draft_statement" };
+        responseText = JSON.stringify(draftObj);
       } else {
         responseText = typeof data === "string" ? data : JSON.stringify(data);
       }
 
-      // Replace the existing draft message content in place (not a new bubble).
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === targetAssistant.id
-            ? {
-                ...m,
-                content: responseText,
-                timestamp: new Date(),
-                durationMs: performance.now() - startTime,
-                responseId: responseId ?? m.responseId,
-                usedChunkIds: usedChunkIds.length ? usedChunkIds : m.usedChunkIds,
-                usedParagraphs: usedParagraphs.length ? usedParagraphs : m.usedParagraphs,
-                feedbackSubmitted: undefined,
-              }
-            : m,
-        ),
-      );
+      // Append as a NEW assistant message (mirrors how a fresh draft is rendered).
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        content: responseText,
+        role: "assistant",
+        timestamp: new Date(),
+        durationMs: performance.now() - startTime,
+        responseId,
+        usedChunkIds,
+        usedParagraphs,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
       persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
       if (historyEnabled) loadConversations();
     } catch (e) {
