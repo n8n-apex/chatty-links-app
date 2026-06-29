@@ -384,6 +384,46 @@ Deno.serve(async (req) => {
     }
 
 
+    // --- INGEST PROJECT (bind a chat to a Drive folder) ---
+    if (body.action === 'ingest_project') {
+      try {
+        const projectRef = body.project_ref || body.projectRef || '';
+        if (!projectRef) {
+          return new Response(
+            JSON.stringify({ status: 'error', error: 'missing_project_ref' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const resp = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'ingest_project',
+            project_ref: projectRef,
+          }),
+        });
+        const txt = await resp.text();
+        if (!resp.ok) {
+          return new Response(
+            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        let parsed: unknown;
+        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', raw: txt }; }
+        return new Response(
+          JSON.stringify(parsed),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e) {
+        console.error('ingest_project error:', e);
+        return new Response(
+          JSON.stringify({ status: 'error', error: String(e) }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
 
     const response = await fetch(webhookUrl, {
@@ -400,6 +440,8 @@ Deno.serve(async (req) => {
         statement_type: body.statement_type || (body.action === 'draft_statement' ? 'Stellungnahme' : null),
         ziel: body.ziel || null,
         mode: body.mode || null,
+        source_type: body.source_type || null,
+        project_ref: body.project_ref || null,
         message: body.message,
         sessionId: body.sessionId,
         timestamp: body.timestamp,
