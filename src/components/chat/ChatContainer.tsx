@@ -197,7 +197,92 @@ export const ChatContainer = () => {
     });
   };
 
+  // Detect the current "mode" from the input text prefix (same prefixes the
+  // mode buttons prefill). Falls back to "behoerdenschreiben" to preserve
+  // existing default attach behavior.
+  const detectMode = (text: string): "rechtsfrage" | "stellungnahme" | "behoerdenschreiben" => {
+    const m = (text || "").trim().toLowerCase();
+    if (m.startsWith("ich habe eine baurechtsfrage")) return "rechtsfrage";
+    if (
+      m.startsWith("erstelle eine stellungnahme") ||
+      m.startsWith("projekt:") ||
+      m.startsWith("zielsetzung:")
+    ) return "stellungnahme";
+    if (m.startsWith("analysiere dieses behördenschreiben") || m.startsWith("analysiere dieses behoerdenschreiben")) {
+      return "behoerdenschreiben";
+    }
+    return "behoerdenschreiben";
+  };
+
   const sendMessage = async (content: string, file?: File | null, ziel?: string) => {
+    // sessionId sent to n8n is ALWAYS the current conversationId.
+    const sessionId = conversationId || crypto.randomUUID();
+    if (sessionId !== localStorage.getItem("chat-session-id")) {
+      localStorage.setItem("chat-session-id", sessionId);
+    }
+
+    // === NEW: upload_source path (Rechtsfrage / Stellungnahme + attachment) ===
+    if (file) {
+      const mode = detectMode(content);
+      if (mode === "rechtsfrage" || mode === "stellungnahme") {
+        // Show a user bubble noting the attachment
+        const userMessage: Message = {
+          id: crypto.randomUUID(),
+          content: `📎 [${file.name}]`,
+          role: "user",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        setIsLoading(true);
+        persistMessage("user", userMessage.content);
+
+        try {
+          const base64 = await toBase64(file);
+          if (!base64) throw new Error("Empty base64 result");
+          const { data, error } = await supabase.functions.invoke("chat-proxy", {
+            body: {
+              action: "upload_source",
+              sessionId,
+              file_name: file.name,
+              file_base64: base64,
+            },
+          });
+          if (error) throw new Error(error.message);
+
+          const parsed = Array.isArray(data) ? data[0] : data;
+          const indexed = parsed && parsed.indexed === true;
+          const fileName = parsed?.fileName || file.name;
+          const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
+
+          const ackText = indexed
+            ? `✓ Quelle hinzugefügt: ${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""} — wird in dieser Unterhaltung berücksichtigt.`
+            : `⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.`;
+
+          const ackMessage: Message = {
+            id: crypto.randomUUID(),
+            content: ackText,
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, ackMessage]);
+          persistMessage("ai", ackText);
+        } catch (e) {
+          console.error("upload_source error:", e);
+          const errMsg: Message = {
+            id: crypto.randomUUID(),
+            content: "⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.",
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errMsg]);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+    }
+
+    // === Existing flow (analyze_pdf for Behördenschreiben + text Q&A) ===
     const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
 
     const userMessage: Message = {
@@ -210,14 +295,6 @@ export const ChatContainer = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     persistMessage("user", displayContent);
-
-    // sessionId sent to n8n is ALWAYS the current conversationId.
-    // This guarantees gpt_session_context is scoped to this conversation
-    // and that a new conversation = a brand-new, empty server-side session.
-    const sessionId = conversationId || crypto.randomUUID();
-    if (sessionId !== localStorage.getItem("chat-session-id")) {
-      localStorage.setItem("chat-session-id", sessionId);
-    }
 
     // Build payload
     let payload: Record<string, unknown> = {
@@ -251,7 +328,6 @@ export const ChatContainer = () => {
       }
     } else if (isEditDraftMode) {
       // Should never reach here: edit-mode input is routed to handleEditDraft.
-      // Guard anyway so we never accidentally send chat history through the Q&A path.
       setIsLoading(false);
       return;
     } else {
@@ -274,6 +350,7 @@ export const ChatContainer = () => {
         ...extra,
       };
     }
+
 
     const startTime = performance.now();
     try {
