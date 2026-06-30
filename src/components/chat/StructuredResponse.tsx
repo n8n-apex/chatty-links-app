@@ -118,6 +118,7 @@ export const structuredToPlainText = (data: StructuredPayload): string => {
 
   if (Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0) {
     const lines = data.rechtsgrundlage.map((r) => {
+      if (typeof r === 'string') return `- ${r}`.trim();
       const p = r.paragraph || '';
       const q = r.quelle ? ` (${r.quelle})` : '';
       return `- ${p}${q}`.trim();
