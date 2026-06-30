@@ -484,7 +484,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
           </div>
         </Section>
       )}
-      <Section>{renderCommonExtras(data)}</Section>
+      <Section>{renderRechtsfrageExtras(data)}</Section>
     </motion.div>
   );
 };
