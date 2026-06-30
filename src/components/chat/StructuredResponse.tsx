@@ -571,3 +571,106 @@ const renderCommonExtras = (data: StructuredPayload) => {
   );
 };
 
+const renderRechtsfrageExtras = (data: StructuredPayload) => {
+  const konf = konfidenzStyle(data.konfidenz);
+
+  const rechtsgrundlageArr = Array.isArray(data.rechtsgrundlage)
+    ? data.rechtsgrundlage
+    : typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage.trim()
+    ? [data.rechtsgrundlage]
+    : [];
+  const rechtsgrundlageChips = rechtsgrundlageArr
+    .map((r) => (typeof r === 'string' ? r.trim() : r.paragraph))
+    .filter((p): p is string => !!p);
+
+  const quellenArr = Array.isArray(data.quellen)
+    ? data.quellen
+    : typeof data.quellen === 'string' && data.quellen
+    ? [data.quellen]
+    : [];
+  const visibleQuellen = quellenArr.filter(
+    (q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false,
+  );
+
+  const hasRechtsprechung = Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
+
+  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !konf) {
+    return null;
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-3 border-t border-border pt-2">
+      {rechtsgrundlageChips.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsgrundlage</div>
+          <div className="flex flex-wrap gap-1.5">
+            {rechtsgrundlageChips.map((p, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-foreground"
+              >
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {visibleQuellen.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
+          <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} variant="inline" />
+        </div>
+      )}
+      {hasRechtsprechung && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>
+          <div className="flex flex-col gap-2">
+            {data.rechtsprechung!.map((r, i) => (
+              <div key={i} className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                <div className="flex flex-col gap-1">
+                  {r.display && (
+                    <div className="font-medium text-foreground">
+                      {r.fundstelle ? (
+                        <a
+                          href={r.fundstelle}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {r.display}
+                        </a>
+                      ) : (
+                        r.display
+                      )}
+                    </div>
+                  )}
+                  {r.kernaussage && (
+                    <div className="leading-relaxed text-foreground/90">{r.kernaussage}</div>
+                  )}
+                  {r.fundstelle && !r.display && (
+                    <a
+                      href={r.fundstelle}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Quelle ansehen
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {konf && (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={cn('h-2 w-2 rounded-full', konf.dot)} />
+          <span>{konf.label}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
