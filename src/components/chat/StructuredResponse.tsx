@@ -453,7 +453,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
           <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
         </Section>
       )}
-      {/* Rechtsgrundlage + Quellen are rendered together in renderCommonExtras to avoid duplicate headings */}
+      {/* Rechtsgrundlage, Quellen und Rechtsprechung werden unten gerendert */}
       {data.fehlende_informationen && (
         <Section>
           <div className="border-l-2 border-border pl-3 py-1">
