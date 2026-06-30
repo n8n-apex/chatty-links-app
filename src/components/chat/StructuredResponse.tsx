@@ -33,11 +33,12 @@ interface ForderungAnalyse {
 export interface StructuredPayload {
   // B1/B2 - Rechtsfrage
   antwort?: string;
-  rechtsgrundlage?: Rechtsgrundlage[] | string;
+  rechtsgrundlage?: Array<string | RechtsgrundlageItem> | string;
   fehlende_informationen?: string | null;
   naechste_schritte?: string | string[] | null;
   wichtiger_hinweis?: string | null;
   quellen?: Array<string | { file?: string; source_file?: string; state?: string; type?: string; document_type?: string; paragraph?: string; display?: string; [key: string]: unknown }> | string;
+  rechtsprechung?: Rechtsprechung[];
   konfidenz?: 'hoch' | 'mittel' | 'niedrig' | 'unzureichend' | string;
   action?: string;
   // B4 - Behördenschreiben Analyse
