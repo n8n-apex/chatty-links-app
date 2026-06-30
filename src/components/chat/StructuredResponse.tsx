@@ -5,9 +5,21 @@ import { cn } from '@/lib/utils';
 import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 
-interface Rechtsgrundlage {
+interface RechtsgrundlageItem {
   paragraph?: string;
   quelle?: string;
+  [key: string]: unknown;
+}
+
+interface Rechtsprechung {
+  display?: string;
+  kernaussage?: string;
+  gericht?: string;
+  datum?: string;
+  aktenzeichen?: string;
+  entscheidungstyp?: string;
+  herkunft?: string;
+  fundstelle?: string;
   [key: string]: unknown;
 }
 
