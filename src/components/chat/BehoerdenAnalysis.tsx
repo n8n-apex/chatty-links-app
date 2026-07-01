@@ -1,8 +1,34 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
+
+interface Rechtsprechung {
+  display?: string;
+  kernaussage?: string;
+  fundstelle?: string;
+  [key: string]: unknown;
+}
+
+const Md = ({ children }: { children: string }) => (
+  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="mb-1">{children}</li>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  </div>
+);
 
 type Beurteilung = 'Begründet' | 'Teilweise begründet' | 'Nicht begründet' | 'Unklar' | string;
 type Risiko = 'Hoch' | 'Mittel' | 'Gering' | string;
