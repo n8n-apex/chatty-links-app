@@ -60,7 +60,32 @@ export interface StructuredPayload {
   schlussfolgerung?: string;
   kontext_ausreichend?: boolean;
   fehlende_information?: string | null;
+  needs_clarification?: boolean;
+  rechtsgrundlage_unverifiziert?: string[];
+  bundesland?: string;
+  thema?: string;
+  art?: string;
 }
+
+// Small markdown wrapper for long text fields (paragraphs, lists, bold).
+const Md = ({ children, className }: { children: string; className?: string }) => (
+  <div className={cn('prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc', className)}>
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="mb-1">{children}</li>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  </div>
+);
+
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
   const parts: string[] = [];
