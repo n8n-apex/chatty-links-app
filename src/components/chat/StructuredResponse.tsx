@@ -546,7 +546,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
     <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
       {data.antwort && (
         <Section>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
+          <div className="text-sm text-foreground"><Md>{data.antwort}</Md></div>
         </Section>
       )}
       {/* Rechtsgrundlage, Quellen und Rechtsprechung werden unten gerendert */}
