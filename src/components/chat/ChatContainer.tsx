@@ -217,84 +217,113 @@ export const ChatContainer = () => {
     return "behoerdenschreiben";
   };
 
-  const sendMessage = async (content: string, file?: File | null, ziel?: string, sourceType?: 'rechtsquelle' | 'kontext' | 'analyze') => {
+  // Direct fetch to chat-proxy with a longer timeout than supabase.functions.invoke's default.
+  // analyze_pdf/draft_statement can legitimately take up to ~3 min.
+  const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
+    const url = `https://phxsmsaoxhhvopwndujq.supabase.co/functions/v1/chat-proxy`;
+    const anon = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoeHNtc2FveGhodm9wd25kdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTQ5MjIsImV4cCI6MjA5MTkzMDkyMn0.HzBU8UiSPly2LCCPgot5FkhQvsF9Mc6aYeyjlyrKWhQ";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anon,
+          "Authorization": `Bearer ${anon}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      if (!text) throw new Error("Leere Antwort vom Server.");
+      try { return JSON.parse(text); } catch { return { output: text }; }
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const sendMessage = async (
+    content: string,
+    files?: File[] | null,
+    ziel?: string,
+    sourceType?: 'rechtsquelle' | 'kontext' | 'analyze',
+  ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
     if (sessionId !== localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", sessionId);
     }
 
-    // === upload_source path (Rechtsquelle / Kontext attachments) ===
-    // Triggered when a file is attached AND the user picked a non-analyze source type.
-    // Falls back to legacy mode-based detection if no sourceType passed (default rechtsquelle).
-    if (file) {
+    const hasFiles = Array.isArray(files) && files.length > 0;
+    const firstFile = hasFiles ? files![0] : null;
+
+    // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
+    if (hasFiles) {
       const mode = detectMode(content);
       const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
         sourceType ?? (mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
 
       if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
-        // Show a user bubble noting the attachment
-        const userMessage: Message = {
-          id: crypto.randomUUID(),
-          content: `📎 [${file.name}]`,
-          role: "user",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
-        setIsLoading(true);
-        persistMessage("user", userMessage.content);
-
-        try {
-          const base64 = await toBase64(file);
-          if (!base64) throw new Error("Empty base64 result");
-          const { data, error } = await supabase.functions.invoke("chat-proxy", {
-            body: {
+        for (const file of files!) {
+          const userMessage: Message = {
+            id: crypto.randomUUID(),
+            content: `📎 [${file.name}]`,
+            role: "user",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, userMessage]);
+          setIsLoading(true);
+          persistMessage("user", userMessage.content);
+          try {
+            const base64 = await toBase64(file);
+            if (!base64) throw new Error("Empty base64 result");
+            const data = await invokeChatProxy({
               action: "upload_source",
               source_type: effectiveSourceType,
               sessionId,
               file_name: file.name,
               file_base64: base64,
               ...(projectRef ? { project_ref: projectRef } : {}),
-            },
-          });
-          if (error) throw new Error(error.message);
-
-          const parsed = Array.isArray(data) ? data[0] : data;
-          const indexed = parsed && parsed.indexed === true;
-          const fileName = parsed?.fileName || file.name;
-          const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
-
-          const ackText = indexed
-            ? `✓ Quelle hinzugefügt: ${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""} — wird in dieser Unterhaltung berücksichtigt.`
-            : `⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.`;
-
-          const ackMessage: Message = {
-            id: crypto.randomUUID(),
-            content: ackText,
-            role: "assistant",
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, ackMessage]);
-          persistMessage("ai", ackText);
-        } catch (e) {
-          console.error("upload_source error:", e);
-          const errMsg: Message = {
-            id: crypto.randomUUID(),
-            content: "⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.",
-            role: "assistant",
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, errMsg]);
-        } finally {
-          setIsLoading(false);
+            }, 120000);
+            const parsed = Array.isArray(data) ? data[0] : data;
+            const indexed = parsed && parsed.indexed === true;
+            const fileName = parsed?.fileName || file.name;
+            const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
+            const ackText = indexed
+              ? `✓ Quelle hinzugefügt: ${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""} — wird in dieser Unterhaltung berücksichtigt.`
+              : `⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.`;
+            const ackMessage: Message = {
+              id: crypto.randomUUID(),
+              content: ackText,
+              role: "assistant",
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, ackMessage]);
+            persistMessage("ai", ackText);
+          } catch (e) {
+            console.error("upload_source error:", e);
+            const errMsg: Message = {
+              id: crypto.randomUUID(),
+              content: "⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.",
+              role: "assistant",
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, errMsg]);
+          } finally {
+            setIsLoading(false);
+          }
         }
         return;
       }
     }
 
-
-    // === Existing flow (analyze_pdf for Behördenschreiben + text Q&A) ===
-    const displayContent = file ? (content ? `📎 [${file.name}] — ${content}` : `📎 [${file.name}]`) : content;
+    // === analyze_pdf (multi-file) OR text-only Q&A ===
+    const displayContent = hasFiles
+      ? (content
+          ? `📎 [${files!.map((f) => f.name).join(", ")}] — ${content}`
+          : `📎 [${files!.map((f) => f.name).join(", ")}]`)
+      : content;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -307,43 +336,38 @@ export const ChatContainer = () => {
     setIsLoading(true);
     persistMessage("user", displayContent);
 
-    // Build payload
     let payload: Record<string, unknown> = {
       sessionId,
       timestamp: new Date().toISOString(),
       ...(projectRef ? { project_ref: projectRef } : {}),
     };
 
-    if (file) {
+    if (hasFiles) {
       try {
-        const base64 = await toBase64(file);
-        console.log("base64 length:", base64.length);
-        if (!base64) {
-          throw new Error("Empty base64 result");
-        }
+        const encoded = await Promise.all(
+          files!.map(async (f) => ({ file_name: f.name, file_base64: await toBase64(f) })),
+        );
         payload = {
           ...payload,
           action: "analyze_pdf",
-          file_name: file.name,
-          file_base64: base64,
+          files: encoded,
+          // Back-compat: also send first file top-level (n8n may still read either)
+          file_name: firstFile!.name,
+          file_base64: encoded[0].file_base64,
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
         };
-        if (ziel && ziel.trim()) {
-          (payload as Record<string, unknown>).ziel = ziel.trim();
-        }
+        if (ziel && ziel.trim()) (payload as Record<string, unknown>).ziel = ziel.trim();
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
-        toast.error("PDF konnte nicht gelesen werden.");
+        toast.error("Datei konnte nicht gelesen werden.");
         setIsLoading(false);
         return;
       }
     } else if (isEditDraftMode) {
-      // Should never reach here: edit-mode input is routed to handleEditDraft.
       setIsLoading(false);
       return;
     } else {
-      // Action detection (text-only flow, unchanged)
       const msg = content.toLowerCase();
       let action = "question";
       const extra: Record<string, string> = { question: content };
@@ -355,32 +379,17 @@ export const ChatContainer = () => {
         action = "analyze_pdf";
         delete extra.question;
       }
-      payload = {
-        ...payload,
-        message: content,
-        action,
-        ...extra,
-      };
+      payload = { ...payload, message: content, action, ...extra };
     }
 
-
     const startTime = performance.now();
+    // Slow actions get the full 3-minute window.
+    const timeoutMs =
+      payload.action === "analyze_pdf" ? 210000 :
+      payload.action === "draft_statement" ? 210000 :
+      120000;
     try {
-      console.log("Sende Nachricht über Edge Function:", { sessionId, action: payload.action, hasFile: !!file });
-      console.log(
-        "[PDF DEBUG 4] Sending message with file_base64 length:",
-        (payload.file_base64 as string | undefined)?.length,
-      );
-      console.log("[PDF DEBUG 5] action:", payload.action);
-
-      const { data, error } = await supabase.functions.invoke("chat-proxy", {
-        body: payload,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      const data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
 
       let responseText: string;
@@ -424,28 +433,31 @@ export const ChatContainer = () => {
 
       setMessages((prev) => [...prev, assistantMessage]);
       persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
-      // Refresh sidebar list (title/lastAt) after a successful exchange
       if (historyEnabled) loadConversations();
     } catch (error) {
       console.error("Fehler beim Senden:", error);
+      const isAbort = (error as Error)?.name === "AbortError";
+      const msg = isAbort
+        ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
+        : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         content: JSON.stringify({
           status: "error",
           action: "question",
-          antwort: "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.",
+          antwort: msg,
           rechtsgrundlage: [],
           fehlende_informationen: null,
           naechste_schritte: "Bitte versuchen Sie es in wenigen Sekunden erneut.",
           wichtiger_hinweis: null,
           quellen: [],
-          model_used: "none",
-          tokens_used: {},
         }),
         role: "assistant",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      // Preserve the user's input in the composer so they can retry
+      if (content) setInputValue(content);
     } finally {
       setIsLoading(false);
     }
