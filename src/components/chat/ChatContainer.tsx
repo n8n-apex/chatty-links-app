@@ -678,6 +678,7 @@ export const ChatContainer = () => {
     const cleanRef = (ref || "").trim();
     if (!cleanRef) return;
     setProjectRef(cleanRef);
+    localStorage.setItem("chat-project-ref", cleanRef);
     setProjectStatus("loading");
     try {
       const { data, error } = await supabase.functions.invoke("chat-proxy", {
@@ -693,6 +694,7 @@ export const ChatContainer = () => {
       console.error("ingest_project error:", e);
       setProjectStatus("error");
       setProjectRef(null);
+      localStorage.removeItem("chat-project-ref");
       toast.error("Projekt konnte nicht eingelesen werden.");
     }
   };
@@ -700,11 +702,20 @@ export const ChatContainer = () => {
   const unlinkProject = () => {
     setProjectRef(null);
     setProjectStatus("idle");
+    localStorage.removeItem("chat-project-ref");
   };
+
+  // Rehydrate sessionId + project_ref on mount so a reload preserves the thread.
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
     }
+    const savedProject = localStorage.getItem("chat-project-ref");
+    if (savedProject && !projectRef) {
+      setProjectRef(savedProject);
+      setProjectStatus("linked");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Server-verified admin check
