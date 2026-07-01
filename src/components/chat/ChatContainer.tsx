@@ -272,9 +272,8 @@ export const ChatContainer = () => {
 
     // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
     if (hasFiles) {
-      const mode = detectMode(content);
       const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
-        sourceType ?? (mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+        sourceType ?? (activeMode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
 
       if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
         for (const file of files!) {
