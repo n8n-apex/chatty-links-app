@@ -329,7 +329,64 @@ const DraftEditor = ({ value, onChange, onSave, onCancel, saving, error }: Draft
   </div>
 );
 
+const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEditorProps }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* noop */ }
+  };
+  if (editor?.isEditing) return <DraftEditor {...editor} />;
+  return (
+    <div className="relative rounded-lg border border-border bg-background p-5">
+      <button
+        type="button"
+        onClick={copy}
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        title="Entwurf kopieren"
+      >
+        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        {copied ? 'Kopiert' : 'Kopieren'}
+      </button>
+      <div className="font-serif">
+        <Md>{text}</Md>
+      </div>
+    </div>
+  );
+};
+
 export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayload; draftEditor?: DraftEditorProps }) => {
+  // Clarification path — no sources, question in `antwort`, missing info list.
+  if (data.needs_clarification === true) {
+    const missing = typeof data.fehlende_informationen === 'string' ? data.fehlende_informationen.trim() : '';
+    const missingItems = missing ? missing.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        {data.antwort && (
+          <Section>
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
+                <AlertCircle className="h-3.5 w-3.5" />
+                Rückfrage
+              </div>
+              <div className="text-sm text-foreground"><Md>{data.antwort}</Md></div>
+            </div>
+          </Section>
+        )}
+        {missingItems.length > 0 && (
+          <Section>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Benötigte Angaben</div>
+            <ul className="ml-4 list-disc space-y-0.5 text-sm text-foreground">
+              {missingItems.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </Section>
+        )}
+      </motion.div>
+    );
+  }
+
   // B4 — Behördenschreiben analysis (full structured view)
   const isB4 =
     data.action === 'analyze_pdf' ||
@@ -358,16 +415,25 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
   if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        {(data.thema || data.art || data.bundesland) && (
+          <Section>
+            <div className="flex flex-wrap gap-1.5 text-[11px]">
+              {data.art && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.art}</span>}
+              {data.thema && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-foreground">{data.thema}</span>}
+              {data.bundesland && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.bundesland}</span>}
+            </div>
+          </Section>
+        )}
         {b6Sachverhalt && (
           <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Projekt und Sachverhalt</div>
-            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Sachverhalt}</p>
+            <Md>{b6Sachverhalt}</Md>
           </Section>
         )}
         {b6Beurteilungsgrundlage && (
           <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. Rechtliche Beurteilungsgrundlage</div>
-            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Beurteilungsgrundlage}</p>
+            <Md>{b6Beurteilungsgrundlage}</Md>
           </Section>
         )}
         {hasB6Items && (
@@ -375,18 +441,14 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Beurteilung der Einzelfakten</div>
             <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
               {b6Items!.map((arg, i) => {
-                if (typeof arg === 'string') {
-                  return <li key={i} className="leading-relaxed">{arg}</li>;
-                }
+                if (typeof arg === 'string') return <li key={i} className="leading-relaxed">{arg}</li>;
                 const title = arg.fakt || arg.punkt;
                 const desc = arg.beurteilung || arg.argument;
                 return (
                   <li key={i} className="leading-relaxed">
                     {title && <div className="font-medium">{title}</div>}
-                    {desc && <div className="text-muted-foreground">{desc}</div>}
-                    {arg.rechtsgrundlage && (
-                      <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>
-                    )}
+                    {desc && <div className="text-muted-foreground"><Md>{desc}</Md></div>}
+                    {arg.rechtsgrundlage && <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>}
                   </li>
                 );
               })}
@@ -397,21 +459,29 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
           <Section>
             <div className="border-l-2 border-border pl-3 py-1">
               <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
-              <div className="text-sm text-foreground whitespace-pre-wrap">{b6Schluss}</div>
+              <Md>{b6Schluss}</Md>
             </div>
           </Section>
         )}
         {data.entwurf_stellungnahme && (
           <Section>
-            <Collapsible title="Entwurf Stellungnahme" defaultOpen={draftEditor?.isEditing}>
-              {draftEditor?.isEditing ? <DraftEditor {...draftEditor} /> : data.entwurf_stellungnahme}
-            </Collapsible>
+            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Entwurf Stellungnahme</div>
+            <DraftLetter text={data.entwurf_stellungnahme} editor={draftEditor} />
           </Section>
         )}
-        <Section>{renderCommonExtras(data)}</Section>
+        {data.fehlende_information && (
+          <Section>
+            <div className="border-l-2 border-yellow-500/40 pl-3 py-1">
+              <div className="mb-0.5 text-xs font-semibold text-yellow-600 uppercase tracking-wide">⚠️ Fehlende Information</div>
+              <div className="text-sm text-foreground">{data.fehlende_information}</div>
+            </div>
+          </Section>
+        )}
+        <Section>{renderRechtsfrageExtras(data)}</Section>
       </motion.div>
     );
   }
+
 
   // B4 - Behördenschreiben Analyse: only enter if there's actual B4 content beyond zusammenfassung
   if (hasAnalyseForderungen || hasAntwortEntwurf || hasGesamtbeurteilung) {
