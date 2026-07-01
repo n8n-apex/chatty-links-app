@@ -1,8 +1,34 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
+
+interface Rechtsprechung {
+  display?: string;
+  kernaussage?: string;
+  fundstelle?: string;
+  [key: string]: unknown;
+}
+
+const Md = ({ children }: { children: string }) => (
+  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="mb-1">{children}</li>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  </div>
+);
 
 type Beurteilung = 'Begründet' | 'Teilweise begründet' | 'Nicht begründet' | 'Unklar' | string;
 type Risiko = 'Hoch' | 'Mittel' | 'Gering' | string;
@@ -55,6 +81,12 @@ export interface BehoerdenAnalysisData {
   ziel_des_nutzers?: string | null;
 
   quellen?: Quelle[] | string;
+  rechtsprechung?: Rechtsprechung[];
+  rechtsgrundlage_unverifiziert?: string[];
+  naechste_optionen?: string[] | string | null;
+  fehlende_information?: string | null;
+  ziel_erfuellt?: boolean;
+  kontext_ausreichend?: boolean;
   retrieval_summary?: string | null;
   model_used?: string;
   timestamp?: string;
@@ -234,9 +266,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {data.projekt_und_sachverhalt && (
         <Sec>
           <SectionHeading>1. Projekt und Sachverhalt</SectionHeading>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-            {data.projekt_und_sachverhalt}
-          </p>
+          <Md>{data.projekt_und_sachverhalt}</Md>
         </Sec>
       )}
 
@@ -244,9 +274,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {data.rechtliche_beurteilungsgrundlage && (
         <Sec>
           <SectionHeading>2. Rechtliche Beurteilungsgrundlage</SectionHeading>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-            {data.rechtliche_beurteilungsgrundlage}
-          </p>
+          <Md>{data.rechtliche_beurteilungsgrundlage}</Md>
         </Sec>
       )}
 
@@ -286,12 +314,93 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>4. Schlussfolgerung</SectionHeading>
           <div className="rounded-md border-l-2 border-primary bg-primary/5 px-3 py-2">
-            <p className="text-sm font-medium leading-relaxed text-foreground whitespace-pre-line">
-              {data.schlussfolgerung}
-            </p>
+            <Md>{data.schlussfolgerung}</Md>
           </div>
         </Sec>
       )}
+
+      {/* Risikobewertung */}
+      {data.risikobewertung && (
+        <Sec>
+          <SectionHeading>Risikobewertung</SectionHeading>
+          <Md>{String(data.risikobewertung)}</Md>
+        </Sec>
+      )}
+
+      {/* Genehmigungsfiktion (top-level, only if meaningful) */}
+      {showGenFiktion && (
+        <Sec>
+          <SectionHeading>Genehmigungsfiktion</SectionHeading>
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
+            {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
+            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+            <DetailRow
+              label="Eingetreten"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn('h-2 w-2 rounded-full', genFiktion!.eingetreten ? 'bg-green-500' : 'bg-red-500')} />
+                  {genFiktion!.eingetreten ? 'Ja' : 'Nein'}
+                </span>
+              }
+            />
+            {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+          </div>
+        </Sec>
+      )}
+
+      {/* Nächste Schritte */}
+      {naechsteSchritteArr.length > 0 && (
+        <Sec>
+          <SectionHeading>Nächste Schritte</SectionHeading>
+          <ol className="ml-5 list-decimal space-y-1 text-sm text-foreground">
+            {naechsteSchritteArr.map((s, i) => (
+              <li key={i} className="leading-relaxed">{s}</li>
+            ))}
+          </ol>
+        </Sec>
+      )}
+
+      {/* Nächste Optionen */}
+      {(() => {
+        const opts = data.naechste_optionen;
+        const items = Array.isArray(opts)
+          ? opts
+          : (typeof opts === 'string' && opts.trim() ? [opts] : []);
+        if (items.length === 0) return null;
+        return (
+          <Sec>
+            <SectionHeading>Nächste Optionen</SectionHeading>
+            <ul className="ml-5 list-disc space-y-1 text-sm text-foreground">
+              {items.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+            </ul>
+          </Sec>
+        );
+      })()}
+
+      {/* Rechtsgrundlage (verifiziert) */}
+      {rechtsgrundlageArr.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsgrundlage</SectionHeading>
+          <div className="flex flex-wrap gap-1.5">
+            {rechtsgrundlageArr.map((r, i) => (
+              <span key={i} className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground">{r}</span>
+            ))}
+          </div>
+        </Sec>
+      )}
+
+      {/* Rechtsgrundlage unverifiziert */}
+      {Array.isArray(data.rechtsgrundlage_unverifiziert) && data.rechtsgrundlage_unverifiziert.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
+          <div className="flex flex-wrap gap-1.5">
+            {data.rechtsgrundlage_unverifiziert.map((r, i) => (
+              <span key={i} className="inline-flex items-center rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] text-muted-foreground italic">{r}</span>
+            ))}
+          </div>
+        </Sec>
+      )}
+
 
       {/* Detailanalyse — collapsible legacy */}
       {hasLegacyDetail && (
@@ -408,8 +517,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
               {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
               {copied ? 'Kopiert' : 'Kopieren'}
             </button>
-            <div className="font-serif text-sm leading-relaxed text-foreground whitespace-pre-line">
-              {data.antwortschreiben_entwurf}
+            <div className="font-serif">
+              <Md>{data.antwortschreiben_entwurf}</Md>
             </div>
           </div>
         </Sec>
@@ -421,6 +530,44 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Quellen</SectionHeading>
           <QuelleList quellen={data.quellen} />
         </Sec>
+      )}
+
+      {/* Rechtsprechung */}
+      {Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsprechung</SectionHeading>
+          <div className="flex flex-col gap-2">
+            {data.rechtsprechung.map((r, i) => (
+              <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
+                {r.display && <div className="text-sm font-semibold text-foreground">{r.display}</div>}
+                {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
+                {r.fundstelle && (
+                  <a
+                    href={r.fundstelle}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Quelle ansehen
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Sec>
+      )}
+
+      {/* Konfidenz */}
+      {data.konfidenz && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="uppercase tracking-wide">Konfidenz:</span>
+          <span className={cn(
+            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+            String(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
+            String(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
+            (String(data.konfidenz).toLowerCase() === 'niedrig' || String(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
+          )}>{data.konfidenz}</span>
+        </div>
       )}
 
       {/* Footer */}

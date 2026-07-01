@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, FileText, Check, ExternalLink } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
@@ -59,7 +60,32 @@ export interface StructuredPayload {
   schlussfolgerung?: string;
   kontext_ausreichend?: boolean;
   fehlende_information?: string | null;
+  needs_clarification?: boolean;
+  rechtsgrundlage_unverifiziert?: string[];
+  bundesland?: string;
+  thema?: string;
+  art?: string;
 }
+
+// Small markdown wrapper for long text fields (paragraphs, lists, bold).
+const Md = ({ children, className }: { children: string; className?: string }) => (
+  <div className={cn('prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc', className)}>
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="mb-1">{children}</li>,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  </div>
+);
+
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
   const parts: string[] = [];
@@ -303,7 +329,64 @@ const DraftEditor = ({ value, onChange, onSave, onCancel, saving, error }: Draft
   </div>
 );
 
+const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEditorProps }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* noop */ }
+  };
+  if (editor?.isEditing) return <DraftEditor {...editor} />;
+  return (
+    <div className="relative rounded-lg border border-border bg-background p-5">
+      <button
+        type="button"
+        onClick={copy}
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        title="Entwurf kopieren"
+      >
+        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        {copied ? 'Kopiert' : 'Kopieren'}
+      </button>
+      <div className="font-serif">
+        <Md>{text}</Md>
+      </div>
+    </div>
+  );
+};
+
 export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayload; draftEditor?: DraftEditorProps }) => {
+  // Clarification path — no sources, question in `antwort`, missing info list.
+  if (data.needs_clarification === true) {
+    const missing = typeof data.fehlende_informationen === 'string' ? data.fehlende_informationen.trim() : '';
+    const missingItems = missing ? missing.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        {data.antwort && (
+          <Section>
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
+                <AlertCircle className="h-3.5 w-3.5" />
+                Rückfrage
+              </div>
+              <div className="text-sm text-foreground"><Md>{data.antwort}</Md></div>
+            </div>
+          </Section>
+        )}
+        {missingItems.length > 0 && (
+          <Section>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Benötigte Angaben</div>
+            <ul className="ml-4 list-disc space-y-0.5 text-sm text-foreground">
+              {missingItems.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </Section>
+        )}
+      </motion.div>
+    );
+  }
+
   // B4 — Behördenschreiben analysis (full structured view)
   const isB4 =
     data.action === 'analyze_pdf' ||
@@ -332,16 +415,25 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
   if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        {(data.thema || data.art || data.bundesland) && (
+          <Section>
+            <div className="flex flex-wrap gap-1.5 text-[11px]">
+              {data.art && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.art}</span>}
+              {data.thema && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-foreground">{data.thema}</span>}
+              {data.bundesland && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.bundesland}</span>}
+            </div>
+          </Section>
+        )}
         {b6Sachverhalt && (
           <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Projekt und Sachverhalt</div>
-            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Sachverhalt}</p>
+            <Md>{b6Sachverhalt}</Md>
           </Section>
         )}
         {b6Beurteilungsgrundlage && (
           <Section>
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. Rechtliche Beurteilungsgrundlage</div>
-            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{b6Beurteilungsgrundlage}</p>
+            <Md>{b6Beurteilungsgrundlage}</Md>
           </Section>
         )}
         {hasB6Items && (
@@ -349,18 +441,14 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
             <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Beurteilung der Einzelfakten</div>
             <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
               {b6Items!.map((arg, i) => {
-                if (typeof arg === 'string') {
-                  return <li key={i} className="leading-relaxed">{arg}</li>;
-                }
+                if (typeof arg === 'string') return <li key={i} className="leading-relaxed">{arg}</li>;
                 const title = arg.fakt || arg.punkt;
                 const desc = arg.beurteilung || arg.argument;
                 return (
                   <li key={i} className="leading-relaxed">
                     {title && <div className="font-medium">{title}</div>}
-                    {desc && <div className="text-muted-foreground">{desc}</div>}
-                    {arg.rechtsgrundlage && (
-                      <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>
-                    )}
+                    {desc && <div className="text-muted-foreground"><Md>{desc}</Md></div>}
+                    {arg.rechtsgrundlage && <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>}
                   </li>
                 );
               })}
@@ -371,21 +459,29 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
           <Section>
             <div className="border-l-2 border-border pl-3 py-1">
               <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
-              <div className="text-sm text-foreground whitespace-pre-wrap">{b6Schluss}</div>
+              <Md>{b6Schluss}</Md>
             </div>
           </Section>
         )}
         {data.entwurf_stellungnahme && (
           <Section>
-            <Collapsible title="Entwurf Stellungnahme" defaultOpen={draftEditor?.isEditing}>
-              {draftEditor?.isEditing ? <DraftEditor {...draftEditor} /> : data.entwurf_stellungnahme}
-            </Collapsible>
+            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Entwurf Stellungnahme</div>
+            <DraftLetter text={data.entwurf_stellungnahme} editor={draftEditor} />
           </Section>
         )}
-        <Section>{renderCommonExtras(data)}</Section>
+        {data.fehlende_information && (
+          <Section>
+            <div className="border-l-2 border-yellow-500/40 pl-3 py-1">
+              <div className="mb-0.5 text-xs font-semibold text-yellow-600 uppercase tracking-wide">⚠️ Fehlende Information</div>
+              <div className="text-sm text-foreground">{data.fehlende_information}</div>
+            </div>
+          </Section>
+        )}
+        <Section>{renderRechtsfrageExtras(data)}</Section>
       </motion.div>
     );
   }
+
 
   // B4 - Behördenschreiben Analyse: only enter if there's actual B4 content beyond zusammenfassung
   if (hasAnalyseForderungen || hasAntwortEntwurf || hasGesamtbeurteilung) {
@@ -450,7 +546,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
     <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
       {data.antwort && (
         <Section>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{data.antwort}</p>
+          <div className="text-sm text-foreground"><Md>{data.antwort}</Md></div>
         </Section>
       )}
       {/* Rechtsgrundlage, Quellen und Rechtsprechung werden unten gerendert */}

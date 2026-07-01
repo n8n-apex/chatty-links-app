@@ -10,7 +10,7 @@ export type SourceType = 'rechtsquelle' | 'kontext' | 'analyze';
 export type ChatMode = 'rechtsfrage' | 'stellungnahme' | 'behoerdenschreiben';
 
 interface ChatInputProps {
-  onSendMessage: (message: string, file?: File | null, ziel?: string, sourceType?: SourceType) => void;
+  onSendMessage: (message: string, files?: File[] | null, ziel?: string, sourceType?: SourceType) => void;
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
@@ -19,122 +19,153 @@ interface ChatInputProps {
 
 type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
 
+const MAX_FILES = 8;
+const MAX_TOTAL_BYTES = 15 * 1024 * 1024; // 15 MB encoded ceiling
+
+/** Downscale an image blob to ~2000px longest side, JPEG q~0.8. Returns original if not an image. */
+const downscaleImage = async (file: File): Promise<File> => {
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2000;
+    const longest = Math.max(bitmap.width, bitmap.height);
+    const scale = longest > maxSide ? maxSide / longest : 1;
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.(png|webp|heic|heif|bmp)$/i, '.jpg'), { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+};
+
 export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, mode = 'behoerdenschreiben' }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [sourceType, setSourceType] = useState<SourceType>(
     mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle'
   );
-  // Reset default source type when the active mode changes, but only while no file is attached
-  // (so user choice isn't overridden mid-attachment).
   useEffect(() => {
     setSourceType((current) => {
       if (mode === 'behoerdenschreiben') return current === 'kontext' || current === 'rechtsquelle' ? current : 'analyze';
-      // rechtsfrage / stellungnahme: analyze isn't available — fall back to rechtsquelle
       return current === 'analyze' ? 'rechtsquelle' : current;
     });
   }, [mode]);
   const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
+  const [zielAudioStatus, setZielAudioStatus] = useState<AudioStatus>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
 
   const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
-  const awaitingAnswerRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const zielMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const zielRecordedChunksRef = useRef<Blob[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const zielRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Use controlled input if inputValue is provided
   const message = inputValue !== undefined ? inputValue : internalMessage;
   const setMessage = (value: string) => {
-    if (onInputChange) {
-      onInputChange(value);
-    } else {
-      setInternalMessage(value);
-    }
+    if (onInputChange) onInputChange(value);
+    else setInternalMessage(value);
   };
 
-  // Watch parent isLoading to transition submitting -> done
   useEffect(() => {
-    if (awaitingAnswerRef.current && !isLoading) {
-      awaitingAnswerRef.current = false;
-      setAudioStatus('done');
-      // brief done-flash then clear
-      const t = setTimeout(() => {
-        setAudioStatus('idle');
-        setAudioTranscript(null);
-      }, 600);
-      return () => clearTimeout(t);
-    }
-  }, [isLoading]);
-
-  // Keep the default source type in sync with the active mode whenever a new
-  // file is attached, but allow the user to override it via the picker.
-  useEffect(() => {
-    if (attachedFile) {
+    // Keep default source type in sync when a new file is attached (only if none yet)
+    if (attachedFiles.length === 1) {
       setSourceType(mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
     }
-  }, [attachedFile, mode]);
+  }, [attachedFiles.length, mode]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if ((message.trim() || attachedFile) && !isLoading) {
-      const trimmedZiel = ziel.trim();
-      onSendMessage(message.trim(), attachedFile, trimmedZiel || undefined, attachedFile ? sourceType : undefined);
-      setMessage('');
-      setAttachedFile(null);
-      setZiel('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      // Clear any prior audio status when user manually sends
-      if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
-        setAudioStatus('idle');
-        setAudioTranscript(null);
-        setAudioError(null);
-      }
+    if (isLoading) return;
+    if (!message.trim() && attachedFiles.length === 0) return;
+    const trimmedZiel = ziel.trim();
+    onSendMessage(
+      message.trim(),
+      attachedFiles.length > 0 ? attachedFiles : null,
+      trimmedZiel || undefined,
+      attachedFiles.length > 0 ? sourceType : undefined,
+    );
+    setMessage('');
+    setAttachedFiles([]);
+    setZiel('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
+      setAudioStatus('idle');
+      setAudioTranscript(null);
+      setAudioError(null);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (isLoading) return;
       handleSubmit(e);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const isAcceptedFile = (file: File): boolean => {
     const name = file.name.toLowerCase();
     const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
     const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp|svg)$/.test(name);
-    if (!isPdf && !isImage) {
-      toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('Datei ist zu groß. Maximal 20 MB erlaubt.');
-      return;
-    }
-    setAttachedFile(file);
+    return isPdf || isImage;
   };
 
-  const acceptDroppedFile = (file: File) => {
-    const name = file.name.toLowerCase();
-    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
-    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp|svg)$/.test(name);
-    if (!isPdf && !isImage) {
-      toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
-      return;
+  const addFiles = async (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    // Multi-file only allowed for analyze mode; otherwise take just the first (upload_source is per-file).
+    const allowMulti = sourceType === 'analyze' && mode === 'behoerdenschreiben';
+    const list: File[] = [];
+    for (const f of incoming) {
+      if (!isAcceptedFile(f)) {
+        toast.error('Bitte nur PDF- oder Bilddateien hochladen.');
+        continue;
+      }
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`${f.name}: Datei ist zu groß. Maximal 20 MB.`);
+        continue;
+      }
+      list.push(f);
     }
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('Datei ist zu groß. Maximal 20 MB erlaubt.');
-      return;
-    }
-    setAttachedFile(file);
+    if (list.length === 0) return;
+
+    // Downscale images to keep base64 payload manageable
+    const processed = await Promise.all(list.map(downscaleImage));
+
+    setAttachedFiles((prev) => {
+      const combined = allowMulti ? [...prev, ...processed] : processed.slice(0, 1);
+      if (combined.length > MAX_FILES) {
+        toast.error(`Maximal ${MAX_FILES} Dateien pro Analyse.`);
+        return combined.slice(0, MAX_FILES);
+      }
+      const total = combined.reduce((s, f) => s + f.size, 0);
+      // Base64 inflates ~33% → ~1.34x
+      if (total * 1.34 > MAX_TOTAL_BYTES) {
+        toast.error('Anhang zu groß (max. ~15 MB nach Kodierung). Bitte weniger/kleinere Dateien.');
+        return prev;
+      }
+      return combined;
+    });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) addFiles(files);
+    // Reset so re-picking the same file works
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -158,14 +189,12 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     dragDepthRef.current = 0;
     setIsDragOver(false);
     if (isLoading) return;
-    const file = e.dataTransfer?.files?.[0];
-    if (file) acceptDroppedFile(file);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 0) addFiles(files);
   };
 
-
-  const removeFile = () => {
-    setAttachedFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const removeFile = (idx: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const blobToBase64 = (blob: Blob): Promise<string> =>
@@ -179,58 +208,51 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       r.readAsDataURL(blob);
     });
 
+  const transcribe = async (blob: Blob): Promise<string> => {
+    const base64 = await blobToBase64(blob);
+    const { data, error } = await supabase.functions.invoke('chat-proxy', {
+      body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm', language: 'de' },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return (data?.text || '').trim();
+  };
+
+  // ---------- Main-input mic ----------
   const startRecording = async () => {
     if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting' || isLoading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       recordedChunksRef.current = [];
-      // Reset prior state for a fresh recording
       setAudioTranscript(null);
       setAudioError(null);
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
-      };
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
         if (blob.size === 0) {
           setAudioStatus('error');
-          setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
+          setAudioError('Aufnahme leer. Bitte erneut versuchen.');
           return;
         }
         setAudioStatus('transcribing');
         try {
-          const base64 = await blobToBase64(blob);
-          const { data, error } = await supabase.functions.invoke('chat-proxy', {
-            body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm' },
-          });
-          if (error) throw new Error(error.message);
-          if (data?.error) throw new Error(data.error);
-          const text = (data?.text || '').trim();
+          const text = await transcribe(blob);
           if (!text) {
             setAudioStatus('error');
-            setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
+            setAudioError('Keine Sprache erkannt. Bitte erneut versuchen.');
             return;
           }
-          // Keep transcript visible through submitting
+          // Insert into field; DO NOT auto-send.
+          setMessage(message ? `${message} ${text}` : text);
           setAudioTranscript(text);
-          const combined = message ? `${message} ${text}` : text;
-          setMessage(combined);
-          // Auto-submit if no file attachment workflow is open
-          if (!attachedFile) {
-            setAudioStatus('submitting');
-            awaitingAnswerRef.current = true;
-            onSendMessage(combined, null, undefined);
-            setMessage('');
-          } else {
-            // With attachment, leave it to the user to press send
-            setAudioStatus('idle');
-          }
+          setAudioStatus('idle');
+          setTimeout(() => setAudioTranscript(null), 400);
         } catch (err) {
           console.error('Transcription error:', err);
           setAudioStatus('error');
-          setAudioError('Es ist ein Fehler aufgetreten. Bitte erneut versuchen.');
+          setAudioError('Transkription fehlgeschlagen. Bitte erneut versuchen.');
         }
       };
       mediaRecorderRef.current = mr;
@@ -238,42 +260,70 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       setAudioStatus('recording');
     } catch (err) {
       console.error('Mic access error:', err);
-      toast.error('Mikrofon-Zugriff verweigert.');
+      toast.error('Mikrofon-Zugriff verweigert. Bitte Berechtigungen prüfen.');
     }
   };
 
   const stopRecording = () => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') mr.stop();
-    // Immediately reflect transition; onstop will set transcribing/error
     setAudioStatus('transcribing');
+  };
+
+  // ---------- Ziel-field mic ----------
+  const startZielRecording = async () => {
+    if (zielAudioStatus === 'recording' || zielAudioStatus === 'transcribing' || isLoading) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      zielRecordedChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) zielRecordedChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(zielRecordedChunksRef.current, { type: 'audio/webm' });
+        if (blob.size === 0) { setZielAudioStatus('idle'); return; }
+        setZielAudioStatus('transcribing');
+        try {
+          const text = await transcribe(blob);
+          if (text) setZiel((prev) => (prev ? `${prev} ${text}` : text));
+          setZielAudioStatus('idle');
+        } catch {
+          toast.error('Transkription fehlgeschlagen.');
+          setZielAudioStatus('idle');
+        }
+      };
+      zielMediaRecorderRef.current = mr;
+      mr.start();
+      setZielAudioStatus('recording');
+    } catch {
+      toast.error('Mikrofon-Zugriff verweigert.');
+    }
+  };
+  const stopZielRecording = () => {
+    const mr = zielMediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setZielAudioStatus('transcribing');
   };
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(
-        textareaRef.current.scrollHeight,
-        150
-      )}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
   }, [message]);
 
-  // Auto-grow Ziel textarea (3-6 rows ≈ 72-144 px at text-sm)
   useEffect(() => {
     if (zielRef.current) {
       zielRef.current.style.height = 'auto';
-      zielRef.current.style.height = `${Math.min(
-        Math.max(zielRef.current.scrollHeight, 72),
-        144
-      )}px`;
+      zielRef.current.style.height = `${Math.min(Math.max(zielRef.current.scrollHeight, 72), 144)}px`;
     }
-  }, [ziel, attachedFile]);
+  }, [ziel, attachedFiles.length]);
 
   const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
   const recording = audioStatus === 'recording';
   const transcribing = audioStatus === 'transcribing';
   const submitting = audioStatus === 'submitting';
+  const hasFiles = attachedFiles.length > 0;
 
   return (
     <motion.div
@@ -292,29 +342,29 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
           isDragOver && 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-primary/5',
         )}
       >
-        {attachedFile && (
-          <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">
-            <span className="flex min-w-0 items-center gap-2">
-              <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">{attachedFile.name}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                ({(attachedFile.size / 1024).toFixed(0)} KB)
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={removeFile}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
-              aria-label="Datei entfernen"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        {hasFiles && (
+          <div className="mb-2 flex flex-col gap-1.5">
+            {attachedFiles.map((f, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 text-[10px] font-mono text-muted-foreground">#{i + 1}</span>
+                  <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{f.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">({(f.size / 1024).toFixed(0)} KB)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  aria-label="Datei entfernen"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
-        {attachedFile && (() => {
-          // Visibility per mode:
-          //   rechtsfrage / stellungnahme → only Rechtsquelle & Kontext
-          //   behoerdenschreiben → all three, default analyze
+        {hasFiles && (() => {
           const options: { value: SourceType; label: string }[] = [
             { value: 'rechtsquelle', label: 'Rechtsquelle (verbindliches Ortsrecht)' },
             { value: 'kontext', label: 'Kontext (Sachverhalt, kein Recht)' },
@@ -341,28 +391,58 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
                       name="source-type"
                       value={o.value}
                       checked={sourceType === o.value}
-                      onChange={() => setSourceType(o.value)}
+                      onChange={() => {
+                        setSourceType(o.value);
+                        // If switching away from analyze, drop extra files
+                        if (o.value !== 'analyze') setAttachedFiles((prev) => prev.slice(0, 1));
+                      }}
                       className="h-3 w-3 accent-primary"
                     />
                     <span>{o.label}</span>
                   </label>
                 ))}
               </div>
+              {sourceType === 'analyze' && (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Mehrseitige Schreiben: weitere Bilder/PDFs anhängen — Reihenfolge zählt.
+                </p>
+              )}
             </div>
           );
         })()}
-        {attachedFile && sourceType === 'analyze' && (
+        {hasFiles && sourceType === 'analyze' && (
           <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
-            <label htmlFor="ziel-textarea" className="text-xs font-medium text-foreground">
-              Ziel der Antwort (optional)
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="ziel-textarea" className="text-xs font-medium text-foreground">
+                Ziel der Antwort (optional)
+              </label>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={isLoading || zielAudioStatus === 'transcribing'}
+                onClick={zielAudioStatus === 'recording' ? stopZielRecording : startZielRecording}
+                className={cn(
+                  'h-7 w-7 rounded-md',
+                  zielAudioStatus === 'recording' ? 'text-red-500' : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-label={zielAudioStatus === 'recording' ? 'Aufnahme stoppen' : 'Spracheingabe für Ziel'}
+                title={zielAudioStatus === 'recording' ? 'Aufnahme stoppen' : 'Spracheingabe (Deutsch)'}
+              >
+                {zielAudioStatus === 'recording' ? (
+                  <Square className="h-3 w-3 fill-red-500 text-red-500" />
+                ) : zielAudioStatus === 'transcribing' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Mic className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
             <textarea
               id="ziel-textarea"
               ref={zielRef}
               value={ziel}
-              onChange={(e) => {
-                if (e.target.value.length <= 1000) setZiel(e.target.value);
-              }}
+              onChange={(e) => { if (e.target.value.length <= 1000) setZiel(e.target.value); }}
               maxLength={1000}
               placeholder="Was möchten Sie mit der Antwort erreichen? Z.B. 'Forderung abwehren', 'Auflagen verhandeln', 'Befreiung erwirken'"
               rows={3}
@@ -379,7 +459,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
           </div>
         )}
 
-        {/* Unified audio status region — single fixed slot, never collapses to blank between phases */}
         <AnimatePresence initial={false} mode="wait">
           {showStatusBar && (
             <motion.div
@@ -413,27 +492,14 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
                   <span>Wird transkribiert…</span>
                 </div>
               )}
-              {submitting && (
-                <div className="flex flex-col gap-1.5">
-                  {audioTranscript && (
-                    <div className="text-foreground/90 italic">„{audioTranscript}“</div>
-                  )}
-                  <div className="flex items-center gap-2 text-primary">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Antwort wird erstellt…</span>
-                  </div>
+              {audioStatus === 'error' && (
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{audioError || 'Fehler bei der Aufnahme.'}</span>
                 </div>
               )}
-              {audioStatus === 'error' && (
-                <div className="flex flex-col gap-1.5">
-                  {audioTranscript && (
-                    <div className="text-foreground/90 italic">„{audioTranscript}“</div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    <span>{audioError || 'Es ist ein Fehler aufgetreten. Bitte erneut versuchen.'}</span>
-                  </div>
-                </div>
+              {audioTranscript && !transcribing && (
+                <div className="mt-1 text-foreground/90 italic">„{audioTranscript}“</div>
               )}
             </motion.div>
           )}
@@ -444,6 +510,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               accept="application/pdf,image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={handleFileChange}
@@ -456,7 +523,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               onClick={() => fileInputRef.current?.click()}
               className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
               aria-label="Datei anhängen"
-              title="PDF oder Bild anhängen (PDF, JPG, PNG, WebP)"
+              title="PDF oder Bilder anhängen (mehrere möglich für Behördenschreiben)"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
@@ -465,7 +532,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={attachedFile ? 'Optionale Frage zum Schreiben...' : 'Schreibe deine Nachricht...'}
+              placeholder={hasFiles ? 'Optionale Frage / Anweisung…' : 'Schreibe deine Nachricht…'}
               rows={1}
               disabled={isLoading}
               className={cn(
@@ -501,8 +568,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               type="submit"
               size="icon"
               variant="glow"
-              disabled={(!message.trim() && !attachedFile) || isLoading}
+              disabled={(!message.trim() && !hasFiles) || isLoading}
               className="h-10 w-10 shrink-0 rounded-xl"
+              title={isLoading ? 'Bitte warten…' : 'Senden'}
             >
               {isLoading ? (
                 <Sparkles className="h-4 w-4 animate-pulse" />
@@ -517,7 +585,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
           <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> für neue Zeile
         </p>
         <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
-          Unterstützte Formate: PDF, JPG, PNG. Auch Fotos von Bescheiden.
+          Unterstützte Formate: PDF, JPG, PNG, WebP. Mehrere Seiten als einzelne Bilder anhängen möglich.
         </p>
       </form>
     </motion.div>
