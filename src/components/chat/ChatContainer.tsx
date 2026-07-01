@@ -915,7 +915,7 @@ export const ChatContainer = () => {
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
-          mode={detectMode(inputValue)}
+          mode={activeMode}
         />
       </div>
     </div>
