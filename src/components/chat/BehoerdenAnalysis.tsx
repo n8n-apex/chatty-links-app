@@ -517,8 +517,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
               {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
               {copied ? 'Kopiert' : 'Kopieren'}
             </button>
-            <div className="font-serif text-sm leading-relaxed text-foreground whitespace-pre-line">
-              {data.antwortschreiben_entwurf}
+            <div className="font-serif">
+              <Md>{data.antwortschreiben_entwurf}</Md>
             </div>
           </div>
         </Sec>
@@ -530,6 +530,44 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Quellen</SectionHeading>
           <QuelleList quellen={data.quellen} />
         </Sec>
+      )}
+
+      {/* Rechtsprechung */}
+      {Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsprechung</SectionHeading>
+          <div className="flex flex-col gap-2">
+            {data.rechtsprechung.map((r, i) => (
+              <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
+                {r.display && <div className="text-sm font-semibold text-foreground">{r.display}</div>}
+                {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
+                {r.fundstelle && (
+                  <a
+                    href={r.fundstelle}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Quelle ansehen
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Sec>
+      )}
+
+      {/* Konfidenz */}
+      {data.konfidenz && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="uppercase tracking-wide">Konfidenz:</span>
+          <span className={cn(
+            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+            String(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
+            String(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
+            (String(data.konfidenz).toLowerCase() === 'niedrig' || String(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
+          )}>{data.konfidenz}</span>
+        </div>
       )}
 
       {/* Footer */}
