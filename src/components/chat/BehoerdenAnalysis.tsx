@@ -266,9 +266,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {data.projekt_und_sachverhalt && (
         <Sec>
           <SectionHeading>1. Projekt und Sachverhalt</SectionHeading>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-            {data.projekt_und_sachverhalt}
-          </p>
+          <Md>{data.projekt_und_sachverhalt}</Md>
         </Sec>
       )}
 
@@ -276,9 +274,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {data.rechtliche_beurteilungsgrundlage && (
         <Sec>
           <SectionHeading>2. Rechtliche Beurteilungsgrundlage</SectionHeading>
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-            {data.rechtliche_beurteilungsgrundlage}
-          </p>
+          <Md>{data.rechtliche_beurteilungsgrundlage}</Md>
         </Sec>
       )}
 
@@ -318,12 +314,93 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>4. Schlussfolgerung</SectionHeading>
           <div className="rounded-md border-l-2 border-primary bg-primary/5 px-3 py-2">
-            <p className="text-sm font-medium leading-relaxed text-foreground whitespace-pre-line">
-              {data.schlussfolgerung}
-            </p>
+            <Md>{data.schlussfolgerung}</Md>
           </div>
         </Sec>
       )}
+
+      {/* Risikobewertung */}
+      {data.risikobewertung && (
+        <Sec>
+          <SectionHeading>Risikobewertung</SectionHeading>
+          <Md>{String(data.risikobewertung)}</Md>
+        </Sec>
+      )}
+
+      {/* Genehmigungsfiktion (top-level, only if meaningful) */}
+      {showGenFiktion && (
+        <Sec>
+          <SectionHeading>Genehmigungsfiktion</SectionHeading>
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
+            {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
+            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+            <DetailRow
+              label="Eingetreten"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn('h-2 w-2 rounded-full', genFiktion!.eingetreten ? 'bg-green-500' : 'bg-red-500')} />
+                  {genFiktion!.eingetreten ? 'Ja' : 'Nein'}
+                </span>
+              }
+            />
+            {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+          </div>
+        </Sec>
+      )}
+
+      {/* Nächste Schritte */}
+      {naechsteSchritteArr.length > 0 && (
+        <Sec>
+          <SectionHeading>Nächste Schritte</SectionHeading>
+          <ol className="ml-5 list-decimal space-y-1 text-sm text-foreground">
+            {naechsteSchritteArr.map((s, i) => (
+              <li key={i} className="leading-relaxed">{s}</li>
+            ))}
+          </ol>
+        </Sec>
+      )}
+
+      {/* Nächste Optionen */}
+      {(() => {
+        const opts = data.naechste_optionen;
+        const items = Array.isArray(opts)
+          ? opts
+          : (typeof opts === 'string' && opts.trim() ? [opts] : []);
+        if (items.length === 0) return null;
+        return (
+          <Sec>
+            <SectionHeading>Nächste Optionen</SectionHeading>
+            <ul className="ml-5 list-disc space-y-1 text-sm text-foreground">
+              {items.map((s, i) => <li key={i} className="leading-relaxed">{s}</li>)}
+            </ul>
+          </Sec>
+        );
+      })()}
+
+      {/* Rechtsgrundlage (verifiziert) */}
+      {rechtsgrundlageArr.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsgrundlage</SectionHeading>
+          <div className="flex flex-wrap gap-1.5">
+            {rechtsgrundlageArr.map((r, i) => (
+              <span key={i} className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground">{r}</span>
+            ))}
+          </div>
+        </Sec>
+      )}
+
+      {/* Rechtsgrundlage unverifiziert */}
+      {Array.isArray(data.rechtsgrundlage_unverifiziert) && data.rechtsgrundlage_unverifiziert.length > 0 && (
+        <Sec>
+          <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
+          <div className="flex flex-wrap gap-1.5">
+            {data.rechtsgrundlage_unverifiziert.map((r, i) => (
+              <span key={i} className="inline-flex items-center rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] text-muted-foreground italic">{r}</span>
+            ))}
+          </div>
+        </Sec>
+      )}
+
 
       {/* Detailanalyse — collapsible legacy */}
       {hasLegacyDetail && (
