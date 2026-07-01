@@ -28,6 +28,18 @@ export const ChatContainer = () => {
   const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   const [projectRef, setProjectRef] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
+  // Single source of truth for which backend the next message hits.
+  // Set ONLY by clicking a tab. Never derived from input content.
+  const [activeMode, setActiveModeState] = useState<"rechtsfrage" | "stellungnahme" | "behoerdenschreiben">(() => {
+    if (typeof window === "undefined") return "rechtsfrage";
+    const saved = localStorage.getItem("chat-active-mode");
+    if (saved === "rechtsfrage" || saved === "stellungnahme" || saved === "behoerdenschreiben") return saved;
+    return "rechtsfrage";
+  });
+  const setActiveMode = (m: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben") => {
+    setActiveModeState(m);
+    try { localStorage.setItem("chat-active-mode", m); } catch { /* ignore */ }
+  };
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
@@ -260,9 +272,8 @@ export const ChatContainer = () => {
 
     // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
     if (hasFiles) {
-      const mode = detectMode(content);
       const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
-        sourceType ?? (mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+        sourceType ?? (activeMode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
 
       if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
         for (const file of files!) {
@@ -368,18 +379,14 @@ export const ChatContainer = () => {
       setIsLoading(false);
       return;
     } else {
-      const msg = content.toLowerCase();
-      let action = "question";
-      const extra: Record<string, string> = { question: content };
-      if (msg.startsWith("erstelle eine stellungnahme")) {
-        action = "draft_statement";
-        extra.topic = content.replace(/erstelle eine stellungnahme zum thema:?/i, "").trim();
-        delete extra.question;
-      } else if (msg.startsWith("analysiere dieses behördenschreiben")) {
-        action = "analyze_pdf";
-        delete extra.question;
+      // ROUTING: action is a pure function of activeMode. Never read message text.
+      if (activeMode === "stellungnahme") {
+        payload = { ...payload, message: content, action: "draft_statement", topic: content };
+      } else if (activeMode === "behoerdenschreiben") {
+        payload = { ...payload, message: content, action: "analyze_pdf" };
+      } else {
+        payload = { ...payload, message: content, action: "question", question: content };
       }
-      payload = { ...payload, message: content, action, ...extra };
     }
 
     const startTime = performance.now();
@@ -841,22 +848,35 @@ export const ChatContainer = () => {
               const stellungnahmePrefill = hasB4Analysis
                 ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
                 : "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]";
-              const buttons = [
-                { icon: MessageSquare, label: "Rechtsfrage", prefill: "Ich habe eine Baurechtsfrage: " },
-                { icon: FileText, label: "Stellungnahme", prefill: stellungnahmePrefill },
-                { icon: Search, label: "Behördenschreiben", prefill: "Analysiere dieses Behördenschreiben: " },
+              const buttons: Array<{
+                icon: typeof MessageSquare;
+                label: string;
+                mode: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben";
+              }> = [
+                { icon: MessageSquare, label: "Rechtsfrage", mode: "rechtsfrage" },
+                { icon: FileText, label: "Stellungnahme", mode: "stellungnahme" },
+                { icon: Search, label: "Behördenschreiben", mode: "behoerdenschreiben" },
               ];
-              return buttons.map(({ icon: Icon, label, prefill }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setInputValue(prefill)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground"
-                >
-                  <Icon className="h-3 w-3" />
-                  {label}
-                </button>
-              ));
+              return buttons.map(({ icon: Icon, label, mode }) => {
+                const isActive = activeMode === mode;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setActiveMode(mode)}
+                    aria-pressed={isActive}
+                    className={
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors " +
+                      (isActive
+                        ? "border-primary bg-primary/15 text-foreground shadow-sm"
+                        : "border-border bg-background/50 text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-foreground")
+                    }
+                  >
+                    <Icon className="h-3 w-3" />
+                    {label}
+                  </button>
+                );
+              });
             })()}
           </div>
         </div>
@@ -895,7 +915,7 @@ export const ChatContainer = () => {
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
-          mode={detectMode(inputValue)}
+          mode={activeMode}
         />
       </div>
     </div>
