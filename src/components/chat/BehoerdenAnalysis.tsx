@@ -81,6 +81,12 @@ export interface BehoerdenAnalysisData {
   ziel_des_nutzers?: string | null;
 
   quellen?: Quelle[] | string;
+  rechtsprechung?: Rechtsprechung[];
+  rechtsgrundlage_unverifiziert?: string[];
+  naechste_optionen?: string[] | string | null;
+  fehlende_information?: string | null;
+  ziel_erfuellt?: boolean;
+  kontext_ausreichend?: boolean;
   retrieval_summary?: string | null;
   model_used?: string;
   timestamp?: string;
