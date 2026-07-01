@@ -873,11 +873,11 @@ export const ChatContainer = () => {
           </div>
         )}
         <ChatInput
-          onSendMessage={(msg, file, ziel, sourceType) => {
-            if (!file && isEditDraftMode) {
+          onSendMessage={(msg, files, ziel, sourceType) => {
+            if ((!files || files.length === 0) && isEditDraftMode) {
               handleEditDraft(msg);
             } else {
-              sendMessage(msg, file, ziel, sourceType);
+              sendMessage(msg, files, ziel, sourceType);
             }
             setInputValue("");
           }}
