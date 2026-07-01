@@ -379,18 +379,14 @@ export const ChatContainer = () => {
       setIsLoading(false);
       return;
     } else {
-      const msg = content.toLowerCase();
-      let action = "question";
-      const extra: Record<string, string> = { question: content };
-      if (msg.startsWith("erstelle eine stellungnahme")) {
-        action = "draft_statement";
-        extra.topic = content.replace(/erstelle eine stellungnahme zum thema:?/i, "").trim();
-        delete extra.question;
-      } else if (msg.startsWith("analysiere dieses behördenschreiben")) {
-        action = "analyze_pdf";
-        delete extra.question;
+      // ROUTING: action is a pure function of activeMode. Never read message text.
+      if (activeMode === "stellungnahme") {
+        payload = { ...payload, message: content, action: "draft_statement", topic: content };
+      } else if (activeMode === "behoerdenschreiben") {
+        payload = { ...payload, message: content, action: "analyze_pdf" };
+      } else {
+        payload = { ...payload, message: content, action: "question", question: content };
       }
-      payload = { ...payload, message: content, action, ...extra };
     }
 
     const startTime = performance.now();
