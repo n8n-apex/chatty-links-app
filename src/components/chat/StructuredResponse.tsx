@@ -400,6 +400,27 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
     );
   }
 
+  // Stellungnahme Rückfrage — backend refused to invent facts. Render question, nothing else.
+  if (data.kontext_ausreichend === false) {
+    const raw = typeof data.fehlende_information === 'string' ? data.fehlende_information.trim() : '';
+    const body = raw || 'Für eine belastbare Stellungnahme fehlen noch Angaben. Bitte präzisieren Sie Ihre Anfrage.';
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        <Section>
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Rückfrage
+            </div>
+            <div className="text-sm text-foreground"><Md>{body}</Md></div>
+          </div>
+        </Section>
+      </motion.div>
+    );
+  }
+
+
+
   // B4 — Behördenschreiben analysis (full structured view)
   const isB4 =
     data.action === 'analyze_pdf' ||
