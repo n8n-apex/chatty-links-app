@@ -71,6 +71,13 @@ export interface StructuredPayload {
   thema?: string;
   art?: string;
   rechtsprechung_grounding_disabled?: boolean;
+  is_edit?: boolean;
+  edit_splice?: {
+    applied?: boolean;
+    method?: string | null;
+    sections_touched?: string[];
+    failed?: boolean;
+  } | null;
 }
 
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
