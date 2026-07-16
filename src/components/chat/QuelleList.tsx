@@ -57,7 +57,13 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
     if (!label) continue;
     if (seen.has(label)) continue;
     seen.add(label);
-    const url = typeof q !== 'string' ? q.source_url : null;
+    // Prefer explicit source_url; fall back to a URL embedded in a markdown display.
+    let url: string | null = null;
+    if (typeof q !== 'string') url = q.source_url ?? null;
+    if (!url) {
+      const rawDisplay = typeof q === 'string' ? q : (q.display || '');
+      url = parseDisplay(rawDisplay).url;
+    }
     items.push({ label, url });
   }
 
