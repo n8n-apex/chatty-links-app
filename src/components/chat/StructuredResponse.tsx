@@ -400,10 +400,25 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
     );
   }
 
-  // Stellungnahme Rückfrage — backend refused to invent facts. Render question, nothing else.
-  if (data.kontext_ausreichend === false) {
-    const raw = typeof data.fehlende_information === 'string' ? data.fehlende_information.trim() : '';
-    const body = raw || 'Für eine belastbare Stellungnahme fehlen noch Angaben. Bitte präzisieren Sie Ihre Anfrage.';
+  // Stellungnahme Rückfrage — backend refused to invent facts.
+  // Render question, nothing else. NO konfidenz badge here (v5 §F.2).
+  // Permissive detection: kontext_ausreichend === false OR unzureichend-konfidenz
+  // OR fehlende_information present with no substantive draft/content.
+  const fehlendeInfoRaw = typeof data.fehlende_information === 'string' ? data.fehlende_information.trim() : '';
+  const hasEntwurf = !!(data.entwurf_stellungnahme && String(data.entwurf_stellungnahme).trim());
+  const hasProjekt = !!(data.projekt_und_sachverhalt && String(data.projekt_und_sachverhalt).trim());
+  const hasBeurteilungItems = Array.isArray(data.beurteilung_der_einzelfakten) && data.beurteilung_der_einzelfakten.length > 0;
+  const hasSchluss = !!(data.schlussfolgerung && String(data.schlussfolgerung).trim());
+  const konfidenzIsUnzureichend = typeof data.konfidenz === 'string' && data.konfidenz.toLowerCase() === 'unzureichend';
+  const isRueckfrage =
+    data.kontext_ausreichend === false ||
+    (!!fehlendeInfoRaw && !hasEntwurf && !hasProjekt && !hasBeurteilungItems && !hasSchluss) ||
+    (konfidenzIsUnzureichend && !hasEntwurf && !hasProjekt && !hasBeurteilungItems && !hasSchluss);
+
+  if (isRueckfrage) {
+    const body = fehlendeInfoRaw
+      || (typeof data.antwort === 'string' && data.antwort.trim())
+      || 'Für eine belastbare Stellungnahme fehlen noch Angaben. Bitte präzisieren Sie Ihre Anfrage.';
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         <Section>
