@@ -426,74 +426,130 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
 
   // B6 - Stellungnahme
   if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
+    const isEdit = data.is_edit === true;
+    const spliceFailed = isEdit && data.edit_splice?.failed === true;
+    const touched = new Set<string>(
+      Array.isArray(data.edit_splice?.sections_touched) ? data.edit_splice!.sections_touched! : [],
+    );
+
+    const HeaderChips = () =>
+      (data.thema || data.art || data.bundesland) ? (
+        <Section>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            {data.art && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.art}</span>}
+            {data.thema && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-foreground">{data.thema}</span>}
+            {data.bundesland && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.bundesland}</span>}
+          </div>
+        </Section>
+      ) : null;
+
+    const ProjektBlock = () => b6Sachverhalt ? (
+      <Section>
+        <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Projekt und Sachverhalt</div>
+        <Md>{b6Sachverhalt}</Md>
+      </Section>
+    ) : null;
+    const BeurteilungsgrundlageBlock = () => b6Beurteilungsgrundlage ? (
+      <Section>
+        <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. Rechtliche Beurteilungsgrundlage</div>
+        <Md>{b6Beurteilungsgrundlage}</Md>
+      </Section>
+    ) : null;
+    const EinzelfaktenBlock = () => hasB6Items ? (
+      <Section>
+        <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Beurteilung der Einzelfakten</div>
+        <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
+          {b6Items!.map((arg, i) => {
+            if (typeof arg === 'string') return <li key={i} className="leading-relaxed">{arg}</li>;
+            const title = arg.fakt || arg.punkt;
+            const desc = arg.beurteilung || arg.argument;
+            return (
+              <li key={i} className="leading-relaxed">
+                {title && <div className="font-medium">{title}</div>}
+                {desc && <div className="text-muted-foreground"><Md>{desc}</Md></div>}
+                {arg.rechtsgrundlage && <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>}
+              </li>
+            );
+          })}
+        </ol>
+      </Section>
+    ) : null;
+    const SchlussBlock = () => b6Schluss ? (
+      <Section>
+        <div className="border-l-2 border-border pl-3 py-1">
+          <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
+          <Md>{b6Schluss}</Md>
+        </div>
+      </Section>
+    ) : null;
+    const DraftBlock = () => data.entwurf_stellungnahme ? (
+      <Section>
+        <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Entwurf Stellungnahme</div>
+        <DraftLetter text={data.entwurf_stellungnahme} editor={draftEditor} />
+      </Section>
+    ) : null;
+    const FehlendeInfoBlock = () => data.fehlende_information ? (
+      <Section>
+        <div className="border-l-2 border-yellow-500/40 pl-3 py-1">
+          <div className="mb-0.5 text-xs font-semibold text-yellow-600 uppercase tracking-wide">⚠️ Fehlende Information</div>
+          <div className="text-sm text-foreground">{data.fehlende_information}</div>
+        </div>
+      </Section>
+    ) : null;
+
+    if (isEdit) {
+      const sectionMap: Record<string, () => React.ReactNode> = {
+        projekt_und_sachverhalt: ProjektBlock,
+        rechtliche_beurteilungsgrundlage: BeurteilungsgrundlageBlock,
+        beurteilung_der_einzelfakten: EinzelfaktenBlock,
+        schlussfolgerung: SchlussBlock,
+      };
+      const touchedNodes: React.ReactNode[] = [];
+      const untouchedNodes: React.ReactNode[] = [];
+      for (const [key, Comp] of Object.entries(sectionMap)) {
+        const node = <Comp key={key} />;
+        if (touched.has(key)) touchedNodes.push(node);
+        else untouchedNodes.push(node);
+      }
+
+      return (
+        <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+          {spliceFailed && (
+            <Section>
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-foreground">
+                Die gewünschte Änderung konnte nicht zugeordnet werden — der Entwurf ist unverändert. Bitte benennen Sie die zu ändernde Stelle konkreter.
+              </div>
+            </Section>
+          )}
+          <DraftBlock />
+          {touchedNodes}
+          <FehlendeInfoBlock />
+          <Section>
+            <Collapsible title="Unveränderte Details anzeigen">
+              <div className="flex flex-col gap-3">
+                {untouchedNodes}
+                {renderRechtsfrageExtras(data)}
+              </div>
+            </Collapsible>
+          </Section>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
-        {(data.thema || data.art || data.bundesland) && (
-          <Section>
-            <div className="flex flex-wrap gap-1.5 text-[11px]">
-              {data.art && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.art}</span>}
-              {data.thema && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-foreground">{data.thema}</span>}
-              {data.bundesland && <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">{data.bundesland}</span>}
-            </div>
-          </Section>
-        )}
-        {b6Sachverhalt && (
-          <Section>
-            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Projekt und Sachverhalt</div>
-            <Md>{b6Sachverhalt}</Md>
-          </Section>
-        )}
-        {b6Beurteilungsgrundlage && (
-          <Section>
-            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. Rechtliche Beurteilungsgrundlage</div>
-            <Md>{b6Beurteilungsgrundlage}</Md>
-          </Section>
-        )}
-        {hasB6Items && (
-          <Section>
-            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Beurteilung der Einzelfakten</div>
-            <ol className="ml-4 list-decimal space-y-2 text-sm text-foreground">
-              {b6Items!.map((arg, i) => {
-                if (typeof arg === 'string') return <li key={i} className="leading-relaxed">{arg}</li>;
-                const title = arg.fakt || arg.punkt;
-                const desc = arg.beurteilung || arg.argument;
-                return (
-                  <li key={i} className="leading-relaxed">
-                    {title && <div className="font-medium">{title}</div>}
-                    {desc && <div className="text-muted-foreground"><Md>{desc}</Md></div>}
-                    {arg.rechtsgrundlage && <div className="mt-1 text-xs text-primary">{arg.rechtsgrundlage}</div>}
-                  </li>
-                );
-              })}
-            </ol>
-          </Section>
-        )}
-        {b6Schluss && (
-          <Section>
-            <div className="border-l-2 border-border pl-3 py-1">
-              <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
-              <Md>{b6Schluss}</Md>
-            </div>
-          </Section>
-        )}
-        {data.entwurf_stellungnahme && (
-          <Section>
-            <div className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Entwurf Stellungnahme</div>
-            <DraftLetter text={data.entwurf_stellungnahme} editor={draftEditor} />
-          </Section>
-        )}
-        {data.fehlende_information && (
-          <Section>
-            <div className="border-l-2 border-yellow-500/40 pl-3 py-1">
-              <div className="mb-0.5 text-xs font-semibold text-yellow-600 uppercase tracking-wide">⚠️ Fehlende Information</div>
-              <div className="text-sm text-foreground">{data.fehlende_information}</div>
-            </div>
-          </Section>
-        )}
+        <HeaderChips />
+        <ProjektBlock />
+        <BeurteilungsgrundlageBlock />
+        <EinzelfaktenBlock />
+        <SchlussBlock />
+        <DraftBlock />
+        <FehlendeInfoBlock />
         <Section>{renderRechtsfrageExtras(data)}</Section>
       </motion.div>
     );
   }
+
 
 
   // B4 - Behördenschreiben Analyse: only enter if there's actual B4 content beyond zusammenfassung
