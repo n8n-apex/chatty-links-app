@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QuelleList, parseDisplay } from './QuelleList';
+import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 
 interface RechtsgrundlageItem {
@@ -728,11 +728,8 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>
           <div className="flex flex-col gap-2">
             {data.rechtsprechung!.map((r, i) => {
-              // Backend may emit display as a markdown link "[label](url)".
-              // Strip that into label+url; never render markdown as text.
-              const parsed = parseDisplay(r.display);
-              const label = parsed.label;
-              const href = r.fundstelle || parsed.url || null;
+              const label = (r.display || '').trim();
+              const href = r.fundstelle || null;
               const showUngeprueftBadge =
                 r.inhaltlich_geprueft === false &&
                 data.rechtsprechung_grounding_disabled === false;
