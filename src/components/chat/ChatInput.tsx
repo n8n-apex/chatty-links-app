@@ -307,8 +307,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) zielRecordedChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        const durationMs = Date.now() - zielRecStartRef.current;
         const blob = new Blob(zielRecordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) { setZielAudioStatus('idle'); return; }
+        if (blob.size === 0 || durationMs < 500) { setZielAudioStatus('idle'); return; }
         setZielAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
@@ -320,6 +321,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
         }
       };
       zielMediaRecorderRef.current = mr;
+      zielRecStartRef.current = Date.now();
       mr.start();
       setZielAudioStatus('recording');
     } catch {
