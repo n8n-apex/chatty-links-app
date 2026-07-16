@@ -525,13 +525,21 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
           {touchedNodes}
           <FehlendeInfoBlock />
           <Section>
-            <Collapsible title="Unveränderte Details anzeigen">
-              <div className="flex flex-col gap-3">
+            <details className="rounded-lg border border-border bg-background/40 group">
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/30 transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  Unveränderte Details anzeigen
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 group-open:rotate-90 transition-transform" />
+              </summary>
+              <div className="border-t border-border px-3 py-3 flex flex-col gap-3">
                 {untouchedNodes}
                 {renderRechtsfrageExtras(data)}
               </div>
-            </Collapsible>
+            </details>
           </Section>
+
         </motion.div>
       );
     }
