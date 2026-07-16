@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QuelleList } from './QuelleList';
+import { QuelleList, parseDisplay } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 
 interface RechtsgrundlageItem {
