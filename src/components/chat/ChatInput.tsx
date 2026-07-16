@@ -208,6 +208,30 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       r.readAsDataURL(blob);
     });
 
+  // Strip Whisper ASR subtitle boilerplate that appears over silence.
+  const ARTIFACT_PATTERNS: RegExp[] = [
+    /copyright\s+wdr(?:\s+\d{4})?\.?$/i,
+    /untertitel(?:ung)?\s+(?:im\s+auftrag\s+des\s+|des\s+)?zdf[^.]*\.?$/i,
+    /untertitel\s+von\s+stephanie\s+geiges\.?$/i,
+    /(?:die\s+)?untertitel[- ]?community\.?$/i,
+    /untertitel(?:ung)?\s+(?:der\s+)?amara\.org[- ]?community\.?$/i,
+    /vielen\s+dank\s+f(?:ü|u)r'?s\s+zuschauen\.?$/i,
+    /bis\s+zum\s+n(?:ä|a)chsten\s+mal\.?$/i,
+    /mehr\s+infos\s+auf\s+\S+\.?$/i,
+  ];
+  const stripAsrArtifacts = (raw: string): string => {
+    let s = (raw || '').trim();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const re of ARTIFACT_PATTERNS) {
+        const next = s.replace(re, '').replace(/[\s\.,;:!?-]+$/, '').trim();
+        if (next !== s) { s = next; changed = true; }
+      }
+    }
+    return s;
+  };
+
   const transcribe = async (blob: Blob): Promise<string> => {
     const base64 = await blobToBase64(blob);
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
@@ -215,7 +239,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
-    return (data?.text || '').trim();
+    return stripAsrArtifacts((data?.text || '').trim());
   };
 
   // ---------- Main-input mic ----------
