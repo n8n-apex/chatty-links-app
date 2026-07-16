@@ -654,6 +654,42 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
     );
   }
 
+  // Global safety net (v5): never render an empty/decoration-only assistant turn.
+  // If the default branch below would have nothing substantive to show, surface
+  // the most meaningful text field present as a Rückfrage-style notice.
+  const defaultHasContent =
+    !!(data.antwort && String(data.antwort).trim()) ||
+    !!(data.fehlende_informationen && String(data.fehlende_informationen).trim()) ||
+    !!data.naechste_schritte ||
+    !!(data.wichtiger_hinweis && String(data.wichtiger_hinweis).trim()) ||
+    (Array.isArray(data.rechtsgrundlage) && data.rechtsgrundlage.length > 0) ||
+    (typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage.trim().length > 0) ||
+    (Array.isArray(data.quellen) && data.quellen.length > 0) ||
+    (Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0);
+  if (!defaultHasContent) {
+    const fallback =
+      (typeof data.fehlende_information === 'string' && data.fehlende_information.trim()) ||
+      (typeof data.fehlende_informationen === 'string' && data.fehlende_informationen.trim()) ||
+      (typeof data.wichtiger_hinweis === 'string' && data.wichtiger_hinweis.trim()) ||
+      (typeof data.antwort === 'string' && data.antwort.trim()) ||
+      '';
+    if (fallback) {
+      return (
+        <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+          <Section>
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
+                <AlertCircle className="h-3.5 w-3.5" />
+                Rückfrage
+              </div>
+              <div className="text-sm text-foreground"><Md>{fallback}</Md></div>
+            </div>
+          </Section>
+        </motion.div>
+      );
+    }
+  }
+
   // B1/B2 - Rechtsfrage (default with antwort)
   return (
     <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
