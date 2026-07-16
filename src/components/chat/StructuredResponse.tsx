@@ -727,42 +727,62 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
         <div className="flex flex-col gap-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>
           <div className="flex flex-col gap-2">
-            {data.rechtsprechung!.map((r, i) => (
-              <div key={i} className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-                <div className="flex flex-col gap-1">
-                  {r.display && (
-                    <div className="font-medium text-foreground">
-                      {r.fundstelle ? (
-                        <a
-                          href={r.fundstelle}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          {r.display}
-                        </a>
-                      ) : (
-                        r.display
-                      )}
-                    </div>
-                  )}
-                  {r.kernaussage && (
-                    <div className="leading-relaxed text-foreground/90">{r.kernaussage}</div>
-                  )}
-                  {r.fundstelle && !r.display && (
-                    <a
-                      href={r.fundstelle}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      Quelle ansehen
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
+            {data.rechtsprechung!.map((r, i) => {
+              // Backend may emit display as a markdown link "[label](url)".
+              // Strip that into label+url; never render markdown as text.
+              const parsed = parseDisplay(r.display);
+              const label = parsed.label;
+              const href = r.fundstelle || parsed.url || null;
+              const showUngeprueftBadge =
+                r.inhaltlich_geprueft === false &&
+                data.rechtsprechung_grounding_disabled === false;
+              return (
+                <div key={i} className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <div className="flex flex-col gap-1">
+                    {label && (
+                      <div className="font-medium text-foreground">
+                        {href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            {label}
+                          </a>
+                        ) : (
+                          <span>{label}</span>
+                        )}
+                      </div>
+                    )}
+                    {r.kernaussage && (
+                      <div className="leading-relaxed text-foreground/90">
+                        {r.kernaussage}
+                        {showUngeprueftBadge && (
+                          <span
+                            className="ml-2 inline-flex items-center rounded-full border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground align-middle"
+                            title="Kernaussage wurde nicht gegen den Entscheidungstext geprüft"
+                          >
+                            nicht inhaltlich geprüft
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {href && !label && (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        Quelle ansehen
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
