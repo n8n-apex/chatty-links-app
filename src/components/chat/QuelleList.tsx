@@ -16,9 +16,19 @@ export interface Quelle {
   [key: string]: unknown;
 }
 
+// Backend sometimes emits display as a markdown link "[label](url)".
+// Extract the raw label + optional url; never render the markdown as text.
+export const parseDisplay = (raw: string | undefined | null): { label: string; url: string | null } => {
+  const s = (raw ?? '').trim();
+  if (!s) return { label: '', url: null };
+  const m = s.match(/^\[([\s\S]+?)\]\((https?:\/\/[^\s)]+)\)\s*$/);
+  if (m) return { label: m[1].trim(), url: m[2].trim() };
+  return { label: s, url: null };
+};
+
 const labelFor = (q: string | Quelle): string => {
-  if (typeof q === 'string') return q;
-  if (q.display && q.display.trim()) return q.display.trim();
+  if (typeof q === 'string') return parseDisplay(q).label;
+  if (q.display && q.display.trim()) return parseDisplay(q.display).label;
   // Prefer a structured citation: paragraph · source_file · state
   return [q.paragraph, q.source_file || q.file, q.state]
     .filter(Boolean)
