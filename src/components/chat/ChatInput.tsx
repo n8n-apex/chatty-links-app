@@ -70,6 +70,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
   const zielMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const zielRecordedChunksRef = useRef<Blob[]>([]);
+  const recStartRef = useRef<number>(0);
+  const zielRecStartRef = useRef<number>(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const zielRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -208,6 +210,30 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       r.readAsDataURL(blob);
     });
 
+  // Strip Whisper ASR subtitle boilerplate that appears over silence.
+  const ARTIFACT_PATTERNS: RegExp[] = [
+    /copyright\s+wdr(?:\s+\d{4})?\.?$/i,
+    /untertitel(?:ung)?\s+(?:im\s+auftrag\s+des\s+|des\s+)?zdf[^.]*\.?$/i,
+    /untertitel\s+von\s+stephanie\s+geiges\.?$/i,
+    /(?:die\s+)?untertitel[- ]?community\.?$/i,
+    /untertitel(?:ung)?\s+(?:der\s+)?amara\.org[- ]?community\.?$/i,
+    /vielen\s+dank\s+f(?:ü|u)r'?s\s+zuschauen\.?$/i,
+    /bis\s+zum\s+n(?:ä|a)chsten\s+mal\.?$/i,
+    /mehr\s+infos\s+auf\s+\S+\.?$/i,
+  ];
+  const stripAsrArtifacts = (raw: string): string => {
+    let s = (raw || '').trim();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const re of ARTIFACT_PATTERNS) {
+        const next = s.replace(re, '').replace(/[\s\.,;:!?-]+$/, '').trim();
+        if (next !== s) { s = next; changed = true; }
+      }
+    }
+    return s;
+  };
+
   const transcribe = async (blob: Blob): Promise<string> => {
     const base64 = await blobToBase64(blob);
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
@@ -215,7 +241,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
-    return (data?.text || '').trim();
+    return stripAsrArtifacts((data?.text || '').trim());
   };
 
   // ---------- Main-input mic ----------
@@ -230,18 +256,18 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        const durationMs = Date.now() - recStartRef.current;
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) {
-          setAudioStatus('error');
-          setAudioError('Aufnahme leer. Bitte erneut versuchen.');
+        if (blob.size === 0 || durationMs < 500) {
+          setAudioStatus('idle');
           return;
         }
         setAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
           if (!text) {
-            setAudioStatus('error');
-            setAudioError('Keine Sprache erkannt. Bitte erneut versuchen.');
+            // Whole transcript was artifact / empty → leave field untouched.
+            setAudioStatus('idle');
             return;
           }
           // Insert into field; DO NOT auto-send.
@@ -256,6 +282,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
         }
       };
       mediaRecorderRef.current = mr;
+      recStartRef.current = Date.now();
       mr.start();
       setAudioStatus('recording');
     } catch (err) {
@@ -280,8 +307,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) zielRecordedChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        const durationMs = Date.now() - zielRecStartRef.current;
         const blob = new Blob(zielRecordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) { setZielAudioStatus('idle'); return; }
+        if (blob.size === 0 || durationMs < 500) { setZielAudioStatus('idle'); return; }
         setZielAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
@@ -293,6 +321,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
         }
       };
       zielMediaRecorderRef.current = mr;
+      zielRecStartRef.current = Date.now();
       mr.start();
       setZielAudioStatus('recording');
     } catch {
