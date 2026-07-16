@@ -256,18 +256,18 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        const durationMs = Date.now() - recStartRef.current;
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) {
-          setAudioStatus('error');
-          setAudioError('Aufnahme leer. Bitte erneut versuchen.');
+        if (blob.size === 0 || durationMs < 500) {
+          setAudioStatus('idle');
           return;
         }
         setAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
           if (!text) {
-            setAudioStatus('error');
-            setAudioError('Keine Sprache erkannt. Bitte erneut versuchen.');
+            // Whole transcript was artifact / empty → leave field untouched.
+            setAudioStatus('idle');
             return;
           }
           // Insert into field; DO NOT auto-send.
@@ -282,6 +282,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
         }
       };
       mediaRecorderRef.current = mr;
+      recStartRef.current = Date.now();
       mr.start();
       setAudioStatus('recording');
     } catch (err) {
