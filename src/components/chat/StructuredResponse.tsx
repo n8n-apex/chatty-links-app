@@ -70,6 +70,7 @@ export interface StructuredPayload {
   bundesland?: string;
   thema?: string;
   art?: string;
+  rechtsprechung_grounding_disabled?: boolean;
 }
 
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
