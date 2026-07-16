@@ -20,7 +20,12 @@ interface Rechtsprechung {
   aktenzeichen?: string;
   entscheidungstyp?: string;
   herkunft?: string;
-  fundstelle?: string;
+  fundstelle?: string | null;
+  slug?: string;
+  oldp_id?: number;
+  verifiziert?: boolean;
+  inhaltlich_geprueft?: boolean;
+  grounding_status?: string | null;
   [key: string]: unknown;
 }
 
