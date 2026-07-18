@@ -93,11 +93,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     e.preventDefault();
     if (isLoading) return;
     if (!message.trim() && attachedFiles.length === 0) return;
+    // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel).
+    const isBehoerdenAnalyze =
+      mode === 'behoerdenschreiben' && attachedFiles.length > 0 && sourceType === 'analyze';
+    const trimmedMessage = message.trim();
     const trimmedZiel = ziel.trim();
+    const outgoingZiel = isBehoerdenAnalyze
+      ? (trimmedMessage || undefined)
+      : (trimmedZiel || undefined);
+    const outgoingMessage = isBehoerdenAnalyze ? '' : trimmedMessage;
     onSendMessage(
-      message.trim(),
+      outgoingMessage,
       attachedFiles.length > 0 ? attachedFiles : null,
-      trimmedZiel || undefined,
+      outgoingZiel,
       attachedFiles.length > 0 ? sourceType : undefined,
     );
     setMessage('');
@@ -439,54 +447,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
             </div>
           );
         })()}
-        {hasFiles && sourceType === 'analyze' && (
-          <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
-            <div className="flex items-center justify-between">
-              <label htmlFor="ziel-textarea" className="text-xs font-medium text-foreground">
-                Ziel der Antwort (optional)
-              </label>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                disabled={isLoading || zielAudioStatus === 'transcribing'}
-                onClick={zielAudioStatus === 'recording' ? stopZielRecording : startZielRecording}
-                className={cn(
-                  'h-7 w-7 rounded-md',
-                  zielAudioStatus === 'recording' ? 'text-red-500' : 'text-muted-foreground hover:text-foreground',
-                )}
-                aria-label={zielAudioStatus === 'recording' ? 'Aufnahme stoppen' : 'Spracheingabe für Ziel'}
-                title={zielAudioStatus === 'recording' ? 'Aufnahme stoppen' : 'Spracheingabe (Deutsch)'}
-              >
-                {zielAudioStatus === 'recording' ? (
-                  <Square className="h-3 w-3 fill-red-500 text-red-500" />
-                ) : zielAudioStatus === 'transcribing' ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Mic className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-            <textarea
-              id="ziel-textarea"
-              ref={zielRef}
-              value={ziel}
-              onChange={(e) => { if (e.target.value.length <= 1000) setZiel(e.target.value); }}
-              maxLength={1000}
-              placeholder="Was möchten Sie mit der Antwort erreichen? Z.B. 'Forderung abwehren', 'Auflagen verhandeln', 'Befreiung erwirken'"
-              rows={3}
-              disabled={isLoading}
-              className="mt-1 w-full resize-none rounded-md border border-border bg-background/60 px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              style={{ minHeight: 72, maxHeight: 144 }}
-            />
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">
-                Lassen Sie das Feld leer, um eine allgemeine rechtliche Bewertung zu erhalten.
-              </span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{ziel.length}/1000</span>
-            </div>
-          </div>
-        )}
 
         <AnimatePresence initial={false} mode="wait">
           {showStatusBar && (
@@ -561,7 +521,13 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasFiles ? 'Optionale Frage / Anweisung…' : 'Schreibe deine Nachricht…'}
+              placeholder={
+                mode === 'behoerdenschreiben' && hasFiles && sourceType === 'analyze'
+                  ? "Ziel der Antwort oder Anweisung (optional) – z. B. 'Ablehnung abwehren', 'Befreiung erwirken'"
+                  : hasFiles
+                    ? 'Optionale Frage / Anweisung…'
+                    : 'Schreibe deine Nachricht…'
+              }
               rows={1}
               disabled={isLoading}
               className={cn(
