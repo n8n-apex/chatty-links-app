@@ -120,18 +120,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    const skipMessageCheck =
-      body.action === 'submit_feedback' ||
-      body.action === 'save_statement' ||
-      body.action === 'upload_source' ||
-      body.action === 'ingest_project' ||
-      (body.action === 'draft_statement' && body.mode === 'edit');
+    const MESSAGELESS_ACTIONS = [
+      'analyze_pdf', 'draft_statement', 'ingest_project',
+      'ingest_legal_pdf', 'ingest_stellungnahme', 'ingest_folder',
+      'save_statement', 'suspend_document', 'submit_feedback', 'upload_source',
+      'transcribe_audio', 'check_admin',
+    ];
+    const effectiveAction = body.action || 'question';
+    const isMessageless = MESSAGELESS_ACTIONS.includes(effectiveAction);
 
-    if (!skipMessageCheck && (!message || typeof message !== 'string')) {
-      return new Response(
-        JSON.stringify({ error: 'message is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!isMessageless) {
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'message is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // Detect local file path and return helpful error immediately
