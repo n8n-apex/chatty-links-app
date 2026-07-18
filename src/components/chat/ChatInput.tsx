@@ -93,11 +93,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     e.preventDefault();
     if (isLoading) return;
     if (!message.trim() && attachedFiles.length === 0) return;
+    // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel).
+    const isBehoerdenAnalyze =
+      mode === 'behoerdenschreiben' && attachedFiles.length > 0 && sourceType === 'analyze';
+    const trimmedMessage = message.trim();
     const trimmedZiel = ziel.trim();
+    const outgoingZiel = isBehoerdenAnalyze
+      ? (trimmedMessage || undefined)
+      : (trimmedZiel || undefined);
+    const outgoingMessage = isBehoerdenAnalyze ? '' : trimmedMessage;
     onSendMessage(
-      message.trim(),
+      outgoingMessage,
       attachedFiles.length > 0 ? attachedFiles : null,
-      trimmedZiel || undefined,
+      outgoingZiel,
       attachedFiles.length > 0 ? sourceType : undefined,
     );
     setMessage('');
