@@ -521,7 +521,13 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasFiles ? 'Optionale Frage / Anweisung…' : 'Schreibe deine Nachricht…'}
+              placeholder={
+                mode === 'behoerdenschreiben' && hasFiles && sourceType === 'analyze'
+                  ? "Ziel der Antwort oder Anweisung (optional) – z. B. 'Ablehnung abwehren', 'Befreiung erwirken'"
+                  : hasFiles
+                    ? 'Optionale Frage / Anweisung…'
+                    : 'Schreibe deine Nachricht…'
+              }
               rows={1}
               disabled={isLoading}
               className={cn(
