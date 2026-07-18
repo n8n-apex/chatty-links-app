@@ -430,26 +430,30 @@ Deno.serve(async (req) => {
 
     console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
 
+    const forwardPayload: Record<string, unknown> = {
+      action: effectiveAction,
+      message: typeof body.message === 'string' ? body.message : '',
+      sessionId: body.sessionId || null,
+      timestamp: body.timestamp || new Date().toISOString(),
+    };
+    const passthroughKeys = [
+      'file_id', 'file_base64', 'file_name', 'files',
+      'state', 'question', 'topic', 'statement_type',
+      'ziel', 'mode', 'source_type', 'upload_type', 'project_ref',
+    ];
+    for (const k of passthroughKeys) {
+      if (body[k] !== undefined) forwardPayload[k] = body[k];
+    }
+    if (effectiveAction === 'draft_statement' && forwardPayload.statement_type === undefined) {
+      forwardPayload.statement_type = 'Stellungnahme';
+    }
+
+    console.log('Forwarding to n8n:', JSON.stringify({ ...forwardPayload, file_base64: forwardPayload.file_base64 ? '[omitted]' : undefined }));
+
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: body.action,
-        file_id: body.file_id || null,
-        file_base64: body.file_base64 || null,
-        file_name: body.file_name || 'Behördenschreiben.pdf',
-        state: body.state || null,
-        question: body.question || null,
-        topic: body.topic || null,
-        statement_type: body.statement_type || (body.action === 'draft_statement' ? 'Stellungnahme' : null),
-        ziel: body.ziel || null,
-        mode: body.mode || null,
-        source_type: body.source_type || null,
-        project_ref: body.project_ref || null,
-        message: body.message,
-        sessionId: body.sessionId,
-        timestamp: body.timestamp,
-      }),
+      body: JSON.stringify(forwardPayload),
     })
 
     const rawText = await response.text()
