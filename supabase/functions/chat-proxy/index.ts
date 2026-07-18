@@ -428,7 +428,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('Calling webhook:', webhookUrl, { message, sessionId, timestamp })
 
     const forwardPayload: Record<string, unknown> = {
       action: effectiveAction,
