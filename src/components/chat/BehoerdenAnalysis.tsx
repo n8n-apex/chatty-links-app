@@ -9,8 +9,10 @@ interface Rechtsprechung {
   display?: string;
   kernaussage?: string;
   fundstelle?: string;
+  inhaltlich_geprueft?: boolean;
   [key: string]: unknown;
 }
+
 
 const Md = ({ children }: { children: string }) => (
   <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
