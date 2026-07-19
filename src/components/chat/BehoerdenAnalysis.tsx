@@ -84,6 +84,8 @@ export interface BehoerdenAnalysisData {
 
   quellen?: Quelle[] | string;
   rechtsprechung?: Rechtsprechung[];
+  rechtsprechung_grounding_disabled?: boolean;
+
   rechtsgrundlage_unverifiziert?: string[];
   naechste_optionen?: string[] | string | null;
   fehlende_information?: string | null;
