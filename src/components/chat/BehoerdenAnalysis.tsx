@@ -9,8 +9,10 @@ interface Rechtsprechung {
   display?: string;
   kernaussage?: string;
   fundstelle?: string;
+  inhaltlich_geprueft?: boolean;
   [key: string]: unknown;
 }
+
 
 const Md = ({ children }: { children: string }) => (
   <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
@@ -82,6 +84,8 @@ export interface BehoerdenAnalysisData {
 
   quellen?: Quelle[] | string;
   rechtsprechung?: Rechtsprechung[];
+  rechtsprechung_grounding_disabled?: boolean;
+
   rechtsgrundlage_unverifiziert?: string[];
   naechste_optionen?: string[] | string | null;
   fehlende_information?: string | null;
@@ -539,7 +543,16 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <div className="flex flex-col gap-2">
             {data.rechtsprechung.map((r, i) => (
               <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
-                {r.display && <div className="text-sm font-semibold text-foreground">{r.display}</div>}
+                {r.display && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-semibold text-foreground">{r.display}</div>
+                    {r.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
+                      <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                        nicht inhaltlich geprüft
+                      </span>
+                    )}
+                  </div>
+                )}
                 {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
                 {r.fundstelle && (
                   <a
