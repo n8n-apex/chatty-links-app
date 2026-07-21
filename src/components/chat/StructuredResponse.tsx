@@ -69,6 +69,17 @@ export interface StructuredPayload {
   rechtsgrundlage_unverifiziert?: string[];
   bundesland?: string;
   thema?: string;
+  rechtsprechung_footnotes?: Array<{
+    footnote_num: number;
+    status?: 'verified' | 'needs_verification' | string;
+    gericht?: string;
+    datum?: string;
+    aktenzeichen?: string;
+    entscheidungstyp?: string;
+    fundstelle?: string | null;
+    kernaussage?: string;
+    [key: string]: unknown;
+  }>;
   art?: string;
   rechtsprechung_grounding_disabled?: boolean;
   is_edit?: boolean;
@@ -837,11 +848,21 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
     (q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false,
   );
 
-  const hasRechtsprechung = Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
+  const footnotes = Array.isArray(data.rechtsprechung_footnotes) ? data.rechtsprechung_footnotes : [];
+  const hasFootnotes = footnotes.length > 0;
+  // Prefer new footnote model; fall back to legacy `rechtsprechung` only if footnotes absent.
+  const hasRechtsprechung = !hasFootnotes && Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
 
-  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !konf) {
+  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !hasFootnotes && !konf) {
     return null;
   }
+
+  const formatDateDE = (d?: string): string => {
+    if (!d) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.trim());
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : d;
+  };
+
 
   return (
     <div className="mt-1 flex flex-col gap-3 border-t border-border pt-2">
@@ -864,6 +885,79 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
         <div className="flex flex-col gap-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
           <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} variant="inline" />
+        </div>
+      )}
+      {hasFootnotes && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>
+          <ol className="flex flex-col gap-2 list-none pl-0">
+            {footnotes.map((f, i) => {
+              const isVerified = f.status === 'verified';
+              const num = typeof f.footnote_num === 'number' ? f.footnote_num : i + 1;
+              const dateStr = formatDateDE(f.datum);
+              const typeStr = (f.entscheidungstyp || '').trim();
+              const cite = [
+                f.gericht,
+                [typeStr && `${typeStr} v.`, dateStr].filter(Boolean).join(' '),
+                f.aktenzeichen,
+              ]
+                .filter((x) => x && String(x).trim())
+                .join(', ');
+              const href = f.fundstelle || null;
+              return (
+                <li
+                  key={i}
+                  id={`fn-${num}`}
+                  className={cn(
+                    'rounded-lg border p-3 text-sm flex gap-2',
+                    isVerified
+                      ? 'border-border bg-muted/40'
+                      : 'border-border/60 bg-muted/20 opacity-75',
+                  )}
+                >
+                  <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {cite && (
+                        href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline break-words"
+                          >
+                            {cite}
+                          </a>
+                        ) : (
+                          <span className="font-medium text-foreground break-words">{cite}</span>
+                        )
+                      )}
+                      {isVerified ? (
+                        <span
+                          className="inline-flex items-center rounded-full border border-green-600/40 bg-green-600/10 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400"
+                          title="Kernaussage wurde gegen den Entscheidungstext geprüft"
+                        >
+                          geprüft
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                          title="Fall ist real und korrekt zitiert; die Begründung wurde nicht gegen den Entscheidungstext geprüft"
+                        >
+                          nicht inhaltlich geprüft
+                        </span>
+                      )}
+                    </div>
+                    {f.kernaussage && (
+                      <div className={cn('leading-relaxed', isVerified ? 'text-foreground/90' : 'text-muted-foreground')}>
+                        {f.kernaussage}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       )}
       {hasRechtsprechung && (
