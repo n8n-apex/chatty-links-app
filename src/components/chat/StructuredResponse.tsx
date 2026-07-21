@@ -69,6 +69,17 @@ export interface StructuredPayload {
   rechtsgrundlage_unverifiziert?: string[];
   bundesland?: string;
   thema?: string;
+  rechtsprechung_footnotes?: Array<{
+    footnote_num: number;
+    status?: 'verified' | 'needs_verification' | string;
+    gericht?: string;
+    datum?: string;
+    aktenzeichen?: string;
+    entscheidungstyp?: string;
+    fundstelle?: string | null;
+    kernaussage?: string;
+    [key: string]: unknown;
+  }>;
   art?: string;
   rechtsprechung_grounding_disabled?: boolean;
   is_edit?: boolean;
