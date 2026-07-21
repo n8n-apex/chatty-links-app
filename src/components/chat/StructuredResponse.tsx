@@ -848,11 +848,21 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
     (q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false,
   );
 
-  const hasRechtsprechung = Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
+  const footnotes = Array.isArray(data.rechtsprechung_footnotes) ? data.rechtsprechung_footnotes : [];
+  const hasFootnotes = footnotes.length > 0;
+  // Prefer new footnote model; fall back to legacy `rechtsprechung` only if footnotes absent.
+  const hasRechtsprechung = !hasFootnotes && Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
 
-  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !konf) {
+  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !hasFootnotes && !konf) {
     return null;
   }
+
+  const formatDateDE = (d?: string): string => {
+    if (!d) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.trim());
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : d;
+  };
+
 
   return (
     <div className="mt-1 flex flex-col gap-3 border-t border-border pt-2">
