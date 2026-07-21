@@ -905,7 +905,8 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
                 .join(', ');
               const href = f.fundstelle || null;
               return (
-                <li
+                <div
+
                   key={i}
                   id={`fn-${num}`}
                   className={cn(
@@ -954,10 +955,11 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
                       </div>
                     )}
                   </div>
-                </li>
+                </div>
               );
             })}
-          </ol>
+          </div>
+
         </div>
       )}
       {hasRechtsprechung && (
