@@ -890,7 +890,7 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
       {hasFootnotes && (
         <div className="flex flex-col gap-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>
-          <ol className="flex flex-col gap-2 list-none pl-0">
+          <div className="flex flex-col gap-2">
             {footnotes.map((f, i) => {
               const isVerified = f.status === 'verified';
               const num = typeof f.footnote_num === 'number' ? f.footnote_num : i + 1;
