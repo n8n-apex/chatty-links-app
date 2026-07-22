@@ -13,6 +13,19 @@ interface Rechtsprechung {
   [key: string]: unknown;
 }
 
+interface RechtsprechungFootnote {
+  footnote_num?: number;
+  status?: 'verified' | 'needs_verification' | string;
+  gericht?: string;
+  datum?: string;
+  aktenzeichen?: string;
+  entscheidungstyp?: string;
+  display?: string;
+  fundstelle?: string | null;
+  kernaussage?: string;
+}
+
+
 
 const Md = ({ children }: { children: string }) => (
   <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
@@ -84,6 +97,7 @@ export interface BehoerdenAnalysisData {
 
   quellen?: Quelle[] | string;
   rechtsprechung?: Rechtsprechung[];
+  rechtsprechung_footnotes?: RechtsprechungFootnote[];
   rechtsprechung_grounding_disabled?: boolean;
 
   rechtsgrundlage_unverifiziert?: string[];
@@ -536,39 +550,105 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         </Sec>
       )}
 
-      {/* Rechtsprechung */}
-      {Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0 && (
+      {/* Rechtsprechung — new footnote model (preferred) */}
+      {Array.isArray(data.rechtsprechung_footnotes) && data.rechtsprechung_footnotes.length > 0 ? (
         <Sec>
           <SectionHeading>Rechtsprechung</SectionHeading>
           <div className="flex flex-col gap-2">
-            {data.rechtsprechung.map((r, i) => (
-              <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
-                {r.display && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-sm font-semibold text-foreground">{r.display}</div>
-                    {r.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
-                      <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
-                        nicht inhaltlich geprüft
-                      </span>
+            {data.rechtsprechung_footnotes.map((f, i) => {
+              const isVerified = f.status === 'verified';
+              const num = typeof f.footnote_num === 'number' ? f.footnote_num : i + 1;
+              const cite = (f.display || '').trim();
+              const href = f.fundstelle || null;
+              return (
+                <div
+                  key={i}
+                  id={`fn-${num}`}
+                  className={cn(
+                    'rounded-lg border p-3 text-sm flex gap-2',
+                    isVerified ? 'border-border bg-muted/40' : 'border-border/60 bg-muted/20 opacity-75',
+                  )}
+                >
+                  <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {cite && (
+                        href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline break-words"
+                          >
+                            {cite}
+                          </a>
+                        ) : (
+                          <span className="font-medium text-foreground break-words">{cite}</span>
+                        )
+                      )}
+                      {isVerified ? (
+                        <span
+                          className="inline-flex items-center rounded-full border border-green-600/40 bg-green-600/10 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400"
+                          title="Kernaussage wurde gegen den Entscheidungstext geprüft"
+                        >
+                          geprüft
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                          title="Fall ist real und korrekt zitiert; die Begründung wurde nicht gegen den Entscheidungstext geprüft"
+                        >
+                          nicht inhaltlich geprüft
+                        </span>
+                      )}
+                    </div>
+                    {f.kernaussage && (
+                      <div className={cn('leading-relaxed', isVerified ? 'text-foreground/90' : 'text-muted-foreground')}>
+                        {f.kernaussage}
+                      </div>
                     )}
                   </div>
-                )}
-                {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
-                {r.fundstelle && (
-                  <a
-                    href={r.fundstelle}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Quelle ansehen
-                  </a>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </Sec>
+      ) : (
+        /* Rechtsprechung — legacy fallback */
+        Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0 && (
+          <Sec>
+            <SectionHeading>Rechtsprechung</SectionHeading>
+            <div className="flex flex-col gap-2">
+              {data.rechtsprechung.map((r, i) => (
+                <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
+                  {r.display && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-foreground">{r.display}</div>
+                      {r.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
+                        <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                          nicht inhaltlich geprüft
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
+                  {r.fundstelle && (
+                    <a
+                      href={r.fundstelle}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Quelle ansehen
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Sec>
+        )
       )}
+
 
       {/* Konfidenz */}
       {data.konfidenz && (
