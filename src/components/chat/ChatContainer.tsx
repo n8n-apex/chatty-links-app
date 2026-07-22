@@ -163,6 +163,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
+    pollCancelRef.current += 1; // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId);
     localStorage.setItem("chat-session-id", newId);
@@ -171,6 +172,7 @@ export const ChatContainer = () => {
   };
 
   const handleSelectConversation = async (cid: string) => {
+    pollCancelRef.current += 1;
     setConversationId(cid);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
