@@ -513,8 +513,22 @@ export const ChatContainer = () => {
       if (historyEnabled) loadConversations();
     } catch (error) {
       console.error("Fehler beim Senden:", error);
-      const isAbort = (error as Error)?.name === "AbortError";
-      const msg = isAbort
+      // Clean up progress placeholder from async analyze_pdf, if any.
+      if (progressMsgId) {
+        const pid = progressMsgId;
+        setMessages((prev) => prev.filter((m) => m.id !== pid));
+      }
+      const errName = (error as Error)?.name;
+      const errMsgStr = (error as Error)?.message || "";
+      if (errMsgStr === "PollCancelled") {
+        // User navigated away / started a new conversation. Silent.
+        return;
+      }
+      const isAbort = errName === "AbortError";
+      const isPollTimeout = errMsgStr === "PollTimeout";
+      const msg = isPollTimeout
+        ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
+        : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
       const errorMessage: Message = {
