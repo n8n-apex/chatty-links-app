@@ -14,7 +14,7 @@ interface Rechtsprechung {
 }
 
 interface RechtsprechungFootnote {
-  footnote_num?: number;
+  footnote_num?: number | null;
   status?: 'verified' | 'needs_verification' | string;
   gericht?: string;
   datum?: string;
@@ -557,19 +557,21 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <div className="flex flex-col gap-2">
             {data.rechtsprechung_footnotes.map((f, i) => {
               const isVerified = f.status === 'verified';
-              const num = typeof f.footnote_num === 'number' ? f.footnote_num : i + 1;
+              const num = typeof f.footnote_num === 'number' ? f.footnote_num : null;
               const cite = (f.display || '').trim();
               const href = f.fundstelle || null;
               return (
                 <div
                   key={i}
-                  id={`fn-${num}`}
+                  id={num !== null ? `fn-${num}` : undefined}
                   className={cn(
                     'rounded-lg border p-3 text-sm flex gap-2',
                     isVerified ? 'border-border bg-muted/40' : 'border-border/60 bg-muted/20 opacity-75',
                   )}
                 >
-                  <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  {num !== null && (
+                    <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  )}
                   <div className="flex flex-col gap-1 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {cite && (

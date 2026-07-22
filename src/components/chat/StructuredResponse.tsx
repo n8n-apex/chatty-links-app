@@ -70,7 +70,7 @@ export interface StructuredPayload {
   bundesland?: string;
   thema?: string;
   rechtsprechung_footnotes?: Array<{
-    footnote_num: number;
+    footnote_num: number | null;
     status?: 'verified' | 'needs_verification' | string;
     gericht?: string;
     datum?: string;
@@ -893,7 +893,7 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
           <div className="flex flex-col gap-2">
             {footnotes.map((f, i) => {
               const isVerified = f.status === 'verified';
-              const num = typeof f.footnote_num === 'number' ? f.footnote_num : i + 1;
+              const num = typeof f.footnote_num === 'number' ? f.footnote_num : null;
               const dateStr = formatDateDE(f.datum);
               const typeStr = (f.entscheidungstyp || '').trim();
               const cite = [
@@ -906,9 +906,8 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
               const href = f.fundstelle || null;
               return (
                 <div
-
                   key={i}
-                  id={`fn-${num}`}
+                  id={num !== null ? `fn-${num}` : undefined}
                   className={cn(
                     'rounded-lg border p-3 text-sm flex gap-2',
                     isVerified
@@ -916,7 +915,9 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
                       : 'border-border/60 bg-muted/20 opacity-75',
                   )}
                 >
-                  <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  {num !== null && (
+                    <span className="font-semibold text-foreground shrink-0 tabular-nums">{num}.</span>
+                  )}
                   <div className="flex flex-col gap-1 min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {cite && (
