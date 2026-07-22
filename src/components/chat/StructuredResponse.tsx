@@ -70,7 +70,7 @@ export interface StructuredPayload {
   bundesland?: string;
   thema?: string;
   rechtsprechung_footnotes?: Array<{
-    footnote_num: number;
+    footnote_num: number | null;
     status?: 'verified' | 'needs_verification' | string;
     gericht?: string;
     datum?: string;

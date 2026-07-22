@@ -14,7 +14,7 @@ interface Rechtsprechung {
 }
 
 interface RechtsprechungFootnote {
-  footnote_num?: number;
+  footnote_num?: number | null;
   status?: 'verified' | 'needs_verification' | string;
   gericht?: string;
   datum?: string;
