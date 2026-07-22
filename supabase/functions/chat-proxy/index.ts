@@ -439,7 +439,7 @@ Deno.serve(async (req) => {
       'file_id', 'file_base64', 'file_name', 'files',
       'state', 'question', 'topic', 'statement_type',
       'ziel', 'mode', 'source_type', 'upload_type', 'project_ref',
-      'chunk_id',
+      'chunk_id', 'target_action',
     ];
     for (const k of passthroughKeys) {
       if (body[k] !== undefined) forwardPayload[k] = body[k];
