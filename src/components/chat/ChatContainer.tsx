@@ -48,6 +48,9 @@ export const ChatContainer = () => {
     return window.innerWidth >= 768;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
+  const pollCancelRef = useRef(0);
+  useEffect(() => () => { pollCancelRef.current += 1; }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,6 +163,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
+    pollCancelRef.current += 1; // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId);
     localStorage.setItem("chat-session-id", newId);
@@ -168,6 +172,7 @@ export const ChatContainer = () => {
   };
 
   const handleSelectConversation = async (cid: string) => {
+    pollCancelRef.current += 1;
     setConversationId(cid);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
@@ -253,6 +258,39 @@ export const ChatContainer = () => {
     } finally {
       clearTimeout(timer);
     }
+  };
+
+  // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
+  // final payload (byte-identical to a synchronous analyze_pdf response).
+  const pollForResult = async (
+    sessionId: string,
+    targetAction: string,
+    onTick: (elapsedSec: number) => void,
+  ): Promise<any> => {
+    const token = ++pollCancelRef.current;
+    const startedAt = Date.now();
+    const maxMs = 5 * 60 * 1000;
+    const intervalMs = 3000;
+    while (Date.now() - startedAt < maxMs) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      if (pollCancelRef.current !== token) throw new Error("PollCancelled");
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      onTick(elapsed);
+      try {
+        const res = await invokeChatProxy(
+          { action: "get_result", sessionId, target_action: targetAction },
+          30000,
+        );
+        if (pollCancelRef.current !== token) throw new Error("PollCancelled");
+        const p = Array.isArray(res) ? res[0] : res;
+        if (p && p.ready === true) return p.payload ?? p;
+      } catch (e) {
+        if ((e as Error)?.message === "PollCancelled") throw e;
+        // transient network error — keep polling
+        console.warn("get_result poll error, retrying:", e);
+      }
+    }
+    throw new Error("PollTimeout");
   };
 
   const sendMessage = async (
@@ -390,14 +428,46 @@ export const ChatContainer = () => {
     }
 
     const startTime = performance.now();
-    // Slow actions get the full 3-minute window.
+    // Initial request is fast: analyze_pdf now returns {accepted, poll:true}
+    // in ~1s; the real work is fetched via pollForResult below. B3/B6 stay sync.
     const timeoutMs =
-      payload.action === "analyze_pdf" ? 210000 :
+      payload.action === "analyze_pdf" ? 30000 :
       payload.action === "draft_statement" ? 210000 :
       120000;
+    // Progress placeholder id (only used for the async analyze_pdf path).
+    let progressMsgId: string | null = null;
     try {
-      const data = await invokeChatProxy(payload, timeoutMs);
+      let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
+
+      // --- ASYNC REQUEST-REPLY for analyze_pdf ---
+      // Detect on BODY (chat-proxy normalises status codes to 200).
+      const initial = Array.isArray(data) ? data[0] : data;
+      if (
+        payload.action === "analyze_pdf" &&
+        initial && typeof initial === "object" &&
+        (initial.status === "accepted" || initial.poll === true)
+      ) {
+        progressMsgId = crypto.randomUUID();
+        const makeText = (sec: number) =>
+          `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
+        const progressMsg: Message = {
+          id: progressMsgId,
+          content: makeText(0),
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, progressMsg]);
+        data = await pollForResult(sessionId, "analyze_pdf", (sec) => {
+          setMessages((prev) => prev.map((m) =>
+            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
+          ));
+        });
+        // Remove the placeholder before rendering the final assistant message.
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        progressMsgId = null;
+      }
+
 
       let responseText: string;
       let imageUrl: string | undefined;
@@ -443,8 +513,22 @@ export const ChatContainer = () => {
       if (historyEnabled) loadConversations();
     } catch (error) {
       console.error("Fehler beim Senden:", error);
-      const isAbort = (error as Error)?.name === "AbortError";
-      const msg = isAbort
+      // Clean up progress placeholder from async analyze_pdf, if any.
+      if (progressMsgId) {
+        const pid = progressMsgId;
+        setMessages((prev) => prev.filter((m) => m.id !== pid));
+      }
+      const errName = (error as Error)?.name;
+      const errMsgStr = (error as Error)?.message || "";
+      if (errMsgStr === "PollCancelled") {
+        // User navigated away / started a new conversation. Silent.
+        return;
+      }
+      const isAbort = errName === "AbortError";
+      const isPollTimeout = errMsgStr === "PollTimeout";
+      const msg = isPollTimeout
+        ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
+        : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
       const errorMessage: Message = {

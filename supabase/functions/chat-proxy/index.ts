@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       'analyze_pdf', 'draft_statement', 'ingest_project',
       'ingest_legal_pdf', 'ingest_stellungnahme', 'ingest_folder',
       'save_statement', 'suspend_document', 'submit_feedback', 'upload_source',
-      'transcribe_audio', 'check_admin', 'get_chunk',
+      'transcribe_audio', 'check_admin', 'get_chunk', 'get_result',
     ];
     const effectiveAction = body.action || 'question';
     const isMessageless = MESSAGELESS_ACTIONS.includes(effectiveAction);
@@ -439,7 +439,7 @@ Deno.serve(async (req) => {
       'file_id', 'file_base64', 'file_name', 'files',
       'state', 'question', 'topic', 'statement_type',
       'ziel', 'mode', 'source_type', 'upload_type', 'project_ref',
-      'chunk_id',
+      'chunk_id', 'target_action',
     ];
     for (const k of passthroughKeys) {
       if (body[k] !== undefined) forwardPayload[k] = body[k];
