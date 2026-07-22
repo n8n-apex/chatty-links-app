@@ -260,6 +260,39 @@ export const ChatContainer = () => {
     }
   };
 
+  // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
+  // final payload (byte-identical to a synchronous analyze_pdf response).
+  const pollForResult = async (
+    sessionId: string,
+    targetAction: string,
+    onTick: (elapsedSec: number) => void,
+  ): Promise<any> => {
+    const token = ++pollCancelRef.current;
+    const startedAt = Date.now();
+    const maxMs = 5 * 60 * 1000;
+    const intervalMs = 3000;
+    while (Date.now() - startedAt < maxMs) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      if (pollCancelRef.current !== token) throw new Error("PollCancelled");
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      onTick(elapsed);
+      try {
+        const res = await invokeChatProxy(
+          { action: "get_result", sessionId, target_action: targetAction },
+          30000,
+        );
+        if (pollCancelRef.current !== token) throw new Error("PollCancelled");
+        const p = Array.isArray(res) ? res[0] : res;
+        if (p && p.ready === true) return p.payload ?? p;
+      } catch (e) {
+        if ((e as Error)?.message === "PollCancelled") throw e;
+        // transient network error — keep polling
+        console.warn("get_result poll error, retrying:", e);
+      }
+    }
+    throw new Error("PollTimeout");
+  };
+
   const sendMessage = async (
     content: string,
     files?: File[] | null,
