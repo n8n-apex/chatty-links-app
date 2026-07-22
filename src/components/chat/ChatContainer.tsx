@@ -48,6 +48,9 @@ export const ChatContainer = () => {
     return window.innerWidth >= 768;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
+  const pollCancelRef = useRef(0);
+  useEffect(() => () => { pollCancelRef.current += 1; }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
