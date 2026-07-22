@@ -428,14 +428,46 @@ export const ChatContainer = () => {
     }
 
     const startTime = performance.now();
-    // Slow actions get the full 3-minute window.
+    // Initial request is fast: analyze_pdf now returns {accepted, poll:true}
+    // in ~1s; the real work is fetched via pollForResult below. B3/B6 stay sync.
     const timeoutMs =
-      payload.action === "analyze_pdf" ? 210000 :
+      payload.action === "analyze_pdf" ? 30000 :
       payload.action === "draft_statement" ? 210000 :
       120000;
+    // Progress placeholder id (only used for the async analyze_pdf path).
+    let progressMsgId: string | null = null;
     try {
-      const data = await invokeChatProxy(payload, timeoutMs);
+      let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
+
+      // --- ASYNC REQUEST-REPLY for analyze_pdf ---
+      // Detect on BODY (chat-proxy normalises status codes to 200).
+      const initial = Array.isArray(data) ? data[0] : data;
+      if (
+        payload.action === "analyze_pdf" &&
+        initial && typeof initial === "object" &&
+        (initial.status === "accepted" || initial.poll === true)
+      ) {
+        progressMsgId = crypto.randomUUID();
+        const makeText = (sec: number) =>
+          `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
+        const progressMsg: Message = {
+          id: progressMsgId,
+          content: makeText(0),
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, progressMsg]);
+        data = await pollForResult(sessionId, "analyze_pdf", (sec) => {
+          setMessages((prev) => prev.map((m) =>
+            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
+          ));
+        });
+        // Remove the placeholder before rendering the final assistant message.
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        progressMsgId = null;
+      }
+
 
       let responseText: string;
       let imageUrl: string | undefined;
