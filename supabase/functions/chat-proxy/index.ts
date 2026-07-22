@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       'analyze_pdf', 'draft_statement', 'ingest_project',
       'ingest_legal_pdf', 'ingest_stellungnahme', 'ingest_folder',
       'save_statement', 'suspend_document', 'submit_feedback', 'upload_source',
-      'transcribe_audio', 'check_admin', 'get_chunk',
+      'transcribe_audio', 'check_admin', 'get_chunk', 'get_result',
     ];
     const effectiveAction = body.action || 'question';
     const isMessageless = MESSAGELESS_ACTIONS.includes(effectiveAction);
