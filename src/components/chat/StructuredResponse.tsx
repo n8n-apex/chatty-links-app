@@ -474,9 +474,24 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
   // B6 - Stellungnahme
   if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
     const isEdit = data.is_edit === true;
-    const spliceFailed = isEdit && data.edit_splice?.failed === true;
+    const spliceFailed = isEdit && (data.edit_splice?.failed === true || data.edit_splice?.applied === false);
+    // Backend alias map: normalise short/legacy section names to canonical block keys.
+    // Notably 'einzelfakt' is pushed literally by B6_Edit_Splice for edits to beurteilung_der_einzelfakten.
+    const SECTION_ALIASES: Record<string, string> = {
+      einzelfakt: "beurteilung_der_einzelfakten",
+      einzelfakten: "beurteilung_der_einzelfakten",
+      beurteilung_der_einzelfakten: "beurteilung_der_einzelfakten",
+      projekt_und_sachverhalt: "projekt_und_sachverhalt",
+      projekt: "projekt_und_sachverhalt",
+      sachverhalt: "projekt_und_sachverhalt",
+      rechtliche_beurteilungsgrundlage: "rechtliche_beurteilungsgrundlage",
+      beurteilungsgrundlage: "rechtliche_beurteilungsgrundlage",
+      schlussfolgerung: "schlussfolgerung",
+      schluss: "schlussfolgerung",
+    };
+    const rawTouched = Array.isArray(data.edit_splice?.sections_touched) ? data.edit_splice!.sections_touched! : [];
     const touched = new Set<string>(
-      Array.isArray(data.edit_splice?.sections_touched) ? data.edit_splice!.sections_touched! : [],
+      rawTouched.map((s) => SECTION_ALIASES[String(s).toLowerCase()] ?? String(s)),
     );
 
     const HeaderChips = () =>
