@@ -901,7 +901,12 @@ export const ChatContainer = () => {
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
             {messages.length === 0 ? (
-              <EmptyState onSuggestionClick={(text) => setInputValue(text)} />
+              <EmptyState
+                onSuggestionClick={(text, mode) => {
+                  setActiveMode(mode);
+                  setInputValue(text);
+                }}
+              />
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
