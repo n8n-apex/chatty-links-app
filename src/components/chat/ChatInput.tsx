@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
-export type SourceType = 'rechtsquelle' | 'kontext' | 'analyze';
+export type SourceType = 'analyse';
 export type ChatMode = 'rechtsfrage' | 'stellungnahme' | 'behoerdenschreiben';
 
 interface ChatInputProps {
@@ -49,15 +49,6 @@ const downscaleImage = async (file: File): Promise<File> => {
 export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, mode = 'behoerdenschreiben' }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [sourceType, setSourceType] = useState<SourceType>(
-    mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle'
-  );
-  useEffect(() => {
-    setSourceType((current) => {
-      if (mode === 'behoerdenschreiben') return current === 'kontext' || current === 'rechtsquelle' ? current : 'analyze';
-      return current === 'analyze' ? 'rechtsquelle' : current;
-    });
-  }, [mode]);
   const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
   const [zielAudioStatus, setZielAudioStatus] = useState<AudioStatus>('idle');
@@ -82,20 +73,13 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     else setInternalMessage(value);
   };
 
-  useEffect(() => {
-    // Keep default source type in sync when a new file is attached (only if none yet)
-    if (attachedFiles.length === 1) {
-      setSourceType(mode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
-    }
-  }, [attachedFiles.length, mode]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
     if (!message.trim() && attachedFiles.length === 0) return;
     // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel).
     const isBehoerdenAnalyze =
-      mode === 'behoerdenschreiben' && attachedFiles.length > 0 && sourceType === 'analyze';
+      mode === 'behoerdenschreiben' && attachedFiles.length > 0;
     const trimmedMessage = message.trim();
     const trimmedZiel = ziel.trim();
     const outgoingZiel = isBehoerdenAnalyze
@@ -106,7 +90,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
       outgoingMessage,
       attachedFiles.length > 0 ? attachedFiles : null,
       outgoingZiel,
-      attachedFiles.length > 0 ? sourceType : undefined,
+      isBehoerdenAnalyze ? 'analyse' : undefined,
     );
     setMessage('');
     setAttachedFiles([]);
@@ -401,48 +385,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
             ))}
           </div>
         )}
-        {hasFiles && (() => {
-          const options: { value: SourceType; label: string }[] = [
-            { value: 'rechtsquelle', label: 'Rechtsquelle (verbindliches Ortsrecht)' },
-            { value: 'kontext', label: 'Kontext (Sachverhalt, kein Recht)' },
-          ];
-          if (mode === 'behoerdenschreiben') {
-            options.push({ value: 'analyze', label: 'Behördenschreiben analysieren' });
-          }
-          return (
-            <div className="mb-2 rounded-xl border border-border bg-background/40 p-3">
-              <div className="mb-1.5 text-xs font-medium text-foreground">Was ist diese Datei?</div>
-              <div className="flex flex-col gap-1">
-                {options.map((o) => (
-                  <label
-                    key={o.value}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors',
-                      sourceType === o.value
-                        ? 'border-primary/50 bg-primary/10 text-foreground'
-                        : 'border-border bg-background/40 text-muted-foreground hover:border-border hover:bg-muted/40',
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="source-type"
-                      value={o.value}
-                      checked={sourceType === o.value}
-                      onChange={() => setSourceType(o.value)}
-                      className="h-3 w-3 accent-primary"
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {sourceType === 'analyze'
-                  ? 'Mehrseitige Schreiben: weitere Bilder/PDFs anhängen — Reihenfolge zählt.'
-                  : 'Mehrere Dateien möglich — sie werden nacheinander hinzugefügt.'}
-              </p>
-            </div>
-          );
-        })()}
 
         <AnimatePresence initial={false} mode="wait">
           {showStatusBar && (
@@ -518,7 +460,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                mode === 'behoerdenschreiben' && hasFiles && sourceType === 'analyze'
+                mode === 'behoerdenschreiben' && hasFiles
                   ? "Ziel der Antwort oder Anweisung (optional) – z. B. 'Ablehnung abwehren', 'Befreiung erwirken'"
                   : hasFiles
                     ? 'Optionale Frage / Anweisung…'
