@@ -156,7 +156,7 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
                   : undefined
               }
               className={cn(
-                'inline-flex items-start self-start rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-snug text-foreground transition-colors',
+                'inline-flex max-w-full items-start self-start whitespace-normal break-words rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-snug text-foreground transition-colors',
                 clickable &&
                   'cursor-pointer hover:bg-muted hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary',
               )}

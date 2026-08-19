@@ -136,8 +136,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
 
   const addFiles = async (incoming: File[]) => {
     if (incoming.length === 0) return;
-    // Multi-file only allowed for analyze mode; otherwise take just the first (upload_source is per-file).
-    const allowMulti = sourceType === 'analyze' && mode === 'behoerdenschreiben';
+    // Multiple files are always allowed. For Rechtsquelle/Kontext the client
+    // sends them as sequential upload_source calls (one document per call).
     const list: File[] = [];
     for (const f of incoming) {
       if (!isAcceptedFile(f)) {
@@ -156,7 +156,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     const processed = await Promise.all(list.map(downscaleImage));
 
     setAttachedFiles((prev) => {
-      const combined = allowMulti ? [...prev, ...processed] : processed.slice(0, 1);
+      const combined = [...prev, ...processed];
       if (combined.length > MAX_FILES) {
         toast.error(`Maximal ${MAX_FILES} Dateien pro Analyse.`);
         return combined.slice(0, MAX_FILES);
@@ -428,22 +428,18 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
                       name="source-type"
                       value={o.value}
                       checked={sourceType === o.value}
-                      onChange={() => {
-                        setSourceType(o.value);
-                        // If switching away from analyze, drop extra files
-                        if (o.value !== 'analyze') setAttachedFiles((prev) => prev.slice(0, 1));
-                      }}
+                      onChange={() => setSourceType(o.value)}
                       className="h-3 w-3 accent-primary"
                     />
                     <span>{o.label}</span>
                   </label>
                 ))}
               </div>
-              {sourceType === 'analyze' && (
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Mehrseitige Schreiben: weitere Bilder/PDFs anhängen — Reihenfolge zählt.
-                </p>
-              )}
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {sourceType === 'analyze'
+                  ? 'Mehrseitige Schreiben: weitere Bilder/PDFs anhängen — Reihenfolge zählt.'
+                  : 'Mehrere Dateien möglich — sie werden nacheinander hinzugefügt.'}
+              </p>
             </div>
           );
         })()}
