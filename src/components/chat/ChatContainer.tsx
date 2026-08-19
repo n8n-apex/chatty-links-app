@@ -136,6 +136,8 @@ export const ChatContainer = () => {
       setConversationId(freshId);
       localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
+      // Start fresh in Rechtsfrage mode; the pills are the single control.
+      setActiveMode("rechtsfrage");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
@@ -168,6 +170,9 @@ export const ChatContainer = () => {
     setConversationId(newId);
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
+    // The pills are the single mode control; every new conversation starts fresh
+    // in Rechtsfrage mode so the user is never in a mode they did not choose.
+    setActiveMode("rechtsfrage");
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -934,12 +939,7 @@ export const ChatContainer = () => {
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
             {messages.length === 0 ? (
-              <EmptyState
-                onSuggestionClick={(text, mode) => {
-                  setActiveMode(mode);
-                  setInputValue(text);
-                }}
-              />
+              <EmptyState />
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
