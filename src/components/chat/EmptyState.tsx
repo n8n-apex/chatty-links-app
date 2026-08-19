@@ -1,29 +1,40 @@
 import { motion } from 'framer-motion';
 import { MessageSquare, FileText, Search, Scale } from 'lucide-react';
 
+export type ChatMode = 'rechtsfrage' | 'stellungnahme' | 'behoerdenschreiben';
+
 interface EmptyStateProps {
-  onSuggestionClick?: (text: string) => void;
+  onSuggestionClick?: (text: string, mode: ChatMode) => void;
 }
 
 export const EmptyState = ({ onSuggestionClick }: EmptyStateProps) => {
-  const suggestions = [
+  const suggestions: Array<{
+    icon: typeof MessageSquare;
+    title: string;
+    description: string;
+    prompt: string;
+    mode: ChatMode;
+  }> = [
     {
       icon: MessageSquare,
       title: 'Rechtsfrage stellen',
       description: 'Rechtsfrage mit §-Angaben und Quellen beantwortet bekommen',
       prompt: 'Ich habe eine Baurechtsfrage:',
+      mode: 'rechtsfrage',
     },
     {
       icon: FileText,
       title: 'Stellungnahme erstellen',
       description: 'Formelle rechtliche Stellungnahme zu einem Baurechtsthema erstellen',
       prompt: 'Erstelle eine Stellungnahme zum Thema:',
+      mode: 'stellungnahme',
     },
     {
       icon: Search,
       title: 'Behördenschreiben analysieren',
       description: 'Behördenschreiben analysieren und Antwortentwurf erhalten',
-      prompt: 'Analysiere dieses Behördenschreiben:',
+      prompt: '',
+      mode: 'behoerdenschreiben',
     },
   ];
 
@@ -57,8 +68,16 @@ export const EmptyState = ({ onSuggestionClick }: EmptyStateProps) => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + i * 0.1 }}
-              onClick={() => onSuggestionClick?.(suggestion.prompt)}
-              className="glass rounded-xl p-4 text-left transition-colors hover:bg-muted/50 cursor-pointer active:scale-95"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSuggestionClick?.(suggestion.prompt, suggestion.mode)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSuggestionClick?.(suggestion.prompt, suggestion.mode);
+                }
+              }}
+              className="glass rounded-xl p-4 text-left transition-colors hover:bg-muted/50 cursor-pointer active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <suggestion.icon className="mb-2 h-5 w-5 text-primary" />
               <div className="text-sm font-medium text-foreground mb-1">

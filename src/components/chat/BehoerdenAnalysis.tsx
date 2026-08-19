@@ -145,7 +145,7 @@ const konfidenzClass = (v?: string): string => {
 const Pill = ({ label, className }: { label: string; className?: string }) => (
   <span
     className={cn(
-      'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium',
+      'inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top',
       className,
     )}
   >
@@ -401,7 +401,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Rechtsgrundlage</SectionHeading>
           <div className="flex flex-wrap gap-1.5">
             {rechtsgrundlageArr.map((r, i) => (
-              <span key={i} className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground">{r}</span>
+              <span key={i} className="inline-block rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] leading-snug text-foreground max-w-full whitespace-normal break-words text-left align-top">{r}</span>
             ))}
           </div>
         </Sec>
@@ -413,7 +413,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
           <div className="flex flex-wrap gap-1.5">
             {data.rechtsgrundlage_unverifiziert.map((r, i) => (
-              <span key={i} className="inline-flex items-center rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] text-muted-foreground italic">{r}</span>
+              <span key={i} className="inline-block rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] italic leading-snug text-muted-foreground max-w-full whitespace-normal break-words text-left align-top">{r}</span>
             ))}
           </div>
         </Sec>
@@ -478,7 +478,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                       {rechtsgrundlageArr.map((r, i) => (
                         <span
                           key={i}
-                          className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-foreground"
+                          className="inline-block rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] leading-snug text-foreground max-w-full whitespace-normal break-words text-left align-top"
                         >
                           {r}
                         </span>
@@ -654,10 +654,10 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
       {/* Konfidenz */}
       {data.konfidenz && (
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span className="uppercase tracking-wide">Konfidenz:</span>
           <span className={cn(
-            'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+            'inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top',
             String(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
             String(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
             (String(data.konfidenz).toLowerCase() === 'niedrig' || String(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',

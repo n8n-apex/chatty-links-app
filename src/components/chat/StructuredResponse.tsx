@@ -274,7 +274,7 @@ const ParagraphBadge = ({ paragraph, quelle }: { paragraph?: string; quelle?: st
     <button
       type="button"
       onClick={handleCopy}
-      className="group/badge relative inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-foreground transition-colors hover:bg-muted cursor-pointer"
+      className="group/badge relative inline-flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs leading-snug text-foreground transition-colors hover:bg-muted cursor-pointer max-w-full whitespace-normal break-words text-left align-top"
       title={`Kopieren: ${fullRef}`}
     >
       <span className="font-medium">{paragraph}</span>
@@ -633,7 +633,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
         )}
         {data.gesamtbeurteilung && (
           <Section>
-            <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium', getBeurteilungVariant(data.gesamtbeurteilung))}>
+            <span className={cn('inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top', getBeurteilungVariant(data.gesamtbeurteilung))}>
               {data.gesamtbeurteilung}
             </span>
           </Section>
@@ -646,7 +646,7 @@ export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayl
                 <div key={i} className="rounded-lg border border-border bg-transparent p-3">
                   {f.forderung && <div className="mb-1 text-sm font-medium text-foreground">{f.forderung}</div>}
                   {f.bewertung && (
-                    <span className={cn('mb-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium', getBeurteilungVariant(f.bewertung))}>
+                    <span className={cn('mb-1.5 inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top', getBeurteilungVariant(f.bewertung))}>
                       {f.bewertung}
                     </span>
                   )}
@@ -888,7 +888,7 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
             {rechtsgrundlageChips.map((p, i) => (
               <span
                 key={i}
-                className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-foreground"
+                className="inline-block rounded-md border border-border bg-muted/40 px-2 py-1 text-xs leading-snug text-foreground max-w-full whitespace-normal break-words text-left align-top"
               >
                 {p}
               </span>
