@@ -314,55 +314,88 @@ export const ChatContainer = () => {
         sourceType ?? (activeMode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
 
       if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
-        for (const file of files!) {
-          const userMessage: Message = {
-            id: crypto.randomUUID(),
-            content: `📎 [${file.name}]`,
-            role: "user",
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, userMessage]);
-          setIsLoading(true);
-          persistMessage("user", userMessage.content);
-          try {
-            const base64 = await toBase64(file);
-            if (!base64) throw new Error("Empty base64 result");
-            const data = await invokeChatProxy({
-              action: "upload_source",
-              source_type: effectiveSourceType,
-              sessionId,
-              file_name: file.name,
-              file_base64: base64,
-              ...(projectRef ? { project_ref: projectRef } : {}),
-            }, 120000);
-            const parsed = Array.isArray(data) ? data[0] : data;
-            const indexed = parsed && parsed.indexed === true;
-            const fileName = parsed?.fileName || file.name;
-            const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
-            const ackText = indexed
-              ? `✓ Quelle hinzugefügt: ${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""} — wird in dieser Unterhaltung berücksichtigt.`
-              : `⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.`;
-            const ackMessage: Message = {
-              id: crypto.randomUUID(),
-              content: ackText,
-              role: "assistant",
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, ackMessage]);
-            persistMessage("ai", ackText);
-          } catch (e) {
-            console.error("upload_source error:", e);
-            const errMsg: Message = {
-              id: crypto.randomUUID(),
-              content: "⚠ Quelle konnte nicht verarbeitet werden. Bitte erneut versuchen.",
-              role: "assistant",
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, errMsg]);
-          } finally {
-            setIsLoading(false);
+        const list = files!;
+        const label = effectiveSourceType === 'kontext' ? 'Kontext' : 'Rechtsquelle';
+        // One user message listing every attached document, in send order.
+        const userMessage: Message = {
+          id: crypto.randomUUID(),
+          content: list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n"),
+          role: "user",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        persistMessage("user", userMessage.content);
+
+        // One combined progress placeholder for the whole batch.
+        const progressId = crypto.randomUUID();
+        const progressText = (n: number, name: string) =>
+          `⏳ Quelle ${n} von ${list.length} wird hinzugefügt… (${name})`;
+        setMessages((prev) => [
+          ...prev,
+          { id: progressId, content: progressText(1, list[0].name), role: "assistant", timestamp: new Date() },
+        ]);
+        setIsLoading(true);
+
+        const succeeded: string[] = [];
+        const failed: string[] = [];
+        try {
+          for (let i = 0; i < list.length; i++) {
+            const file = list[i];
+            setMessages((prev) =>
+              prev.map((m) => (m.id === progressId ? { ...m, content: progressText(i + 1, file.name) } : m)),
+            );
+            try {
+              const base64 = await toBase64(file);
+              if (!base64) throw new Error("Empty base64 result");
+              const data = await invokeChatProxy({
+                action: "upload_source",
+                source_type: effectiveSourceType,
+                sessionId,
+                file_name: file.name,
+                file_base64: base64,
+                ...(projectRef ? { project_ref: projectRef } : {}),
+              }, 120000);
+              const parsed = Array.isArray(data) ? data[0] : data;
+              const fileName = parsed?.fileName || file.name;
+              const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
+              if (parsed && parsed.indexed === true) {
+                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
+              } else {
+                failed.push(file.name);
+              }
+            } catch (e) {
+              console.error("upload_source error:", e);
+              failed.push(file.name);
+            }
           }
+        } finally {
+          setMessages((prev) => prev.filter((m) => m.id !== progressId));
+          setIsLoading(false);
         }
+
+        const parts: string[] = [];
+        if (succeeded.length > 0) {
+          parts.push(
+            `✓ ${succeeded.length} von ${list.length} Quellen hinzugefügt (${label}) — werden in dieser Unterhaltung berücksichtigt:\n` +
+              succeeded.map((s, i) => `${i + 1}. ${s}`).join("\n"),
+          );
+        }
+        if (failed.length > 0) {
+          parts.push(
+            `⚠ Nicht verarbeitet:\n` +
+              failed.map((f, i) => `${i + 1}. ${f}`).join("\n") +
+              `\nBitte diese Datei${failed.length > 1 ? "en" : ""} erneut hinzufügen.`,
+          );
+        }
+        const summary = parts.join("\n\n");
+        const ackMessage: Message = {
+          id: crypto.randomUUID(),
+          content: summary,
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, ackMessage]);
+        persistMessage("ai", summary);
         return;
       }
     }
