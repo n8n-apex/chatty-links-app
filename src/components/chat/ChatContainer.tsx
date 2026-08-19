@@ -302,7 +302,7 @@ export const ChatContainer = () => {
     content: string,
     files?: File[] | null,
     ziel?: string,
-    sourceType?: 'rechtsquelle' | 'kontext' | 'analyze',
+    sourceType?: 'analyse',
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -315,12 +315,13 @@ export const ChatContainer = () => {
 
     // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
     if (hasFiles) {
-      const effectiveSourceType: 'rechtsquelle' | 'kontext' | 'analyze' =
-        sourceType ?? (activeMode === 'behoerdenschreiben' ? 'analyze' : 'rechtsquelle');
+      // Mode is the only signal: Behördenschreiben => analyse, otherwise the
+      // file is context and no source_type key is sent at all.
+      const isAnalyse = sourceType === 'analyse' || activeMode === 'behoerdenschreiben';
 
-      if (effectiveSourceType === 'rechtsquelle' || effectiveSourceType === 'kontext') {
+      if (!isAnalyse) {
         const list = files!;
-        const label = effectiveSourceType === 'kontext' ? 'Kontext' : 'Rechtsquelle';
+        const label = 'Kontext';
         // One user message listing every attached document, in send order.
         const userMessage: Message = {
           id: crypto.randomUUID(),
@@ -354,7 +355,6 @@ export const ChatContainer = () => {
               if (!base64) throw new Error("Empty base64 result");
               const data = await invokeChatProxy({
                 action: "upload_source",
-                source_type: effectiveSourceType,
                 sessionId,
                 file_name: file.name,
                 file_base64: base64,
@@ -437,6 +437,7 @@ export const ChatContainer = () => {
         payload = {
           ...payload,
           action: "analyze_pdf",
+          source_type: "analyse",
           files: encoded,
           // Back-compat: also send first file top-level (n8n may still read either)
           file_name: firstFile!.name,
