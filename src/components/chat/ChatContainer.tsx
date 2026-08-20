@@ -406,8 +406,14 @@ export const ChatContainer = () => {
         };
         setMessages((prev) => [...prev, ackMessage]);
         persistMessage("ai", summary);
+        // The typed text is a real request — run it after the uploads, without
+        // duplicating the user bubble that already contains it.
+        if (typed) {
+          await sendMessage(typed, null, undefined, undefined, true);
+        }
         return;
       }
+
     }
 
     // === analyze_pdf (multi-file) OR text-only Q&A ===
