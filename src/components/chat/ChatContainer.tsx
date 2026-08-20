@@ -364,6 +364,7 @@ export const ChatContainer = () => {
 
         const succeeded: string[] = [];
         const failed: string[] = [];
+        const unknown: string[] = [];
         try {
           for (let i = 0; i < list.length; i++) {
             const file = list[i];
@@ -373,24 +374,40 @@ export const ChatContainer = () => {
             try {
               const base64 = await toBase64(file);
               if (!base64) throw new Error("Empty base64 result");
-              const data = await invokeChatProxy({
+              // 180s: a large PDF can still be chunking well past 2 minutes.
+              const { ok, status, data, rawText } = await invokeChatProxyRaw({
                 action: "upload_source",
                 sessionId,
                 file_name: file.name,
                 file_base64: base64,
                 ...(projectRef ? { project_ref: projectRef } : {}),
-              }, 120000);
-              const parsed = Array.isArray(data) ? data[0] : data;
-              const fileName = parsed?.fileName || file.name;
-              const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
-              if (parsed && parsed.indexed === true) {
-                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
-              } else {
+              }, 180000);
+
+              // A real HTTP error is a real failure.
+              if (!ok) {
+                console.error("upload_source HTTP error:", status, rawText);
                 failed.push(file.name);
+                continue;
+              }
+
+              const verdict = classifyUploadSource(data);
+              const fileName = verdict.fileName || file.name;
+              const chunks = verdict.chunks;
+              if (verdict.state === "success") {
+                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
+              } else if (verdict.state === "failure") {
+                console.error("upload_source backend failure:", verdict.error, data);
+                failed.push(file.name);
+              } else {
+                // 200 OK but no readable verdict (the workflow frequently answers
+                // with an empty body while indexing continues server-side).
+                console.warn("upload_source unknown result:", rawText);
+                unknown.push(file.name);
               }
             } catch (e) {
+              // Timeout / network drop: the upload may well have completed.
               console.error("upload_source error:", e);
-              failed.push(file.name);
+              unknown.push(file.name);
             }
           }
         } finally {
@@ -405,6 +422,15 @@ export const ChatContainer = () => {
               succeeded.map((s, i) => `${i + 1}. ${s}`).join("\n"),
           );
         }
+        if (unknown.length > 0) {
+          parts.push(
+            `ℹ Status unklar:\n` +
+              unknown.map((f, i) => `${i + 1}. ${f}`).join("\n") +
+              `\nDie Verarbeitung läuft möglicherweise noch im Hintergrund. ` +
+              `Diese Datei${unknown.length > 1 ? "en" : ""} wurde${unknown.length > 1 ? "n" : ""} vermutlich bereits gespeichert — ` +
+              `bitte nicht erneut hinzufügen, sondern zunächst eine Frage dazu stellen.`,
+          );
+        }
         if (failed.length > 0) {
           parts.push(
             `⚠ Nicht verarbeitet:\n` +
@@ -412,6 +438,7 @@ export const ChatContainer = () => {
               `\nBitte diese Datei${failed.length > 1 ? "en" : ""} erneut hinzufügen.`,
           );
         }
+
         const summary = parts.join("\n\n");
         const ackMessage: Message = {
           id: crypto.randomUUID(),
