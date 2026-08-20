@@ -303,6 +303,7 @@ export const ChatContainer = () => {
     files?: File[] | null,
     ziel?: string,
     sourceType?: 'analyse',
+    suppressUserBubble?: boolean,
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
