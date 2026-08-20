@@ -12,6 +12,63 @@ import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+type UploadVerdict = {
+  state: "success" | "failure" | "unknown";
+  fileName?: string;
+  chunks?: number;
+  error?: string;
+};
+
+/**
+ * Classify one `upload_source` response.
+ *
+ * Primary test = the documented "SD Source Response" shape: `{ indexed, fileName, chunks }`.
+ * Observed reality: the workflow also answers HTTP 200 with an empty body while the
+ * file keeps indexing server-side, so anything unrecognised is UNKNOWN — never a failure.
+ * Only an explicit backend rejection counts as a failure.
+ */
+const classifyUploadSource = (raw: unknown): UploadVerdict => {
+  // Unwrap arrays and common envelopes ({ payload }, { data }, { result }, { json }).
+  let node: any = raw;
+  for (let depth = 0; depth < 4 && node && typeof node === "object"; depth++) {
+    if (Array.isArray(node)) { node = node[0]; continue; }
+    if ("indexed" in node || "chunks" in node || "status" in node || "error" in node) break;
+    const next = node.payload ?? node.data ?? node.result ?? node.json ?? node.body;
+    if (next && typeof next === "object") { node = next; continue; }
+    break;
+  }
+  if (!node || typeof node !== "object") return { state: "unknown" };
+
+  const p: any = node;
+  const fileName = typeof p.fileName === "string" ? p.fileName
+    : typeof p.file_name === "string" ? p.file_name : undefined;
+  const chunksRaw = p.chunks ?? p.chunk_count ?? p.chunkCount;
+  const chunks = typeof chunksRaw === "number" ? chunksRaw
+    : typeof chunksRaw === "string" && /^\d+$/.test(chunksRaw) ? Number(chunksRaw)
+    : undefined;
+
+  // --- PRIMARY: the `indexed` flag from SD Source Response ---
+  if (p.indexed === true || p.indexed === "true") return { state: "success", fileName, chunks };
+  if (p.indexed === false || p.indexed === "false") {
+    return { state: "failure", fileName, chunks, error: String(p.error ?? p.message ?? "indexed=false") };
+  }
+
+  // --- FALLBACK: loose success/failure signals ---
+  const statusStr = String(p.status ?? p.result ?? p.state ?? "").toLowerCase();
+  if (["success", "ok", "indexed", "stored", "done", "completed"].includes(statusStr)) {
+    return { state: "success", fileName, chunks };
+  }
+  if (["error", "failed", "failure", "rejected"].includes(statusStr)) {
+    return { state: "failure", fileName, chunks, error: String(p.error ?? p.message ?? statusStr) };
+  }
+  if (typeof chunks === "number" && chunks > 0) return { state: "success", fileName, chunks };
+  if (p.error) return { state: "failure", fileName, chunks, error: String(p.error) };
+
+  // Empty body → chat-proxy turns it into { output: "No response from webhook" }.
+  return { state: "unknown", fileName, chunks };
+};
+
+
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
