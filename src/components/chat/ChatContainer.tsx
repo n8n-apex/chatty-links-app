@@ -303,6 +303,7 @@ export const ChatContainer = () => {
     files?: File[] | null,
     ziel?: string,
     sourceType?: 'analyse',
+    suppressUserBubble?: boolean,
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -322,15 +323,19 @@ export const ChatContainer = () => {
       if (!isAnalyse) {
         const list = files!;
         const label = 'Kontext';
-        // One user message listing every attached document, in send order.
+        const typed = (content || '').trim();
+        // One user message listing every attached document, in send order,
+        // plus whatever the user typed (never discarded).
+        const fileLines = list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n");
         const userMessage: Message = {
           id: crypto.randomUUID(),
-          content: list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n"),
+          content: typed ? `${fileLines}\n\n${typed}` : fileLines,
           role: "user",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
         persistMessage("user", userMessage.content);
+
 
         // One combined progress placeholder for the whole batch.
         const progressId = crypto.randomUUID();
@@ -401,8 +406,14 @@ export const ChatContainer = () => {
         };
         setMessages((prev) => [...prev, ackMessage]);
         persistMessage("ai", summary);
+        // The typed text is a real request — run it after the uploads, without
+        // duplicating the user bubble that already contains it.
+        if (typed) {
+          await sendMessage(typed, null, undefined, undefined, true);
+        }
         return;
       }
+
     }
 
     // === analyze_pdf (multi-file) OR text-only Q&A ===
@@ -412,16 +423,17 @@ export const ChatContainer = () => {
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content: displayContent,
-      role: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    if (!suppressUserBubble) {
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        content: displayContent,
+        role: "user",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      persistMessage("user", displayContent);
+    }
     setIsLoading(true);
-    persistMessage("user", displayContent);
 
     let payload: Record<string, unknown> = {
       sessionId,
@@ -445,7 +457,9 @@ export const ChatContainer = () => {
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
         };
-        if (ziel && ziel.trim()) (payload as Record<string, unknown>).ziel = ziel.trim();
+        // The typed text is the objective in Behördenschreiben mode.
+        const effectiveZiel = (ziel && ziel.trim()) || (content || '').trim();
+        if (effectiveZiel) (payload as Record<string, unknown>).ziel = effectiveZiel;
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("Datei konnte nicht gelesen werden.");

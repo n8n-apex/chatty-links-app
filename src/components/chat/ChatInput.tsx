@@ -77,7 +77,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     e.preventDefault();
     if (isLoading) return;
     if (!message.trim() && attachedFiles.length === 0) return;
-    // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel).
+    // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel),
+    // but the typed text is still sent as the message so it never disappears.
     const isBehoerdenAnalyze =
       mode === 'behoerdenschreiben' && attachedFiles.length > 0;
     const trimmedMessage = message.trim();
@@ -85,9 +86,8 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     const outgoingZiel = isBehoerdenAnalyze
       ? (trimmedMessage || undefined)
       : (trimmedZiel || undefined);
-    const outgoingMessage = isBehoerdenAnalyze ? '' : trimmedMessage;
     onSendMessage(
-      outgoingMessage,
+      trimmedMessage,
       attachedFiles.length > 0 ? attachedFiles : null,
       outgoingZiel,
       isBehoerdenAnalyze ? 'analyse' : undefined,
