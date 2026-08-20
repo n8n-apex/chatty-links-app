@@ -456,7 +456,9 @@ export const ChatContainer = () => {
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
         };
-        if (ziel && ziel.trim()) (payload as Record<string, unknown>).ziel = ziel.trim();
+        // The typed text is the objective in Behördenschreiben mode.
+        const effectiveZiel = (ziel && ziel.trim()) || (content || '').trim();
+        if (effectiveZiel) (payload as Record<string, unknown>).ziel = effectiveZiel;
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("Datei konnte nicht gelesen werden.");
