@@ -323,15 +323,19 @@ export const ChatContainer = () => {
       if (!isAnalyse) {
         const list = files!;
         const label = 'Kontext';
-        // One user message listing every attached document, in send order.
+        const typed = (content || '').trim();
+        // One user message listing every attached document, in send order,
+        // plus whatever the user typed (never discarded).
+        const fileLines = list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n");
         const userMessage: Message = {
           id: crypto.randomUUID(),
-          content: list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n"),
+          content: typed ? `${fileLines}\n\n${typed}` : fileLines,
           role: "user",
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
         persistMessage("user", userMessage.content);
+
 
         // One combined progress placeholder for the whole batch.
         const progressId = crypto.randomUUID();
