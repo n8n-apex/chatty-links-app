@@ -423,16 +423,17 @@ export const ChatContainer = () => {
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content: displayContent,
-      role: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    if (!suppressUserBubble) {
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        content: displayContent,
+        role: "user",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      persistMessage("user", displayContent);
+    }
     setIsLoading(true);
-    persistMessage("user", displayContent);
 
     let payload: Record<string, unknown> = {
       sessionId,
