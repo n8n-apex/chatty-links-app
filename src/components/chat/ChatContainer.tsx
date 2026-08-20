@@ -241,7 +241,12 @@ export const ChatContainer = () => {
 
   // Direct fetch to chat-proxy with a longer timeout than supabase.functions.invoke's default.
   // analyze_pdf/draft_statement can legitimately take up to ~3 min.
-  const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
+  // Returns the HTTP status alongside the parsed body so callers can tell a real
+  // backend failure apart from an unreadable/empty answer.
+  const invokeChatProxyRaw = async (
+    body: Record<string, unknown>,
+    timeoutMs = 180000,
+  ): Promise<{ ok: boolean; status: number; data: any; rawText: string }> => {
     const url = `https://phxsmsaoxhhvopwndujq.supabase.co/functions/v1/chat-proxy`;
     const anon = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoeHNtc2FveGhodm9wd25kdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTQ5MjIsImV4cCI6MjA5MTkzMDkyMn0.HzBU8UiSPly2LCCPgot5FkhQvsF9Mc6aYeyjlyrKWhQ";
     const controller = new AbortController();
@@ -258,12 +263,22 @@ export const ChatContainer = () => {
         signal: controller.signal,
       });
       const text = await res.text();
-      if (!text) throw new Error("Leere Antwort vom Server.");
-      try { return JSON.parse(text); } catch { return { output: text }; }
+      let data: any = null;
+      if (text) {
+        try { data = JSON.parse(text); } catch { data = { output: text }; }
+      }
+      return { ok: res.ok, status: res.status, data, rawText: text };
     } finally {
       clearTimeout(timer);
     }
   };
+
+  const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
+    const { data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+    if (!rawText) throw new Error("Leere Antwort vom Server.");
+    return data;
+  };
+
 
   // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
   // final payload (byte-identical to a synchronous analyze_pdf response).
