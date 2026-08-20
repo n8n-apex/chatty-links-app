@@ -12,6 +12,63 @@ import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+type UploadVerdict = {
+  state: "success" | "failure" | "unknown";
+  fileName?: string;
+  chunks?: number;
+  error?: string;
+};
+
+/**
+ * Classify one `upload_source` response.
+ *
+ * Primary test = the documented "SD Source Response" shape: `{ indexed, fileName, chunks }`.
+ * Observed reality: the workflow also answers HTTP 200 with an empty body while the
+ * file keeps indexing server-side, so anything unrecognised is UNKNOWN — never a failure.
+ * Only an explicit backend rejection counts as a failure.
+ */
+const classifyUploadSource = (raw: unknown): UploadVerdict => {
+  // Unwrap arrays and common envelopes ({ payload }, { data }, { result }, { json }).
+  let node: any = raw;
+  for (let depth = 0; depth < 4 && node && typeof node === "object"; depth++) {
+    if (Array.isArray(node)) { node = node[0]; continue; }
+    if ("indexed" in node || "chunks" in node || "status" in node || "error" in node) break;
+    const next = node.payload ?? node.data ?? node.result ?? node.json ?? node.body;
+    if (next && typeof next === "object") { node = next; continue; }
+    break;
+  }
+  if (!node || typeof node !== "object") return { state: "unknown" };
+
+  const p: any = node;
+  const fileName = typeof p.fileName === "string" ? p.fileName
+    : typeof p.file_name === "string" ? p.file_name : undefined;
+  const chunksRaw = p.chunks ?? p.chunk_count ?? p.chunkCount;
+  const chunks = typeof chunksRaw === "number" ? chunksRaw
+    : typeof chunksRaw === "string" && /^\d+$/.test(chunksRaw) ? Number(chunksRaw)
+    : undefined;
+
+  // --- PRIMARY: the `indexed` flag from SD Source Response ---
+  if (p.indexed === true || p.indexed === "true") return { state: "success", fileName, chunks };
+  if (p.indexed === false || p.indexed === "false") {
+    return { state: "failure", fileName, chunks, error: String(p.error ?? p.message ?? "indexed=false") };
+  }
+
+  // --- FALLBACK: loose success/failure signals ---
+  const statusStr = String(p.status ?? p.result ?? p.state ?? "").toLowerCase();
+  if (["success", "ok", "indexed", "stored", "done", "completed"].includes(statusStr)) {
+    return { state: "success", fileName, chunks };
+  }
+  if (["error", "failed", "failure", "rejected"].includes(statusStr)) {
+    return { state: "failure", fileName, chunks, error: String(p.error ?? p.message ?? statusStr) };
+  }
+  if (typeof chunks === "number" && chunks > 0) return { state: "success", fileName, chunks };
+  if (p.error) return { state: "failure", fileName, chunks, error: String(p.error) };
+
+  // Empty body → chat-proxy turns it into { output: "No response from webhook" }.
+  return { state: "unknown", fileName, chunks };
+};
+
+
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -241,7 +298,12 @@ export const ChatContainer = () => {
 
   // Direct fetch to chat-proxy with a longer timeout than supabase.functions.invoke's default.
   // analyze_pdf/draft_statement can legitimately take up to ~3 min.
-  const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
+  // Returns the HTTP status alongside the parsed body so callers can tell a real
+  // backend failure apart from an unreadable/empty answer.
+  const invokeChatProxyRaw = async (
+    body: Record<string, unknown>,
+    timeoutMs = 180000,
+  ): Promise<{ ok: boolean; status: number; data: any; rawText: string }> => {
     const url = `https://phxsmsaoxhhvopwndujq.supabase.co/functions/v1/chat-proxy`;
     const anon = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoeHNtc2FveGhodm9wd25kdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTQ5MjIsImV4cCI6MjA5MTkzMDkyMn0.HzBU8UiSPly2LCCPgot5FkhQvsF9Mc6aYeyjlyrKWhQ";
     const controller = new AbortController();
@@ -258,12 +320,22 @@ export const ChatContainer = () => {
         signal: controller.signal,
       });
       const text = await res.text();
-      if (!text) throw new Error("Leere Antwort vom Server.");
-      try { return JSON.parse(text); } catch { return { output: text }; }
+      let data: any = null;
+      if (text) {
+        try { data = JSON.parse(text); } catch { data = { output: text }; }
+      }
+      return { ok: res.ok, status: res.status, data, rawText: text };
     } finally {
       clearTimeout(timer);
     }
   };
+
+  const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
+    const { data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+    if (!rawText) throw new Error("Leere Antwort vom Server.");
+    return data;
+  };
+
 
   // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
   // final payload (byte-identical to a synchronous analyze_pdf response).
@@ -349,6 +421,7 @@ export const ChatContainer = () => {
 
         const succeeded: string[] = [];
         const failed: string[] = [];
+        const unknown: string[] = [];
         try {
           for (let i = 0; i < list.length; i++) {
             const file = list[i];
@@ -358,24 +431,40 @@ export const ChatContainer = () => {
             try {
               const base64 = await toBase64(file);
               if (!base64) throw new Error("Empty base64 result");
-              const data = await invokeChatProxy({
+              // 180s: a large PDF can still be chunking well past 2 minutes.
+              const { ok, status, data, rawText } = await invokeChatProxyRaw({
                 action: "upload_source",
                 sessionId,
                 file_name: file.name,
                 file_base64: base64,
                 ...(projectRef ? { project_ref: projectRef } : {}),
-              }, 120000);
-              const parsed = Array.isArray(data) ? data[0] : data;
-              const fileName = parsed?.fileName || file.name;
-              const chunks = typeof parsed?.chunks === "number" ? parsed.chunks : 0;
-              if (parsed && parsed.indexed === true) {
-                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
-              } else {
+              }, 180000);
+
+              // A real HTTP error is a real failure.
+              if (!ok) {
+                console.error("upload_source HTTP error:", status, rawText);
                 failed.push(file.name);
+                continue;
+              }
+
+              const verdict = classifyUploadSource(data);
+              const fileName = verdict.fileName || file.name;
+              const chunks = verdict.chunks;
+              if (verdict.state === "success") {
+                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
+              } else if (verdict.state === "failure") {
+                console.error("upload_source backend failure:", verdict.error, data);
+                failed.push(file.name);
+              } else {
+                // 200 OK but no readable verdict (the workflow frequently answers
+                // with an empty body while indexing continues server-side).
+                console.warn("upload_source unknown result:", rawText);
+                unknown.push(file.name);
               }
             } catch (e) {
+              // Timeout / network drop: the upload may well have completed.
               console.error("upload_source error:", e);
-              failed.push(file.name);
+              unknown.push(file.name);
             }
           }
         } finally {
@@ -390,6 +479,15 @@ export const ChatContainer = () => {
               succeeded.map((s, i) => `${i + 1}. ${s}`).join("\n"),
           );
         }
+        if (unknown.length > 0) {
+          parts.push(
+            `ℹ Status unklar:\n` +
+              unknown.map((f, i) => `${i + 1}. ${f}`).join("\n") +
+              `\nDie Verarbeitung läuft möglicherweise noch im Hintergrund. ` +
+              `Diese Datei${unknown.length > 1 ? "en" : ""} wurde${unknown.length > 1 ? "n" : ""} vermutlich bereits gespeichert — ` +
+              `bitte nicht erneut hinzufügen, sondern zunächst eine Frage dazu stellen.`,
+          );
+        }
         if (failed.length > 0) {
           parts.push(
             `⚠ Nicht verarbeitet:\n` +
@@ -397,6 +495,7 @@ export const ChatContainer = () => {
               `\nBitte diese Datei${failed.length > 1 ? "en" : ""} erneut hinzufügen.`,
           );
         }
+
         const summary = parts.join("\n\n");
         const ackMessage: Message = {
           id: crypto.randomUUID(),
