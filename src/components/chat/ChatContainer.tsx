@@ -1052,6 +1052,16 @@ export const ChatContainer = () => {
       console.log("[DRAFT EDIT] n8n response:", data);
 
       const parsed = Array.isArray(data) ? data[0] : data;
+      // Never persist or render an error envelope as a revised draft.
+      if (
+        parsed && typeof parsed === "object" &&
+        typeof (parsed as any).error === "string" &&
+        !(parsed as any).antwort && !(parsed as any).entwurf_stellungnahme &&
+        !(parsed as any).projekt_und_sachverhalt && !(parsed as any).output
+      ) {
+        throw new Error(`BackendError: ${(parsed as any).error}`);
+      }
+
       let responseText: string;
       let usedChunkIds: string[] = [];
       let usedParagraphs: string[] = [];
