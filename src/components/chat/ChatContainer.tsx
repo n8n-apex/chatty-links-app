@@ -889,10 +889,13 @@ export const ChatContainer = () => {
       }
       const isAbort = errName === "AbortError";
       const isPollTimeout = errMsgStr === "PollTimeout";
+      const isBackendError = errMsgStr.startsWith("BackendError:");
       const msg = isPollTimeout
         ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
         : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
+        : isBackendError
+        ? "Die Anfrage konnte nicht verarbeitet werden — der Server hat einen Fehler gemeldet. Bitte versuchen Sie es erneut. Wenn der Fehler erneut auftritt, melden Sie ihn bitte."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
       const errorMessage: Message = {
         id: crypto.randomUUID(),
