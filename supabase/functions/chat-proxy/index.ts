@@ -3,6 +3,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+// Same pattern as chat-history/index.ts: real HTTP status codes out of an Edge
+// Function are a choice, not a platform limitation.
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+// Every failure leaves this function in ONE shape, with a machine-readable code.
+const fail = (code: string, status: number, detail?: unknown) =>
+  json(
+    {
+      status: 'error',
+      error: code,
+      detail: detail === undefined ? undefined : String(detail).slice(0, 2000),
+    },
+    status,
+  )
+
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
