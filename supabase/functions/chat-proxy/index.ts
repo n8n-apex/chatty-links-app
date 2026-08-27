@@ -507,6 +507,25 @@ Deno.serve(async (req) => {
     console.log('Webhook raw response status:', response.status, 'body:', rawText)
 
     if (!response.ok) {
+      // Upstream 4xx means the request was rejected cleanly by n8n.
+      // Pass that status through and surface the German message directly.
+      if (response.status >= 400 && response.status < 500) {
+        try {
+          const parsed = JSON.parse(rawText)
+          if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+            return json(
+              {
+                status: 'error',
+                error: parsed.error || 'upstream_error',
+                message: parsed.message,
+              },
+              response.status,
+            )
+          }
+        } catch {
+          // Body doesn't parse: fall through to the existing 502 behavior.
+        }
+      }
       return fail('upstream_error', 502, rawText)
     }
 
