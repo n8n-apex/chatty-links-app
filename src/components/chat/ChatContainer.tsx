@@ -850,9 +850,21 @@ export const ChatContainer = () => {
         try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
 
+      // An error envelope must never become an assistant message, and must never be
+      // written to chat history. Throw so the German error path below runs.
+      const parsedFinal = Array.isArray(data) ? data[0] : data;
+      if (
+        parsedFinal && typeof parsedFinal === "object" &&
+        typeof parsedFinal.error === "string" &&
+        !parsedFinal.antwort && !parsedFinal.action && !parsedFinal.entwurf_stellungnahme &&
+        !parsedFinal.antwortschreiben_entwurf && !parsedFinal.projekt_und_sachverhalt
+      ) {
+        throw new Error(`BackendError: ${parsedFinal.error}`);
+      }
 
       const { message: assistantMessage, responseText, meta } =
         buildAssistantMessage(data, performance.now() - startTime);
+
 
       if (activeConversationRef.current === sendConversationId) {
         setMessages((prev) => [...prev, assistantMessage]);
