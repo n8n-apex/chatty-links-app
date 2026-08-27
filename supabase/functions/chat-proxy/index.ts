@@ -3,6 +3,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
+// Same pattern as chat-history/index.ts: real HTTP status codes out of an Edge
+// Function are a choice, not a platform limitation.
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+// Every failure leaves this function in ONE shape, with a machine-readable code.
+const fail = (code: string, status: number, detail?: unknown) =>
+  json(
+    {
+      status: 'error',
+      error: code,
+      detail: detail === undefined ? undefined : String(detail).slice(0, 2000),
+    },
+    status,
+  )
+
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -131,12 +151,10 @@ Deno.serve(async (req) => {
 
     if (!isMessageless) {
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
-        return new Response(
-          JSON.stringify({ error: 'message is required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return fail('missing_message', 400)
       }
     }
+
 
     // Detect local file path and return helpful error immediately
     if (body.message?.match(/^\/Users\/|^C:\\|^\/home\//i)) {
@@ -187,27 +205,12 @@ Deno.serve(async (req) => {
       const driveMatch = body.message?.match(/\/d\/([a-zA-Z0-9_-]+)/);
       const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
 
-      if (!cleanId && !body.file_id && !body.file_base64) {
-        return new Response(
-          JSON.stringify({
-            status: 'success',
-            action: 'question',
-            frage: '',
-            bundesland: 'nicht erkannt',
-            antwort: 'Bitte fügen Sie einen gültigen Google Drive Link zu einem Behördenschreiben ein. Beispiel: https://drive.google.com/file/d/FILE_ID/view',
-            rechtsgrundlage: [],
-            fehlende_informationen: null,
-            naechste_schritte: null,
-            wichtiger_hinweis: null,
-            quellen: [],
-            model_used: 'none',
-            tokens_used: {}
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // NOTE: no fileless short-circuit here any more. n8n answers a
+      // document-less analyze_pdf as a legal question with a routing notice,
+      // which is strictly better than telling the user to paste a Drive link.
 
       if (cleanId) body.file_id = cleanId;
+
 
       const stateMap: Record<string, string> = {
         'bayern': 'Bayern', 'münchen': 'Bayern', 'nürnberg': 'Bayern', 'bamberg': 'Bayern', 'augsburg': 'Bayern',
@@ -242,10 +245,7 @@ Deno.serve(async (req) => {
 
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
     if (!webhookUrl) {
-      return new Response(
-        JSON.stringify({ error: 'Webhook URL not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return fail('webhook_not_configured', 500)
     }
 
     // --- CONVERSATIONAL DRAFT EDIT (dedicated, no chat history) ---
@@ -254,10 +254,7 @@ Deno.serve(async (req) => {
         const sessionId = body.sessionId || body.session_id || null;
         const topic = typeof body.topic === 'string' ? body.topic : '';
         if (!sessionId) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: 'missing_session_id' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_session_id', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -271,25 +268,24 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('draft_statement edit upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
+        }
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('draft_statement edit: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
         }
         let parsed: unknown;
-        try { parsed = JSON.parse(txt); } catch { parsed = { output: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // A non-empty body that is not JSON is not automatically a failure.
+        try { parsed = JSON.parse(trimmed); } catch { parsed = { output: trimmed }; }
+        return json(parsed);
       } catch (e) {
         console.error('draft_statement edit error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
     // --- SAVE EDITED STATEMENT (manual pencil-edit) ---
     if (body.action === 'save_statement') {
@@ -297,16 +293,10 @@ Deno.serve(async (req) => {
         const sessionId = body.sessionId || body.session_id || null;
         const statementText = typeof body.statement_text === 'string' ? body.statement_text : '';
         if (!sessionId) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: 'missing_session_id' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_session_id', 400);
         }
         if (!statementText.trim()) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: 'empty_statement' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('empty_statement', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -319,25 +309,32 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('save_statement upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
+        }
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('save_statement: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
         }
         let parsed: any;
-        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', saved: true, raw: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          console.error('save_statement: unparseable upstream body:', trimmed.slice(0, 500));
+          return fail('upstream_unparseable', 502, trimmed);
+        }
+        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.saved === false || obj.error) {
+          return fail('save_not_confirmed', 502, trimmed);
+        }
+        return json(obj);
       } catch (e) {
         console.error('save_statement error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', saved: false, error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
     if (body.action === 'submit_feedback') {
       try {
@@ -369,23 +366,56 @@ Deno.serve(async (req) => {
         });
         const fbText = await fbResp.text();
         if (!fbResp.ok) {
-          return new Response(
-            JSON.stringify({ success: false, error: `Webhook ${fbResp.status}`, detail: fbText }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('submit_feedback upstream error', fbResp.status, fbText);
+          return fail('upstream_error', 502, fbText);
         }
-        return new Response(
-          JSON.stringify({ success: true, message: fbText || 'Feedback gespeichert' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+
+        // n8n answering 2xx is NOT proof the feedback row was written. A workflow
+        // branch that yields zero items ends the run silently and the webhook
+        // replies 200 with an empty body. Treat that as a failure.
+        const fbTrimmed = (fbText || '').trim();
+        if (!fbTrimmed) {
+          console.error('submit_feedback: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
+        }
+
+        let fbParsed: any = null;
+        let fbJson = true;
+        try {
+          fbParsed = JSON.parse(fbTrimmed);
+        } catch {
+          fbJson = false;
+        }
+
+        // MEASURED 2026-08-27: n8n's happy path answers this action with the
+        // plain-text body `Feedback gespeichert` — 200, non-empty, not JSON.
+        // Rejecting that would turn a working button red, so a non-empty
+        // unparseable body is passed through as success (same policy as the
+        // generic forward path). Only an empty body is a failure here.
+        if (!fbJson) {
+          console.warn('submit_feedback: non-JSON upstream body:', fbTrimmed.slice(0, 500));
+          return json({ success: true, message: fbTrimmed.slice(0, 500), upstream_raw: fbTrimmed.slice(0, 500) });
+        }
+
+        const fbObj = Array.isArray(fbParsed) ? fbParsed[0] : fbParsed;
+        const fbOk =
+          fbObj && typeof fbObj === 'object' &&
+          fbObj.success !== false &&
+          fbObj.status !== 'error' &&
+          !fbObj.error;
+
+        if (!fbOk) {
+          console.error('submit_feedback: upstream reported failure:', fbTrimmed.slice(0, 500));
+          return fail('feedback_not_saved', 502, fbTrimmed);
+        }
+
+        return json({ success: true, message: fbObj.message ?? 'Feedback gespeichert', upstream: fbObj });
       } catch (e) {
         console.error('Feedback forward error:', e);
-        return new Response(
-          JSON.stringify({ success: false, error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('proxy_exception', 500, e);
       }
     }
+
 
 
     // --- INGEST PROJECT (bind a chat to a Drive folder) ---
@@ -393,10 +423,7 @@ Deno.serve(async (req) => {
       try {
         const projectRef = body.project_ref || body.projectRef || '';
         if (!projectRef) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: 'missing_project_ref' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_project_ref', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -408,25 +435,32 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('ingest_project upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
         }
-        let parsed: unknown;
-        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', raw: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('ingest_project: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
+        }
+        let parsed: any;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          console.error('ingest_project: unparseable upstream body:', trimmed.slice(0, 500));
+          return fail('upstream_unparseable', 502, trimmed);
+        }
+        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
+          return fail('ingest_not_confirmed', 502, trimmed);
+        }
+        return json(obj);
       } catch (e) {
         console.error('ingest_project error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
 
     const forwardPayload: Record<string, unknown> = {
@@ -457,38 +491,44 @@ Deno.serve(async (req) => {
 
     console.log('Forwarding to n8n:', JSON.stringify({ ...forwardPayload, file_base64: forwardPayload.file_base64 ? '[omitted]' : undefined }));
 
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(forwardPayload),
-    })
+    let response: Response
+    try {
+      response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(forwardPayload),
+      })
+    } catch (e) {
+      console.error('Webhook unreachable:', e)
+      return fail('upstream_unreachable', 502, e)
+    }
 
     const rawText = await response.text()
     console.log('Webhook raw response status:', response.status, 'body:', rawText)
 
     if (!response.ok) {
-      return new Response(
-        JSON.stringify({ error: `Webhook responded with ${response.status}`, details: rawText }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return fail('upstream_error', 502, rawText)
+    }
+
+    // An empty 2xx is the known n8n trap: a branch that yields zero items ends
+    // the run silently and the webhook answers 200 with nothing in it.
+    if (!rawText || !rawText.trim()) {
+      console.error('upstream 2xx with empty body for action', effectiveAction)
+      return fail('upstream_empty', 502)
     }
 
     let data: unknown
     try {
       data = JSON.parse(rawText)
     } catch {
-      data = { output: rawText || 'No response from webhook' }
+      // Non-empty but not JSON is NOT a failure — keep wrapping it as before.
+      data = { output: rawText }
     }
 
-    return new Response(
-      JSON.stringify(data),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json(data)
   } catch (error) {
     console.error('Chat proxy error:', error)
-    return new Response(
-      JSON.stringify({ error: 'Failed to process message', details: String(error) }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return fail('proxy_exception', 500, error)
   }
 })
+

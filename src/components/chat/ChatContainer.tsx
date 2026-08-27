@@ -411,10 +411,42 @@ export const ChatContainer = () => {
   };
 
   const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
-    const { data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+    const { ok, status, data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+
+    // A real HTTP failure is a real failure.
+    if (!ok) {
+      const code =
+        data && typeof data === "object" && typeof (data as any).error === "string"
+          ? (data as any).error
+          : `http_${status}`;
+      console.error("chat-proxy failed:", status, rawText);
+      throw new Error(`BackendError: ${code}`);
+    }
+
     if (!rawText) throw new Error("Leere Antwort vom Server.");
+
+    // Belt and braces: a 200 body that is nothing but an error envelope is still a
+    // failure. Only treat it as one when NO answer-shaped field is present, so the
+    // deliberate user-facing guidance messages still render normally.
+    const obj = Array.isArray(data) ? data[0] : data;
+    if (
+      obj && typeof obj === "object" &&
+      typeof obj.error === "string" &&
+      obj.antwort === undefined &&
+      obj.action === undefined &&
+      obj.ready === undefined &&
+      obj.output === undefined &&
+      obj.entwurf_stellungnahme === undefined &&
+      obj.antwortschreiben_entwurf === undefined &&
+      obj.projekt_und_sachverhalt === undefined
+    ) {
+      console.error("chat-proxy returned an error envelope at 200:", rawText);
+      throw new Error(`BackendError: ${obj.error}`);
+    }
+
     return data;
   };
+
 
 
   // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
@@ -818,9 +850,21 @@ export const ChatContainer = () => {
         try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
 
+      // An error envelope must never become an assistant message, and must never be
+      // written to chat history. Throw so the German error path below runs.
+      const parsedFinal = Array.isArray(data) ? data[0] : data;
+      if (
+        parsedFinal && typeof parsedFinal === "object" &&
+        typeof parsedFinal.error === "string" &&
+        !parsedFinal.antwort && !parsedFinal.action && !parsedFinal.entwurf_stellungnahme &&
+        !parsedFinal.antwortschreiben_entwurf && !parsedFinal.projekt_und_sachverhalt
+      ) {
+        throw new Error(`BackendError: ${parsedFinal.error}`);
+      }
 
       const { message: assistantMessage, responseText, meta } =
         buildAssistantMessage(data, performance.now() - startTime);
+
 
       if (activeConversationRef.current === sendConversationId) {
         setMessages((prev) => [...prev, assistantMessage]);
@@ -845,10 +889,13 @@ export const ChatContainer = () => {
       }
       const isAbort = errName === "AbortError";
       const isPollTimeout = errMsgStr === "PollTimeout";
+      const isBackendError = errMsgStr.startsWith("BackendError:");
       const msg = isPollTimeout
         ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
         : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
+        : isBackendError
+        ? "Die Anfrage konnte nicht verarbeitet werden — der Server hat einen Fehler gemeldet. Bitte versuchen Sie es erneut. Wenn der Fehler erneut auftritt, melden Sie ihn bitte."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
       const errorMessage: Message = {
         id: crypto.randomUUID(),
@@ -1005,6 +1052,16 @@ export const ChatContainer = () => {
       console.log("[DRAFT EDIT] n8n response:", data);
 
       const parsed = Array.isArray(data) ? data[0] : data;
+      // Never persist or render an error envelope as a revised draft.
+      if (
+        parsed && typeof parsed === "object" &&
+        typeof (parsed as any).error === "string" &&
+        !(parsed as any).antwort && !(parsed as any).entwurf_stellungnahme &&
+        !(parsed as any).projekt_und_sachverhalt && !(parsed as any).output
+      ) {
+        throw new Error(`BackendError: ${(parsed as any).error}`);
+      }
+
       let responseText: string;
       let usedChunkIds: string[] = [];
       let usedParagraphs: string[] = [];
@@ -1049,7 +1106,12 @@ export const ChatContainer = () => {
       if (historyEnabled) loadConversations();
     } catch (e) {
       console.error("Draft edit error:", e);
-      toast.error("Entwurf konnte nicht aktualisiert werden.");
+      const m = e instanceof Error ? e.message : String(e);
+      toast.error(
+        m.startsWith("BackendError:")
+          ? "Der Server hat die Überarbeitung abgelehnt. Der Entwurf wurde nicht geändert."
+          : "Entwurf konnte nicht aktualisiert werden.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1065,20 +1127,22 @@ export const ChatContainer = () => {
       const { data, error } = await supabase.functions.invoke("chat-proxy", {
         body: { action: "save_statement", sessionId, statement_text: newText },
       });
-      if (error) return { error: error.message };
-      const saved = data && (data.saved === true || data.status === "success");
-      if (!saved) return { error: data?.error || "Speichern fehlgeschlagen" };
+      // chat-proxy now answers non-2xx when the backend did not confirm the write.
+      if (error) return { error: "Speichern fehlgeschlagen — der Server hat den Vorgang nicht bestätigt." };
+      const parsed = Array.isArray(data) ? data[0] : data;
+      const saved = parsed && (parsed.saved === true || parsed.status === "success");
+      if (!saved) return { error: parsed?.error || "Speichern fehlgeschlagen — keine Bestätigung vom Server." };
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
         try {
           const trimmed = (m.content || "").trim();
           if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return m;
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) {
-            parsed[0] = { ...parsed[0], entwurf_stellungnahme: newText };
-            return { ...m, content: JSON.stringify(parsed) };
+          const parsedMsg = JSON.parse(trimmed);
+          if (Array.isArray(parsedMsg)) {
+            parsedMsg[0] = { ...parsedMsg[0], entwurf_stellungnahme: newText };
+            return { ...m, content: JSON.stringify(parsedMsg) };
           }
-          return { ...m, content: JSON.stringify({ ...parsed, entwurf_stellungnahme: newText }) };
+          return { ...m, content: JSON.stringify({ ...parsedMsg, entwurf_stellungnahme: newText }) };
         } catch { return m; }
       }));
       return true;
@@ -1086,6 +1150,7 @@ export const ChatContainer = () => {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   };
+
 
   // --- PROJECT PICKER: bind a chat to a Google Drive project folder ---
   const bindProject = async (ref: string) => {
