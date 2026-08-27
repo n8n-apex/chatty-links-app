@@ -293,16 +293,10 @@ Deno.serve(async (req) => {
         const sessionId = body.sessionId || body.session_id || null;
         const statementText = typeof body.statement_text === 'string' ? body.statement_text : '';
         if (!sessionId) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: 'missing_session_id' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_session_id', 400);
         }
         if (!statementText.trim()) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: 'empty_statement' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('empty_statement', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -315,25 +309,32 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', saved: false, error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('save_statement upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
+        }
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('save_statement: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
         }
         let parsed: any;
-        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', saved: true, raw: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          console.error('save_statement: unparseable upstream body:', trimmed.slice(0, 500));
+          return fail('upstream_unparseable', 502, trimmed);
+        }
+        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.saved === false || obj.error) {
+          return fail('save_not_confirmed', 502, trimmed);
+        }
+        return json(obj);
       } catch (e) {
         console.error('save_statement error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', saved: false, error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
     if (body.action === 'submit_feedback') {
       try {
