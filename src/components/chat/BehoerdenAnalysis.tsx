@@ -314,28 +314,34 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>3. Beurteilung der Einzelfakten</SectionHeading>
           <div className="flex flex-col gap-2">
-            {beurteilung.map((item, i) => (
-              <div key={i} className="rounded-md border border-border bg-background/40 p-3">
-                {item.fakt && (
-                  <div className="text-sm">
-                    <span className="font-semibold text-muted-foreground">Fakt: </span>
-                    <span className="text-foreground">{item.fakt}</span>
-                  </div>
-                )}
-                {item.beurteilung && (
-                  <div className="mt-1 flex items-baseline gap-2 text-sm">
-                    <span className="font-semibold text-muted-foreground">Beurteilung:</span>
-                    <Pill label={item.beurteilung} className={beurteilungClass(item.beurteilung)} />
-                  </div>
-                )}
-                {item.rechtsgrundlage && (
-                  <div className="mt-1 text-sm">
-                    <span className="font-semibold text-muted-foreground">Rechtsgrundlage: </span>
-                    <span className="text-foreground">{item.rechtsgrundlage}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+            {beurteilung.map((item, i) => {
+              const fakt = toText(item?.fakt);
+              const beurt = toText(item?.beurteilung);
+              const rg = toText(item?.rechtsgrundlage);
+              return (
+                <div key={i} className="rounded-md border border-border bg-background/40 p-3">
+                  {fakt.trim() && (
+                    <div className="text-sm">
+                      <span className="font-semibold text-muted-foreground">Fakt: </span>
+                      <span className="text-foreground">{fakt}</span>
+                    </div>
+                  )}
+                  {beurt.trim() && (
+                    <div className="mt-1 flex items-baseline gap-2 text-sm">
+                      <span className="font-semibold text-muted-foreground">Beurteilung:</span>
+                      <Pill label={beurt} className={beurteilungClass(beurt)} />
+                    </div>
+                  )}
+                  {rg.trim() && (
+                    <div className="mt-1 text-sm">
+                      <span className="font-semibold text-muted-foreground">Rechtsgrundlage: </span>
+                      <span className="text-foreground">{rg}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
           </div>
         </Sec>
       )}
