@@ -151,12 +151,10 @@ Deno.serve(async (req) => {
 
     if (!isMessageless) {
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
-        return new Response(
-          JSON.stringify({ error: 'message is required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return fail('missing_message', 400)
       }
     }
+
 
     // Detect local file path and return helpful error immediately
     if (body.message?.match(/^\/Users\/|^C:\\|^\/home\//i)) {
