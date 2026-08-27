@@ -544,7 +544,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Antwortschreiben Entwurf */}
-      {data.antwortschreiben_entwurf && (
+      {letterText.trim() && (
         <Sec>
           <SectionHeading>Antwortschreiben-Entwurf</SectionHeading>
           <div className="relative rounded-lg border border-border bg-background p-5">
@@ -580,8 +580,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
             {data.rechtsprechung_footnotes.map((f, i) => {
               const isVerified = f.status === 'verified';
               const num = typeof f.footnote_num === 'number' ? f.footnote_num : null;
-              const cite = (f.display || '').trim();
-              const href = f.fundstelle || null;
+              const cite = toText(f?.display).trim();
+              const href = typeof f?.fundstelle === 'string' && f.fundstelle.trim() ? f.fundstelle : null;
               return (
                 <div
                   key={i}
