@@ -205,27 +205,12 @@ Deno.serve(async (req) => {
       const driveMatch = body.message?.match(/\/d\/([a-zA-Z0-9_-]+)/);
       const cleanId = driveMatch?.[1]?.split('/')[0]?.split('?')[0] || '';
 
-      if (!cleanId && !body.file_id && !body.file_base64) {
-        return new Response(
-          JSON.stringify({
-            status: 'success',
-            action: 'question',
-            frage: '',
-            bundesland: 'nicht erkannt',
-            antwort: 'Bitte fügen Sie einen gültigen Google Drive Link zu einem Behördenschreiben ein. Beispiel: https://drive.google.com/file/d/FILE_ID/view',
-            rechtsgrundlage: [],
-            fehlende_informationen: null,
-            naechste_schritte: null,
-            wichtiger_hinweis: null,
-            quellen: [],
-            model_used: 'none',
-            tokens_used: {}
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // NOTE: no fileless short-circuit here any more. n8n answers a
+      // document-less analyze_pdf as a legal question with a routing notice,
+      // which is strictly better than telling the user to paste a Drive link.
 
       if (cleanId) body.file_id = cleanId;
+
 
       const stateMap: Record<string, string> = {
         'bayern': 'Bayern', 'münchen': 'Bayern', 'nürnberg': 'Bayern', 'bamberg': 'Bayern', 'augsburg': 'Bayern',
