@@ -4,6 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
+import { toText, toStringList } from '@/lib/safeText';
+import { toast } from 'sonner';
+
+
 
 interface Rechtsprechung {
   display?: string;
@@ -27,23 +31,30 @@ interface RechtsprechungFootnote {
 
 
 
-const Md = ({ children }: { children: string }) => (
-  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
-    <ReactMarkdown
-      components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
-        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-        li: ({ children }) => <li className="mb-1">{children}</li>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
-        ),
-      }}
-    >
-      {children}
-    </ReactMarkdown>
-  </div>
-);
+// `children` is typed unknown on purpose: the backend is not schema-stable and
+// react-markdown throws on non-string input, which would take down the tree.
+const Md = ({ children }: { children: unknown }) => {
+  const text = toText(children);
+  if (!text.trim()) return null;
+  return (
+    <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc">
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+          li: ({ children }) => <li className="mb-1">{children}</li>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+};
+
 
 type Beurteilung = 'Begründet' | 'Teilweise begründet' | 'Nicht begründet' | 'Unklar' | string;
 type Risiko = 'Hoch' | 'Mittel' | 'Gering' | string;
@@ -183,41 +194,42 @@ const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) 
 export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => {
   const [copied, setCopied] = useState(false);
 
-  const beurteilung = data.beurteilung_der_einzelfakten || [];
-  const forderungen = data.analyse_der_forderungen || [];
-  const rechtsgrundlageArr = Array.isArray(data.rechtsgrundlage)
-    ? data.rechtsgrundlage
-    : typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage
-    ? [data.rechtsgrundlage]
-    : [];
-  const naechsteSchritteArr = Array.isArray(data.naechste_schritte)
-    ? data.naechste_schritte
-    : typeof data.naechste_schritte === 'string' && data.naechste_schritte
-    ? [data.naechste_schritte]
-    : [];
+  const beurteilung = Array.isArray(data.beurteilung_der_einzelfakten) ? data.beurteilung_der_einzelfakten : [];
+  const forderungen = Array.isArray(data.analyse_der_forderungen) ? data.analyse_der_forderungen : [];
+  const rechtsgrundlageArr = toStringList(data.rechtsgrundlage);
+  const naechsteSchritteArr = toStringList(data.naechste_schritte);
 
-  const detailFields: Array<{ label: string; value: string | null | undefined }> = [
-    { label: 'Absender (Behörde)', value: data.absender_behoerde },
-    { label: 'Aktenzeichen', value: data.aktenzeichen },
-    { label: 'Antragsteller', value: data.antragsteller },
-    { label: 'Bauvorhaben', value: data.bauvorhaben },
-    { label: 'Bundesland', value: data.bundesland },
+  const detailFields: Array<{ label: string; value: string }> = [
+    { label: 'Absender (Behörde)', value: toText(data.absender_behoerde) },
+    { label: 'Aktenzeichen', value: toText(data.aktenzeichen) },
+    { label: 'Antragsteller', value: toText(data.antragsteller) },
+    { label: 'Bauvorhaben', value: toText(data.bauvorhaben) },
+    { label: 'Bundesland', value: toText(data.bundesland) },
   ];
-  if (data.ziel_des_nutzers) {
-    detailFields.push({ label: 'Ziel des Nutzers', value: data.ziel_des_nutzers });
+  if (toText(data.ziel_des_nutzers).trim()) {
+    detailFields.push({ label: 'Ziel des Nutzers', value: toText(data.ziel_des_nutzers) });
   }
-  const showDetails = detailFields.some((f) => f.value !== undefined && f.value !== null && String(f.value).trim() !== '');
+  const showDetails = detailFields.some((f) => f.value.trim() !== '');
+
+  const letterText = toText(data.antwortschreiben_entwurf);
 
   const handleCopyLetter = async () => {
-    if (!data.antwortschreiben_entwurf) return;
+    // The backend has shipped objects in this field before; never let a
+    // "[object Object]" string reach the clipboard of a letter to an authority.
+    if (typeof data.antwortschreiben_entwurf !== 'string' || !letterText.trim()) {
+      toast.error('Der Entwurf konnte nicht kopiert werden (unerwartetes Format). Bitte den Text manuell markieren.');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(data.antwortschreiben_entwurf);
+      await navigator.clipboard.writeText(letterText);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      toast.error('Kopieren fehlgeschlagen. Bitte den Text manuell markieren und kopieren.');
+      console.error('[BehoerdenAnalysis] clipboard write failed', e);
     }
   };
+
 
   const formattedTimestamp = (() => {
     if (!data.timestamp) return null;
@@ -251,18 +263,18 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       <Sec>
         <div className="rounded-xl border border-border bg-background/40 p-4">
           <div className="text-base font-semibold text-foreground">Behördenschreiben Analyse</div>
-          {data.dateiname && (
-            <div className="mt-0.5 text-xs text-muted-foreground">{data.dateiname}</div>
+          {toText(data.dateiname).trim() && (
+            <div className="mt-0.5 text-xs text-muted-foreground">{toText(data.dateiname)}</div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            {data.gesamtbeurteilung && (
-              <Pill label={`Gesamt: ${data.gesamtbeurteilung}`} className={beurteilungClass(data.gesamtbeurteilung)} />
+            {toText(data.gesamtbeurteilung).trim() && (
+              <Pill label={`Gesamt: ${toText(data.gesamtbeurteilung)}`} className={beurteilungClass(toText(data.gesamtbeurteilung))} />
             )}
-            {data.risikobewertung && (
-              <Pill label={`Risiko: ${data.risikobewertung}`} className={risikoClass(data.risikobewertung)} />
+            {toText(data.risikobewertung).trim() && (
+              <Pill label={`Risiko: ${toText(data.risikobewertung)}`} className={risikoClass(toText(data.risikobewertung))} />
             )}
-            {data.konfidenz && (
-              <Pill label={`Konfidenz: ${data.konfidenz}`} className={konfidenzClass(data.konfidenz)} />
+            {toText(data.konfidenz).trim() && (
+              <Pill label={`Konfidenz: ${toText(data.konfidenz)}`} className={konfidenzClass(toText(data.konfidenz))} />
             )}
           </div>
         </div>
@@ -274,8 +286,9 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Dokumentdetails</SectionHeading>
           <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
             {detailFields.map((f) => (
-              <DetailRow key={f.label} label={f.label} value={f.value && String(f.value).trim() ? f.value : '—'} />
+              <DetailRow key={f.label} label={f.label} value={f.value.trim() ? f.value : '—'} />
             ))}
+
           </div>
         </Sec>
       )}
@@ -301,28 +314,34 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>3. Beurteilung der Einzelfakten</SectionHeading>
           <div className="flex flex-col gap-2">
-            {beurteilung.map((item, i) => (
-              <div key={i} className="rounded-md border border-border bg-background/40 p-3">
-                {item.fakt && (
-                  <div className="text-sm">
-                    <span className="font-semibold text-muted-foreground">Fakt: </span>
-                    <span className="text-foreground">{item.fakt}</span>
-                  </div>
-                )}
-                {item.beurteilung && (
-                  <div className="mt-1 flex items-baseline gap-2 text-sm">
-                    <span className="font-semibold text-muted-foreground">Beurteilung:</span>
-                    <Pill label={item.beurteilung} className={beurteilungClass(item.beurteilung)} />
-                  </div>
-                )}
-                {item.rechtsgrundlage && (
-                  <div className="mt-1 text-sm">
-                    <span className="font-semibold text-muted-foreground">Rechtsgrundlage: </span>
-                    <span className="text-foreground">{item.rechtsgrundlage}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+            {beurteilung.map((item, i) => {
+              const fakt = toText(item?.fakt);
+              const beurt = toText(item?.beurteilung);
+              const rg = toText(item?.rechtsgrundlage);
+              return (
+                <div key={i} className="rounded-md border border-border bg-background/40 p-3">
+                  {fakt.trim() && (
+                    <div className="text-sm">
+                      <span className="font-semibold text-muted-foreground">Fakt: </span>
+                      <span className="text-foreground">{fakt}</span>
+                    </div>
+                  )}
+                  {beurt.trim() && (
+                    <div className="mt-1 flex items-baseline gap-2 text-sm">
+                      <span className="font-semibold text-muted-foreground">Beurteilung:</span>
+                      <Pill label={beurt} className={beurteilungClass(beurt)} />
+                    </div>
+                  )}
+                  {rg.trim() && (
+                    <div className="mt-1 text-sm">
+                      <span className="font-semibold text-muted-foreground">Rechtsgrundlage: </span>
+                      <span className="text-foreground">{rg}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
           </div>
         </Sec>
       )}
@@ -338,10 +357,10 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Risikobewertung */}
-      {data.risikobewertung && (
+      {toText(data.risikobewertung).trim() && (
         <Sec>
           <SectionHeading>Risikobewertung</SectionHeading>
-          <Md>{String(data.risikobewertung)}</Md>
+          <Md>{data.risikobewertung}</Md>
         </Sec>
       )}
 
@@ -350,8 +369,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>Genehmigungsfiktion</SectionHeading>
           <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
-            {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
-            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+            {toText(genFiktion!.vorschrift).trim() && <DetailRow label="Vorschrift" value={toText(genFiktion!.vorschrift)} />}
+            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={toText(genFiktion!.frist_tage)} />}
             <DetailRow
               label="Eingetreten"
               value={
@@ -361,7 +380,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                 </span>
               }
             />
-            {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+            {toText(genFiktion!.begruendung).trim() && <DetailRow label="Begründung" value={toText(genFiktion!.begruendung)} />}
           </div>
         </Sec>
       )}
@@ -380,10 +399,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
       {/* Nächste Optionen */}
       {(() => {
-        const opts = data.naechste_optionen;
-        const items = Array.isArray(opts)
-          ? opts
-          : (typeof opts === 'string' && opts.trim() ? [opts] : []);
+        const items = toStringList(data.naechste_optionen);
         if (items.length === 0) return null;
         return (
           <Sec>
@@ -408,16 +424,17 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Rechtsgrundlage unverifiziert */}
-      {Array.isArray(data.rechtsgrundlage_unverifiziert) && data.rechtsgrundlage_unverifiziert.length > 0 && (
+      {toStringList(data.rechtsgrundlage_unverifiziert).length > 0 && (
         <Sec>
           <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
           <div className="flex flex-wrap gap-1.5">
-            {data.rechtsgrundlage_unverifiziert.map((r, i) => (
+            {toStringList(data.rechtsgrundlage_unverifiziert).map((r, i) => (
               <span key={i} className="inline-block rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] italic leading-snug text-muted-foreground max-w-full whitespace-normal break-words text-left align-top">{r}</span>
             ))}
           </div>
         </Sec>
       )}
+
 
 
       {/* Detailanalyse — collapsible legacy */}
@@ -434,10 +451,10 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
             </button>
             {detailOpen && (
               <div className="flex flex-col gap-4 border-t border-border p-3">
-                {data.zusammenfassung && (
+                {toText(data.zusammenfassung).trim() && (
                   <div>
                     <SubHeading>Zusammenfassung</SubHeading>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">{data.zusammenfassung}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">{toText(data.zusammenfassung)}</p>
                   </div>
                 )}
                 {forderungen.length > 0 && (
@@ -445,24 +462,27 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                     <SubHeading>Analyse der Forderungen</SubHeading>
                     <div className="mt-2 flex flex-col gap-2">
                       {forderungen.map((f, i) => {
-                        const beurt = (f.beurteilung || f.bewertung) as string | undefined;
-                        const begr = f.begruendung_mit_quelle || f.begruendung;
+                        const beurt = toText(f?.beurteilung ?? f?.bewertung);
+                        const begr = toText(f?.begruendung_mit_quelle ?? f?.begruendung);
+                        const forderung = toText(f?.forderung);
+                        const fehlend = toText(f?.fehlende_information);
+                        const gegen = toText(f?.gegenargument);
                         return (
                           <div key={i} className="rounded-md border border-border bg-background/40 p-3">
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                              {f.forderung && <div className="text-sm font-semibold text-foreground">{f.forderung}</div>}
-                              {beurt && <Pill label={beurt} className={beurteilungClass(beurt)} />}
+                              {forderung.trim() && <div className="text-sm font-semibold text-foreground">{forderung}</div>}
+                              {beurt.trim() && <Pill label={beurt} className={beurteilungClass(beurt)} />}
                             </div>
-                            {begr && <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>}
-                            {f.fehlende_information && (
+                            {begr.trim() && <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>}
+                            {fehlend.trim() && (
                               <p className="mt-1.5 text-xs text-muted-foreground">
-                                <span className="font-semibold">Fehlende Information:</span> {f.fehlende_information}
+                                <span className="font-semibold">Fehlende Information:</span> {fehlend}
                               </p>
                             )}
-                            {f.gegenargument && (
+                            {gegen.trim() && (
                               <div className="mt-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5">
                                 <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">Gegenargument</div>
-                                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{f.gegenargument}</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{gegen}</p>
                               </div>
                             )}
                           </div>
@@ -471,6 +491,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                     </div>
                   </div>
                 )}
+
                 {rechtsgrundlageArr.length > 0 && (
                   <div>
                     <SubHeading>Rechtsgrundlage</SubHeading>
@@ -490,8 +511,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                   <div>
                     <SubHeading>Genehmigungsfiktion</SubHeading>
                     <div className="mt-1.5 grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
-                      {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
-                      {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+                      {toText(genFiktion!.vorschrift).trim() && <DetailRow label="Vorschrift" value={toText(genFiktion!.vorschrift)} />}
+                      {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={toText(genFiktion!.frist_tage)} />}
                       <DetailRow
                         label="Eingetreten"
                         value={
@@ -501,7 +522,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                           </span>
                         }
                       />
-                      {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+                      {toText(genFiktion!.begruendung).trim() && <DetailRow label="Begründung" value={toText(genFiktion!.begruendung)} />}
+
                     </div>
                   </div>
                 )}
@@ -522,7 +544,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Antwortschreiben Entwurf */}
-      {data.antwortschreiben_entwurf && (
+      {letterText.trim() && (
         <Sec>
           <SectionHeading>Antwortschreiben-Entwurf</SectionHeading>
           <div className="relative rounded-lg border border-border bg-background p-5">
@@ -558,8 +580,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
             {data.rechtsprechung_footnotes.map((f, i) => {
               const isVerified = f.status === 'verified';
               const num = typeof f.footnote_num === 'number' ? f.footnote_num : null;
-              const cite = (f.display || '').trim();
-              const href = f.fundstelle || null;
+              const cite = toText(f?.display).trim();
+              const href = typeof f?.fundstelle === 'string' && f.fundstelle.trim() ? f.fundstelle : null;
               return (
                 <div
                   key={i}
@@ -604,11 +626,12 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                         </span>
                       )}
                     </div>
-                    {f.kernaussage && (
+                    {toText(f?.kernaussage).trim() && (
                       <div className={cn('leading-relaxed', isVerified ? 'text-foreground/90' : 'text-muted-foreground')}>
-                        {f.kernaussage}
+                        {toText(f?.kernaussage)}
                       </div>
                     )}
+
                   </div>
                 </div>
               );
@@ -621,31 +644,36 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <Sec>
             <SectionHeading>Rechtsprechung</SectionHeading>
             <div className="flex flex-col gap-2">
-              {data.rechtsprechung.map((r, i) => (
-                <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
-                  {r.display && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-semibold text-foreground">{r.display}</div>
-                      {r.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
-                        <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
-                          nicht inhaltlich geprüft
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
-                  {r.fundstelle && (
-                    <a
-                      href={r.fundstelle}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Quelle ansehen
-                    </a>
-                  )}
-                </div>
-              ))}
+              {data.rechtsprechung.map((r, i) => {
+                const display = toText(r?.display).trim();
+                const kern = toText(r?.kernaussage).trim();
+                const href = typeof r?.fundstelle === 'string' && r.fundstelle.trim() ? r.fundstelle : null;
+                return (
+                  <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
+                    {display && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">{display}</div>
+                        {r?.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
+                          <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                            nicht inhaltlich geprüft
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {kern && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{kern}</div>}
+                    {href && (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Quelle ansehen
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Sec>
         )
@@ -653,25 +681,26 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
 
       {/* Konfidenz */}
-      {data.konfidenz && (
+      {toText(data.konfidenz).trim() && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span className="uppercase tracking-wide">Konfidenz:</span>
           <span className={cn(
             'inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top',
-            String(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
-            String(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
-            (String(data.konfidenz).toLowerCase() === 'niedrig' || String(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
-          )}>{data.konfidenz}</span>
+            toText(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
+            toText(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
+            (toText(data.konfidenz).toLowerCase() === 'niedrig' || toText(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
+          )}>{toText(data.konfidenz)}</span>
         </div>
       )}
 
       {/* Footer */}
-      {(data.retrieval_summary || formattedTimestamp) && (
+      {(toText(data.retrieval_summary).trim() || formattedTimestamp) && (
         <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 border-t border-border pt-2 text-[10px] text-muted-foreground">
-          {data.retrieval_summary && <span>{data.retrieval_summary}</span>}
+          {toText(data.retrieval_summary).trim() && <span>{toText(data.retrieval_summary)}</span>}
           {formattedTimestamp && <span>{formattedTimestamp}</span>}
         </div>
       )}
+
     </motion.div>
   );
 };

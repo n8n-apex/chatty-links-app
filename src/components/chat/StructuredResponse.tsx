@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCi
 import { cn } from '@/lib/utils';
 import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
+import { toText } from '@/lib/safeText';
+
 
 interface RechtsgrundlageItem {
   paragraph?: string;
@@ -92,23 +94,30 @@ export interface StructuredPayload {
 }
 
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
-const Md = ({ children, className }: { children: string; className?: string }) => (
-  <div className={cn('prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc', className)}>
-    <ReactMarkdown
-      components={{
-        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
-        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-        li: ({ children }) => <li className="mb-1">{children}</li>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
-        ),
-      }}
-    >
-      {children}
-    </ReactMarkdown>
-  </div>
-);
+// `children` is typed unknown on purpose: the backend is not schema-stable and
+// react-markdown throws on non-string input, which would take down the tree.
+const Md = ({ children, className }: { children: unknown; className?: string }) => {
+  const text = toText(children);
+  if (!text.trim()) return null;
+  return (
+    <div className={cn('prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc', className)}>
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
+          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
+          li: ({ children }) => <li className="mb-1">{children}</li>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+};
+
 
 
 export const structuredToPlainText = (data: StructuredPayload): string => {

@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { StructuredResponse, tryParseStructured, structuredToPlainText } from "./StructuredResponse";
 import { ConfidenceIndicator } from "./ConfidenceIndicator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { toText } from "@/lib/safeText";
 
 export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
@@ -200,8 +202,9 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
                     </button>
                   </div>
                 )}
-                {!/<\s*img\s/i.test(message.content) &&
-                  (() => {
+                {!/<\s*img\s/i.test(message.content) && (
+                  <ErrorBoundary variant="inline" resetKey={message.id}>
+                    {(() => {
                     if (structured) {
                       return (
                         <StructuredResponse
@@ -239,11 +242,14 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
                             ),
                           }}
                         >
-                          {message.content}
+                          {toText(message.content)}
                         </ReactMarkdown>
                       </div>
                     );
-                  })()}
+                    })()}
+                  </ErrorBoundary>
+                )}
+
               </>
             )}
           </div>
