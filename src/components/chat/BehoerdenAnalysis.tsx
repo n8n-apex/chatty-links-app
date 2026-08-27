@@ -357,10 +357,10 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Risikobewertung */}
-      {data.risikobewertung && (
+      {toText(data.risikobewertung).trim() && (
         <Sec>
           <SectionHeading>Risikobewertung</SectionHeading>
-          <Md>{String(data.risikobewertung)}</Md>
+          <Md>{data.risikobewertung}</Md>
         </Sec>
       )}
 
@@ -369,8 +369,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
         <Sec>
           <SectionHeading>Genehmigungsfiktion</SectionHeading>
           <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
-            {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
-            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+            {toText(genFiktion!.vorschrift).trim() && <DetailRow label="Vorschrift" value={toText(genFiktion!.vorschrift)} />}
+            {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={toText(genFiktion!.frist_tage)} />}
             <DetailRow
               label="Eingetreten"
               value={
@@ -380,7 +380,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                 </span>
               }
             />
-            {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+            {toText(genFiktion!.begruendung).trim() && <DetailRow label="Begründung" value={toText(genFiktion!.begruendung)} />}
           </div>
         </Sec>
       )}
@@ -399,10 +399,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
       {/* Nächste Optionen */}
       {(() => {
-        const opts = data.naechste_optionen;
-        const items = Array.isArray(opts)
-          ? opts
-          : (typeof opts === 'string' && opts.trim() ? [opts] : []);
+        const items = toStringList(data.naechste_optionen);
         if (items.length === 0) return null;
         return (
           <Sec>
@@ -427,16 +424,17 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       )}
 
       {/* Rechtsgrundlage unverifiziert */}
-      {Array.isArray(data.rechtsgrundlage_unverifiziert) && data.rechtsgrundlage_unverifiziert.length > 0 && (
+      {toStringList(data.rechtsgrundlage_unverifiziert).length > 0 && (
         <Sec>
           <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
           <div className="flex flex-wrap gap-1.5">
-            {data.rechtsgrundlage_unverifiziert.map((r, i) => (
+            {toStringList(data.rechtsgrundlage_unverifiziert).map((r, i) => (
               <span key={i} className="inline-block rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] italic leading-snug text-muted-foreground max-w-full whitespace-normal break-words text-left align-top">{r}</span>
             ))}
           </div>
         </Sec>
       )}
+
 
 
       {/* Detailanalyse — collapsible legacy */}
