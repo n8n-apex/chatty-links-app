@@ -194,8 +194,8 @@ const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) 
 export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => {
   const [copied, setCopied] = useState(false);
 
-  const beurteilung = data.beurteilung_der_einzelfakten || [];
-  const forderungen = data.analyse_der_forderungen || [];
+  const beurteilung = Array.isArray(data.beurteilung_der_einzelfakten) ? data.beurteilung_der_einzelfakten : [];
+  const forderungen = Array.isArray(data.analyse_der_forderungen) ? data.analyse_der_forderungen : [];
   const rechtsgrundlageArr = toStringList(data.rechtsgrundlage);
   const naechsteSchritteArr = toStringList(data.naechste_schritte);
 
