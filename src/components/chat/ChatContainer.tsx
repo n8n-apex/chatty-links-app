@@ -661,6 +661,12 @@ export const ChatContainer = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, progressMsg]);
+        // Record the turn durably so it can be resumed after navigation/reload.
+        try {
+          localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
+            turnId, turnStartedAt, action: "analyze_pdf", fileName: firstFile?.name ?? null,
+          }));
+        } catch { /* ignore */ }
         data = await pollForResult(sessionId, "analyze_pdf", turnId, turnStartedAt, (sec) => {
           setMessages((prev) => prev.map((m) =>
             m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
@@ -669,60 +675,22 @@ export const ChatContainer = () => {
         // Remove the placeholder before rendering the final assistant message.
         setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
         progressMsgId = null;
+        // The result is in hand — the turn no longer needs resuming.
+        try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
 
 
-      let responseText: string;
-      let imageUrl: string | undefined;
-      let usedChunkIds: string[] = [];
-      let usedParagraphs: string[] = [];
-      let responseId: string | undefined;
-      let needsClarification = false;
-      let routingNotice: string | undefined;
+      const { message: assistantMessage, responseText, meta } =
+        buildAssistantMessage(data, performance.now() - startTime);
 
-      const parsed = Array.isArray(data) ? data[0] : data;
-
-      if (typeof data === "string") {
-        responseText = data;
-      } else if (parsed && typeof parsed === "object") {
-        imageUrl = parsed.imageUrl || parsed.image_url || undefined;
-        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
-        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
-        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
-        if (parsed.needs_clarification === true) needsClarification = true;
-        if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
-          routingNotice = parsed.routing_notice.trim();
-        }
-        if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
-          // Strip the routing notice from the start of antwort so it isn't duplicated in the chip.
-          if (routingNotice && typeof parsed.antwort === "string" && parsed.antwort.startsWith(routingNotice)) {
-            parsed.antwort = parsed.antwort.slice(routingNotice.length).replace(/^\s*[\n\r]\s*/, "");
-          }
-          responseText = JSON.stringify(parsed);
-        } else {
-          responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
-        }
-      } else {
-        responseText = String(data);
+      if (activeConversationRef.current === sendConversationId) {
+        setMessages((prev) => [...prev, assistantMessage]);
       }
-
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        content: responseText,
-        role: "assistant",
-        timestamp: new Date(),
-        imageUrl,
-        durationMs: performance.now() - startTime,
-        responseId,
-        usedChunkIds,
-        usedParagraphs,
-        needsClarification,
-        routingNotice,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
+      // The user may have switched away. The answer belongs to sendConversationId;
+      // persist it there — resume-on-open surfaces it when they return.
+      persistMessage("ai", responseText, meta, sendConversationId);
       if (historyEnabled) loadConversations();
+
     } catch (error) {
       console.error("Fehler beim Senden:", error);
       // Clean up progress placeholder from async analyze_pdf, if any.
