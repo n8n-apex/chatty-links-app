@@ -626,11 +626,12 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                         </span>
                       )}
                     </div>
-                    {f.kernaussage && (
+                    {toText(f?.kernaussage).trim() && (
                       <div className={cn('leading-relaxed', isVerified ? 'text-foreground/90' : 'text-muted-foreground')}>
-                        {f.kernaussage}
+                        {toText(f?.kernaussage)}
                       </div>
                     )}
+
                   </div>
                 </div>
               );
