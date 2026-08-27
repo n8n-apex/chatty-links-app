@@ -263,18 +263,18 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       <Sec>
         <div className="rounded-xl border border-border bg-background/40 p-4">
           <div className="text-base font-semibold text-foreground">Behördenschreiben Analyse</div>
-          {data.dateiname && (
-            <div className="mt-0.5 text-xs text-muted-foreground">{data.dateiname}</div>
+          {toText(data.dateiname).trim() && (
+            <div className="mt-0.5 text-xs text-muted-foreground">{toText(data.dateiname)}</div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            {data.gesamtbeurteilung && (
-              <Pill label={`Gesamt: ${data.gesamtbeurteilung}`} className={beurteilungClass(data.gesamtbeurteilung)} />
+            {toText(data.gesamtbeurteilung).trim() && (
+              <Pill label={`Gesamt: ${toText(data.gesamtbeurteilung)}`} className={beurteilungClass(toText(data.gesamtbeurteilung))} />
             )}
-            {data.risikobewertung && (
-              <Pill label={`Risiko: ${data.risikobewertung}`} className={risikoClass(data.risikobewertung)} />
+            {toText(data.risikobewertung).trim() && (
+              <Pill label={`Risiko: ${toText(data.risikobewertung)}`} className={risikoClass(toText(data.risikobewertung))} />
             )}
-            {data.konfidenz && (
-              <Pill label={`Konfidenz: ${data.konfidenz}`} className={konfidenzClass(data.konfidenz)} />
+            {toText(data.konfidenz).trim() && (
+              <Pill label={`Konfidenz: ${toText(data.konfidenz)}`} className={konfidenzClass(toText(data.konfidenz))} />
             )}
           </div>
         </div>
@@ -286,8 +286,9 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <SectionHeading>Dokumentdetails</SectionHeading>
           <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
             {detailFields.map((f) => (
-              <DetailRow key={f.label} label={f.label} value={f.value && String(f.value).trim() ? f.value : '—'} />
+              <DetailRow key={f.label} label={f.label} value={f.value.trim() ? f.value : '—'} />
             ))}
+
           </div>
         </Sec>
       )}
