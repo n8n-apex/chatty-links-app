@@ -579,7 +579,7 @@ export const ChatContainer = () => {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
-      persistMessage("user", displayContent);
+      persistMessage("user", displayContent, undefined, sendConversationId);
     }
     setIsLoading(true);
 
