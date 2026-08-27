@@ -416,6 +416,9 @@ export const ChatContainer = () => {
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
+    // The conversation this send belongs to. Answers must be stored here even if
+    // the user navigates away, and must NOT be rendered into another thread.
+    const sendConversationId = conversationId;
     if (sessionId !== localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", sessionId);
     }
