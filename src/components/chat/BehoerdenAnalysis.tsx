@@ -644,31 +644,36 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           <Sec>
             <SectionHeading>Rechtsprechung</SectionHeading>
             <div className="flex flex-col gap-2">
-              {data.rechtsprechung.map((r, i) => (
-                <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
-                  {r.display && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-semibold text-foreground">{r.display}</div>
-                      {r.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
-                        <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
-                          nicht inhaltlich geprüft
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {r.kernaussage && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{r.kernaussage}</div>}
-                  {r.fundstelle && (
-                    <a
-                      href={r.fundstelle}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Quelle ansehen
-                    </a>
-                  )}
-                </div>
-              ))}
+              {data.rechtsprechung.map((r, i) => {
+                const display = toText(r?.display).trim();
+                const kern = toText(r?.kernaussage).trim();
+                const href = typeof r?.fundstelle === 'string' && r.fundstelle.trim() ? r.fundstelle : null;
+                return (
+                  <div key={i} className="rounded-md border border-border bg-background/40 p-2.5">
+                    {display && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-foreground">{display}</div>
+                        {r?.inhaltlich_geprueft === false && !data.rechtsprechung_grounding_disabled && (
+                          <span className="inline-flex items-center rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                            nicht inhaltlich geprüft
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {kern && <div className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{kern}</div>}
+                    {href && (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Quelle ansehen
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Sec>
         )
@@ -676,25 +681,26 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
 
       {/* Konfidenz */}
-      {data.konfidenz && (
+      {toText(data.konfidenz).trim() && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span className="uppercase tracking-wide">Konfidenz:</span>
           <span className={cn(
             'inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-snug max-w-full whitespace-normal break-words text-left align-top',
-            String(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
-            String(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
-            (String(data.konfidenz).toLowerCase() === 'niedrig' || String(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
-          )}>{data.konfidenz}</span>
+            toText(data.konfidenz).toLowerCase() === 'hoch' && 'border-green-500/40 bg-green-500/10 text-green-600',
+            toText(data.konfidenz).toLowerCase() === 'mittel' && 'border-yellow-500/40 bg-yellow-500/10 text-yellow-600',
+            (toText(data.konfidenz).toLowerCase() === 'niedrig' || toText(data.konfidenz).toLowerCase() === 'unzureichend') && 'border-red-500/40 bg-red-500/10 text-red-600',
+          )}>{toText(data.konfidenz)}</span>
         </div>
       )}
 
       {/* Footer */}
-      {(data.retrieval_summary || formattedTimestamp) && (
+      {(toText(data.retrieval_summary).trim() || formattedTimestamp) && (
         <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 border-t border-border pt-2 text-[10px] text-muted-foreground">
-          {data.retrieval_summary && <span>{data.retrieval_summary}</span>}
+          {toText(data.retrieval_summary).trim() && <span>{toText(data.retrieval_summary)}</span>}
           {formattedTimestamp && <span>{formattedTimestamp}</span>}
         </div>
       )}
+
     </motion.div>
   );
 };
