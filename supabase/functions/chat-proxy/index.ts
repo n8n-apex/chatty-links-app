@@ -245,10 +245,7 @@ Deno.serve(async (req) => {
 
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL')
     if (!webhookUrl) {
-      return new Response(
-        JSON.stringify({ error: 'Webhook URL not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return fail('webhook_not_configured', 500)
     }
 
     // --- CONVERSATIONAL DRAFT EDIT (dedicated, no chat history) ---
@@ -257,10 +254,7 @@ Deno.serve(async (req) => {
         const sessionId = body.sessionId || body.session_id || null;
         const topic = typeof body.topic === 'string' ? body.topic : '';
         if (!sessionId) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: 'missing_session_id' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_session_id', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -274,25 +268,24 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('draft_statement edit upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
+        }
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('draft_statement edit: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
         }
         let parsed: unknown;
-        try { parsed = JSON.parse(txt); } catch { parsed = { output: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // A non-empty body that is not JSON is not automatically a failure.
+        try { parsed = JSON.parse(trimmed); } catch { parsed = { output: trimmed }; }
+        return json(parsed);
       } catch (e) {
         console.error('draft_statement edit error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
     // --- SAVE EDITED STATEMENT (manual pencil-edit) ---
     if (body.action === 'save_statement') {
