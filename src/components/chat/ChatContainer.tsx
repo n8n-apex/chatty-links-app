@@ -581,6 +581,8 @@ export const ChatContainer = () => {
           file_base64: encoded[0].file_base64,
           additional_question: content || null,
           message: "Analysiere dieses Behördenschreiben",
+          client_turn_id: turnId,
+          turn_id: turnId,
         };
         // The typed text is the objective in Behördenschreiben mode.
         const effectiveZiel = (ziel && ziel.trim()) || (content || '').trim();
@@ -636,7 +638,7 @@ export const ChatContainer = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, progressMsg]);
-        data = await pollForResult(sessionId, "analyze_pdf", (sec) => {
+        data = await pollForResult(sessionId, "analyze_pdf", turnId, turnStartedAt, (sec) => {
           setMessages((prev) => prev.map((m) =>
             m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
           ));
