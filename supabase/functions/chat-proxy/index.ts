@@ -491,38 +491,44 @@ Deno.serve(async (req) => {
 
     console.log('Forwarding to n8n:', JSON.stringify({ ...forwardPayload, file_base64: forwardPayload.file_base64 ? '[omitted]' : undefined }));
 
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(forwardPayload),
-    })
+    let response: Response
+    try {
+      response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(forwardPayload),
+      })
+    } catch (e) {
+      console.error('Webhook unreachable:', e)
+      return fail('upstream_unreachable', 502, e)
+    }
 
     const rawText = await response.text()
     console.log('Webhook raw response status:', response.status, 'body:', rawText)
 
     if (!response.ok) {
-      return new Response(
-        JSON.stringify({ error: `Webhook responded with ${response.status}`, details: rawText }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return fail('upstream_error', 502, rawText)
+    }
+
+    // An empty 2xx is the known n8n trap: a branch that yields zero items ends
+    // the run silently and the webhook answers 200 with nothing in it.
+    if (!rawText || !rawText.trim()) {
+      console.error('upstream 2xx with empty body for action', effectiveAction)
+      return fail('upstream_empty', 502)
     }
 
     let data: unknown
     try {
       data = JSON.parse(rawText)
     } catch {
-      data = { output: rawText || 'No response from webhook' }
+      // Non-empty but not JSON is NOT a failure — keep wrapping it as before.
+      data = { output: rawText }
     }
 
-    return new Response(
-      JSON.stringify(data),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json(data)
   } catch (error) {
     console.error('Chat proxy error:', error)
-    return new Response(
-      JSON.stringify({ error: 'Failed to process message', details: String(error) }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return fail('proxy_exception', 500, error)
   }
 })
+
