@@ -550,8 +550,10 @@ export const ChatContainer = () => {
           role: "assistant",
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, ackMessage]);
-        persistMessage("ai", summary);
+        if (activeConversationRef.current === sendConversationId) {
+          setMessages((prev) => [...prev, ackMessage]);
+        }
+        persistMessage("ai", summary, undefined, sendConversationId);
         // The typed text is a real request — run it after the uploads, without
         // duplicating the user bubble that already contains it.
         if (typed) {
