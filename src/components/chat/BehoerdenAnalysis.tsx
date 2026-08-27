@@ -451,10 +451,10 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
             </button>
             {detailOpen && (
               <div className="flex flex-col gap-4 border-t border-border p-3">
-                {data.zusammenfassung && (
+                {toText(data.zusammenfassung).trim() && (
                   <div>
                     <SubHeading>Zusammenfassung</SubHeading>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">{data.zusammenfassung}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-line">{toText(data.zusammenfassung)}</p>
                   </div>
                 )}
                 {forderungen.length > 0 && (
@@ -462,24 +462,27 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                     <SubHeading>Analyse der Forderungen</SubHeading>
                     <div className="mt-2 flex flex-col gap-2">
                       {forderungen.map((f, i) => {
-                        const beurt = (f.beurteilung || f.bewertung) as string | undefined;
-                        const begr = f.begruendung_mit_quelle || f.begruendung;
+                        const beurt = toText(f?.beurteilung ?? f?.bewertung);
+                        const begr = toText(f?.begruendung_mit_quelle ?? f?.begruendung);
+                        const forderung = toText(f?.forderung);
+                        const fehlend = toText(f?.fehlende_information);
+                        const gegen = toText(f?.gegenargument);
                         return (
                           <div key={i} className="rounded-md border border-border bg-background/40 p-3">
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                              {f.forderung && <div className="text-sm font-semibold text-foreground">{f.forderung}</div>}
-                              {beurt && <Pill label={beurt} className={beurteilungClass(beurt)} />}
+                              {forderung.trim() && <div className="text-sm font-semibold text-foreground">{forderung}</div>}
+                              {beurt.trim() && <Pill label={beurt} className={beurteilungClass(beurt)} />}
                             </div>
-                            {begr && <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>}
-                            {f.fehlende_information && (
+                            {begr.trim() && <p className="mt-1.5 text-xs leading-relaxed text-foreground/90">{begr}</p>}
+                            {fehlend.trim() && (
                               <p className="mt-1.5 text-xs text-muted-foreground">
-                                <span className="font-semibold">Fehlende Information:</span> {f.fehlende_information}
+                                <span className="font-semibold">Fehlende Information:</span> {fehlend}
                               </p>
                             )}
-                            {f.gegenargument && (
+                            {gegen.trim() && (
                               <div className="mt-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5">
                                 <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">Gegenargument</div>
-                                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{f.gegenargument}</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{gegen}</p>
                               </div>
                             )}
                           </div>
@@ -488,6 +491,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                     </div>
                   </div>
                 )}
+
                 {rechtsgrundlageArr.length > 0 && (
                   <div>
                     <SubHeading>Rechtsgrundlage</SubHeading>
