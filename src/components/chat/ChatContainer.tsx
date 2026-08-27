@@ -342,6 +342,8 @@ export const ChatContainer = () => {
   const pollForResult = async (
     sessionId: string,
     targetAction: string,
+    turnId: string,
+    turnStartedAt: number,
     onTick: (elapsedSec: number) => void,
   ): Promise<any> => {
     const token = ++pollCancelRef.current;
@@ -355,12 +357,29 @@ export const ChatContainer = () => {
       onTick(elapsed);
       try {
         const res = await invokeChatProxy(
-          { action: "get_result", sessionId, target_action: targetAction },
+          { action: "get_result", sessionId, target_action: targetAction,
+            turn_id: turnId, client_turn_id: turnId },
           30000,
         );
         if (pollCancelRef.current !== token) throw new Error("PollCancelled");
         const p = Array.isArray(res) ? res[0] : res;
-        if (p && p.ready === true) return p.payload ?? p;
+        if (p && p.ready === true) {
+          // BELT — the server was asked for this turn. If it answers with a
+          // different one, it is a stale row and must never be rendered.
+          if (p.turn_id && p.turn_id !== turnId) {
+            console.warn("get_result returned a different turn; ignoring", p.turn_id);
+            continue;
+          }
+          // BRACES — a result older than this request cannot belong to it.
+          // Slack covers clock skew and queueing. Keep polling rather than fail.
+          const SLACK_MS = 10000;
+          if (typeof p.age_seconds === "number"
+              && p.age_seconds * 1000 > Date.now() - turnStartedAt + SLACK_MS) {
+            console.warn("get_result returned a result older than this request; ignoring");
+            continue;
+          }
+          return p.payload ?? p;
+        }
       } catch (e) {
         if ((e as Error)?.message === "PollCancelled") throw e;
         // transient network error — keep polling
