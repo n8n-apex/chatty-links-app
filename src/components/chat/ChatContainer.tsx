@@ -655,6 +655,7 @@ export const ChatContainer = () => {
       let usedParagraphs: string[] = [];
       let responseId: string | undefined;
       let needsClarification = false;
+      let routingNotice: string | undefined;
 
       const parsed = Array.isArray(data) ? data[0] : data;
 
@@ -666,7 +667,14 @@ export const ChatContainer = () => {
         if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
         if (typeof parsed.response_id === "string") responseId = parsed.response_id;
         if (parsed.needs_clarification === true) needsClarification = true;
+        if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
+          routingNotice = parsed.routing_notice.trim();
+        }
         if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
+          // Strip the routing notice from the start of antwort so it isn't duplicated in the chip.
+          if (routingNotice && typeof parsed.antwort === "string" && parsed.antwort.startsWith(routingNotice)) {
+            parsed.antwort = parsed.antwort.slice(routingNotice.length).replace(/^\s*[\n\r]\s*/, "");
+          }
           responseText = JSON.stringify(parsed);
         } else {
           responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
@@ -686,6 +694,7 @@ export const ChatContainer = () => {
         usedChunkIds,
         usedParagraphs,
         needsClarification,
+        routingNotice,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
