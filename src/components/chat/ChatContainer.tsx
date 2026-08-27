@@ -1106,7 +1106,12 @@ export const ChatContainer = () => {
       if (historyEnabled) loadConversations();
     } catch (e) {
       console.error("Draft edit error:", e);
-      toast.error("Entwurf konnte nicht aktualisiert werden.");
+      const m = e instanceof Error ? e.message : String(e);
+      toast.error(
+        m.startsWith("BackendError:")
+          ? "Der Server hat die Überarbeitung abgelehnt. Der Entwurf wurde nicht geändert."
+          : "Entwurf konnte nicht aktualisiert werden.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1122,20 +1127,22 @@ export const ChatContainer = () => {
       const { data, error } = await supabase.functions.invoke("chat-proxy", {
         body: { action: "save_statement", sessionId, statement_text: newText },
       });
-      if (error) return { error: error.message };
-      const saved = data && (data.saved === true || data.status === "success");
-      if (!saved) return { error: data?.error || "Speichern fehlgeschlagen" };
+      // chat-proxy now answers non-2xx when the backend did not confirm the write.
+      if (error) return { error: "Speichern fehlgeschlagen — der Server hat den Vorgang nicht bestätigt." };
+      const parsed = Array.isArray(data) ? data[0] : data;
+      const saved = parsed && (parsed.saved === true || parsed.status === "success");
+      if (!saved) return { error: parsed?.error || "Speichern fehlgeschlagen — keine Bestätigung vom Server." };
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
         try {
           const trimmed = (m.content || "").trim();
           if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return m;
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed)) {
-            parsed[0] = { ...parsed[0], entwurf_stellungnahme: newText };
-            return { ...m, content: JSON.stringify(parsed) };
+          const parsedMsg = JSON.parse(trimmed);
+          if (Array.isArray(parsedMsg)) {
+            parsedMsg[0] = { ...parsedMsg[0], entwurf_stellungnahme: newText };
+            return { ...m, content: JSON.stringify(parsedMsg) };
           }
-          return { ...m, content: JSON.stringify({ ...parsed, entwurf_stellungnahme: newText }) };
+          return { ...m, content: JSON.stringify({ ...parsedMsg, entwurf_stellungnahme: newText }) };
         } catch { return m; }
       }));
       return true;
@@ -1143,6 +1150,7 @@ export const ChatContainer = () => {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   };
+
 
   // --- PROJECT PICKER: bind a chat to a Google Drive project folder ---
   const bindProject = async (ref: string) => {
