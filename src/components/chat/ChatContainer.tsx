@@ -68,6 +68,68 @@ const classifyUploadSource = (raw: unknown): UploadVerdict => {
   return { state: "unknown", fileName, chunks };
 };
 
+type AssistantMeta = { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] };
+
+/**
+ * Turn a backend payload into the assistant Message. Shared by the live send frame
+ * and by resume-on-open, so both render results identically.
+ */
+const buildAssistantMessage = (
+  data: any,
+  durationMs?: number,
+): { message: Message; responseText: string; meta: AssistantMeta } => {
+  let responseText: string;
+  let imageUrl: string | undefined;
+  let usedChunkIds: string[] = [];
+  let usedParagraphs: string[] = [];
+  let responseId: string | undefined;
+  let needsClarification = false;
+  let routingNotice: string | undefined;
+
+  const parsed = Array.isArray(data) ? data[0] : data;
+
+  if (typeof data === "string") {
+    responseText = data;
+  } else if (parsed && typeof parsed === "object") {
+    imageUrl = parsed.imageUrl || parsed.image_url || undefined;
+    if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
+    if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
+    if (typeof parsed.response_id === "string") responseId = parsed.response_id;
+    if (parsed.needs_clarification === true) needsClarification = true;
+    if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
+      routingNotice = parsed.routing_notice.trim();
+    }
+    if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
+      // Strip the routing notice from the start of antwort so it isn't duplicated in the chip.
+      if (routingNotice && typeof parsed.antwort === "string" && parsed.antwort.startsWith(routingNotice)) {
+        parsed.antwort = parsed.antwort.slice(routingNotice.length).replace(/^\s*[\n\r]\s*/, "");
+      }
+      responseText = JSON.stringify(parsed);
+    } else {
+      responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+    }
+  } else {
+    responseText = String(data);
+  }
+
+  const message: Message = {
+    id: crypto.randomUUID(),
+    content: responseText,
+    role: "assistant",
+    timestamp: new Date(),
+    imageUrl,
+    durationMs,
+    responseId,
+    usedChunkIds,
+    usedParagraphs,
+    needsClarification,
+    routingNotice,
+  };
+  return { message, responseText, meta: { responseId, usedChunkIds, usedParagraphs } };
+};
+
+
+
 
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
