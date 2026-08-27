@@ -423,10 +423,7 @@ Deno.serve(async (req) => {
       try {
         const projectRef = body.project_ref || body.projectRef || '';
         if (!projectRef) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: 'missing_project_ref' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return fail('missing_project_ref', 400);
         }
         const resp = await fetch(webhookUrl, {
           method: 'POST',
@@ -438,25 +435,32 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ status: 'error', error: `Webhook ${resp.status}`, detail: txt }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('ingest_project upstream error', resp.status, txt);
+          return fail('upstream_error', 502, txt);
         }
-        let parsed: unknown;
-        try { parsed = JSON.parse(txt); } catch { parsed = { status: 'success', raw: txt }; }
-        return new Response(
-          JSON.stringify(parsed),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        const trimmed = (txt || '').trim();
+        if (!trimmed) {
+          console.error('ingest_project: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
+        }
+        let parsed: any;
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch {
+          console.error('ingest_project: unparseable upstream body:', trimmed.slice(0, 500));
+          return fail('upstream_unparseable', 502, trimmed);
+        }
+        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
+          return fail('ingest_not_confirmed', 502, trimmed);
+        }
+        return json(obj);
       } catch (e) {
         console.error('ingest_project error:', e);
-        return new Response(
-          JSON.stringify({ status: 'error', error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('upstream_unreachable', 502, e);
       }
     }
+
 
 
     const forwardPayload: Record<string, unknown> = {
