@@ -12,6 +12,8 @@ export interface Message {
   needsClarification?: boolean; // true for clarification answers (no chunks)
   // Track feedback already submitted on this assistant message
   feedbackSubmitted?: 'correct' | 'inaccurate' | 'correction' | 'note';
+  // Backend routing explanation (e.g. Behördenschreiben without doc answered as Rechtsfrage)
+  routingNotice?: string;
 }
 
 
