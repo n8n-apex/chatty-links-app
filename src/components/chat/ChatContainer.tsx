@@ -402,6 +402,13 @@ export const ChatContainer = () => {
       localStorage.setItem("chat-session-id", sessionId);
     }
 
+    // One id per user ACTION. sessionId is the CONVERSATION, so it is identical for
+    // letter A and letter B — which is why a poll for B matched A's stored result.
+    // This variable is captured by the closure and used for BOTH the upload and the
+    // poll, so the two can never diverge.
+    const turnId = crypto.randomUUID();
+    const turnStartedAt = Date.now();
+
     const hasFiles = Array.isArray(files) && files.length > 0;
     const firstFile = hasFiles ? files![0] : null;
 
