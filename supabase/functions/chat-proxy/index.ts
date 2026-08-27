@@ -435,11 +435,18 @@ Deno.serve(async (req) => {
       sessionId: body.sessionId || null,
       timestamp: body.timestamp || new Date().toISOString(),
     };
+    // THIS LIST IS A SILENT GATE: chat-proxy rebuilds every outbound body from
+    // scratch and copies ONLY these keys. Anything not named here is dropped with
+    // no log and no error. `additional_question` was the live casualty for months.
+    // Add a key here whenever the backend needs to see a new field.
     const passthroughKeys = [
       'file_id', 'file_base64', 'file_name', 'files',
       'state', 'question', 'topic', 'statement_type',
       'ziel', 'mode', 'source_type', 'upload_type', 'project_ref',
       'chunk_id', 'target_action',
+      // Turn identity. Without these the backend cannot tell one upload from the
+      // next in the same conversation.
+      'turn_id', 'client_turn_id',
     ];
     for (const k of passthroughKeys) {
       if (body[k] !== undefined) forwardPayload[k] = body[k];
