@@ -68,6 +68,68 @@ const classifyUploadSource = (raw: unknown): UploadVerdict => {
   return { state: "unknown", fileName, chunks };
 };
 
+type AssistantMeta = { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] };
+
+/**
+ * Turn a backend payload into the assistant Message. Shared by the live send frame
+ * and by resume-on-open, so both render results identically.
+ */
+const buildAssistantMessage = (
+  data: any,
+  durationMs?: number,
+): { message: Message; responseText: string; meta: AssistantMeta } => {
+  let responseText: string;
+  let imageUrl: string | undefined;
+  let usedChunkIds: string[] = [];
+  let usedParagraphs: string[] = [];
+  let responseId: string | undefined;
+  let needsClarification = false;
+  let routingNotice: string | undefined;
+
+  const parsed = Array.isArray(data) ? data[0] : data;
+
+  if (typeof data === "string") {
+    responseText = data;
+  } else if (parsed && typeof parsed === "object") {
+    imageUrl = parsed.imageUrl || parsed.image_url || undefined;
+    if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
+    if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
+    if (typeof parsed.response_id === "string") responseId = parsed.response_id;
+    if (parsed.needs_clarification === true) needsClarification = true;
+    if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
+      routingNotice = parsed.routing_notice.trim();
+    }
+    if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
+      // Strip the routing notice from the start of antwort so it isn't duplicated in the chip.
+      if (routingNotice && typeof parsed.antwort === "string" && parsed.antwort.startsWith(routingNotice)) {
+        parsed.antwort = parsed.antwort.slice(routingNotice.length).replace(/^\s*[\n\r]\s*/, "");
+      }
+      responseText = JSON.stringify(parsed);
+    } else {
+      responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+    }
+  } else {
+    responseText = String(data);
+  }
+
+  const message: Message = {
+    id: crypto.randomUUID(),
+    content: responseText,
+    role: "assistant",
+    timestamp: new Date(),
+    imageUrl,
+    durationMs,
+    responseId,
+    usedChunkIds,
+    usedParagraphs,
+    needsClarification,
+    routingNotice,
+  };
+  return { message, responseText, meta: { responseId, usedChunkIds, usedParagraphs } };
+};
+
+
+
 
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -108,6 +170,12 @@ export const ChatContainer = () => {
   // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
   const pollCancelRef = useRef(0);
   useEffect(() => () => { pollCancelRef.current += 1; }, []);
+  // Always holds the conversation actually on screen. Assigned on the SAME line as
+  // every setConversationId(...) — a useEffect would lag by one render.
+  const activeConversationRef = useRef<string | null>(null);
+  // Set after pollForResult is defined; lets loadConversationMessages resume a turn.
+  const resumePendingTurnRef = useRef<((cid: string) => void) | null>(null);
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -175,6 +243,8 @@ export const ChatContainer = () => {
         usedParagraphs: Array.isArray(row.used_paragraphs) ? row.used_paragraphs : undefined,
       }));
       setMessages(restored);
+      // Resume a pending analyze_pdf turn for THIS conversation, if any.
+      resumePendingTurnRef.current?.(cid);
     },
     [currentUserEmail, callHistory],
   );
@@ -190,7 +260,7 @@ export const ChatContainer = () => {
       // The sessionId sent to n8n MUST equal the conversationId so that
       // gpt_session_context starts clean for every new conversation.
       const freshId = crypto.randomUUID();
-      setConversationId(freshId);
+      setConversationId(freshId); activeConversationRef.current = freshId;
       localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
       // Start fresh in Rechtsfrage mode; the pills are the single control.
@@ -203,14 +273,16 @@ export const ChatContainer = () => {
     role: "user" | "ai",
     content: string,
     meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
+    conversationIdOverride?: string | null,
   ) => {
-    if (!currentUserEmail || !content || !conversationId) return;
+    const target = conversationIdOverride ?? conversationId;
+    if (!currentUserEmail || !content || !target) return;
     const data = await callHistory({
       action: "save_message",
       user_email: currentUserEmail,
       role,
       content,
-      conversation_id: conversationId,
+      conversation_id: target,
       response_id: meta?.responseId ?? null,
       used_chunk_ids: meta?.usedChunkIds ?? null,
       used_paragraphs: meta?.usedParagraphs ?? null,
@@ -224,9 +296,10 @@ export const ChatContainer = () => {
     // always means a fresh, empty gpt_session_context on the backend.
     pollCancelRef.current += 1; // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
-    setConversationId(newId);
+    setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
+    setIsLoading(false); // never carry a spinner into another conversation
     // The pills are the single mode control; every new conversation starts fresh
     // in Rechtsfrage mode so the user is never in a mode they did not choose.
     setActiveMode("rechtsfrage");
@@ -234,8 +307,10 @@ export const ChatContainer = () => {
   };
 
   const handleSelectConversation = async (cid: string) => {
+    if (cid === conversationId) return; // clicking the active row must do nothing
     pollCancelRef.current += 1;
-    setConversationId(cid);
+    setConversationId(cid); activeConversationRef.current = cid;
+    setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
     await loadConversationMessages(cid);
@@ -254,12 +329,17 @@ export const ChatContainer = () => {
       return;
     }
     toast.success("Gespräch gelöscht");
+    try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
+      pollCancelRef.current += 1; // cancel any poll belonging to the deleted thread
       setMessages([]);
-      setConversationId(crypto.randomUUID());
+      const newId = crypto.randomUUID();
+      setConversationId(newId); activeConversationRef.current = newId;
+      setIsLoading(false);
     }
     await loadConversations();
   };
+
 
 
   const toBase64 = (file: File): Promise<string> => {
@@ -389,6 +469,83 @@ export const ChatContainer = () => {
     throw new Error("PollTimeout");
   };
 
+  // --- Resume a pending analyze_pdf turn when a conversation is opened ---
+  // The backend stores the finished result indefinitely; without this, leaving the
+  // page (unmount, new conversation, sidebar select, reload) loses it forever.
+  const renderResumedResult = (data: any, cid: string) => {
+    const { message, responseText, meta } = buildAssistantMessage(data);
+    if (activeConversationRef.current === cid) {
+      setMessages((prev) => [...prev, message]);
+    }
+    persistMessage("ai", responseText, meta, cid);
+    try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+    if (historyEnabled) loadConversations();
+  };
+
+  resumePendingTurnRef.current = (cid: string) => {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem("pending-turn:" + cid); } catch { /* ignore */ }
+    if (!raw) return; // normal case — no network request at all
+    let pending: { turnId?: string; turnStartedAt?: number; action?: string; fileName?: string | null } | null = null;
+    try { pending = JSON.parse(raw); } catch { /* ignore */ }
+    const turnId = pending?.turnId;
+    const turnStartedAt = typeof pending?.turnStartedAt === "number" ? pending!.turnStartedAt! : 0;
+    const ageMs = Date.now() - turnStartedAt;
+    if (!turnId || !turnStartedAt || ageMs > 30 * 60 * 1000) {
+      try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+      return;
+    }
+
+    (async () => {
+      let res: any;
+      try {
+        res = await invokeChatProxy(
+          { action: "get_result", sessionId: cid, target_action: pending?.action || "analyze_pdf",
+            turn_id: turnId, client_turn_id: turnId },
+          30000,
+        );
+      } catch (e) {
+        console.warn("resume get_result failed:", e);
+        return; // keep the key; try again next time the conversation is opened
+      }
+      const p = Array.isArray(res) ? res[0] : res;
+      if (p && p.ready === true && (!p.turn_id || p.turn_id === turnId)) {
+        renderResumedResult(p.payload ?? p, cid);
+        return;
+      }
+      // Not ready. Younger than ~6 minutes → keep waiting; older → give up.
+      if (ageMs > 6 * 60 * 1000) {
+        try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+        return;
+      }
+      if (activeConversationRef.current !== cid) return;
+      const progressMsgId = crypto.randomUUID();
+      const makeText = (sec: number) =>
+        `⏳ Die Analyse läuft noch — sie wird fortgesetzt.\n\nBisher vergangen: ${sec}s`;
+      setMessages((prev) => [...prev, {
+        id: progressMsgId, content: makeText(0), role: "assistant", timestamp: new Date(),
+      }]);
+      try {
+        // The stored turn id MUST be reused — a fresh one could never match.
+        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, (sec) => {
+          setMessages((prev) => prev.map((m) =>
+            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
+          ));
+        });
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        renderResumedResult(data, cid);
+      } catch (e) {
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        if ((e as Error)?.message === "PollTimeout") {
+          try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+        }
+        // PollCancelled → keep the key so the turn can be resumed again later.
+      }
+    })();
+  };
+
+
+
   const sendMessage = async (
     content: string,
     files?: File[] | null,
@@ -398,6 +555,9 @@ export const ChatContainer = () => {
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
+    // The conversation this send belongs to. Answers must be stored here even if
+    // the user navigates away, and must NOT be rendered into another thread.
+    const sendConversationId = conversationId;
     if (sessionId !== localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", sessionId);
     }
@@ -432,7 +592,7 @@ export const ChatContainer = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
-        persistMessage("user", userMessage.content);
+        persistMessage("user", userMessage.content, undefined, sendConversationId);
 
 
         // One combined progress placeholder for the whole batch.
@@ -529,8 +689,10 @@ export const ChatContainer = () => {
           role: "assistant",
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, ackMessage]);
-        persistMessage("ai", summary);
+        if (activeConversationRef.current === sendConversationId) {
+          setMessages((prev) => [...prev, ackMessage]);
+        }
+        persistMessage("ai", summary, undefined, sendConversationId);
         // The typed text is a real request — run it after the uploads, without
         // duplicating the user bubble that already contains it.
         if (typed) {
@@ -556,7 +718,7 @@ export const ChatContainer = () => {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
-      persistMessage("user", displayContent);
+      persistMessage("user", displayContent, undefined, sendConversationId);
     }
     setIsLoading(true);
 
@@ -638,6 +800,12 @@ export const ChatContainer = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, progressMsg]);
+        // Record the turn durably so it can be resumed after navigation/reload.
+        try {
+          localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
+            turnId, turnStartedAt, action: "analyze_pdf", fileName: firstFile?.name ?? null,
+          }));
+        } catch { /* ignore */ }
         data = await pollForResult(sessionId, "analyze_pdf", turnId, turnStartedAt, (sec) => {
           setMessages((prev) => prev.map((m) =>
             m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
@@ -646,60 +814,22 @@ export const ChatContainer = () => {
         // Remove the placeholder before rendering the final assistant message.
         setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
         progressMsgId = null;
+        // The result is in hand — the turn no longer needs resuming.
+        try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
 
 
-      let responseText: string;
-      let imageUrl: string | undefined;
-      let usedChunkIds: string[] = [];
-      let usedParagraphs: string[] = [];
-      let responseId: string | undefined;
-      let needsClarification = false;
-      let routingNotice: string | undefined;
+      const { message: assistantMessage, responseText, meta } =
+        buildAssistantMessage(data, performance.now() - startTime);
 
-      const parsed = Array.isArray(data) ? data[0] : data;
-
-      if (typeof data === "string") {
-        responseText = data;
-      } else if (parsed && typeof parsed === "object") {
-        imageUrl = parsed.imageUrl || parsed.image_url || undefined;
-        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
-        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
-        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
-        if (parsed.needs_clarification === true) needsClarification = true;
-        if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
-          routingNotice = parsed.routing_notice.trim();
-        }
-        if (parsed.action || parsed.antwort || parsed.entwurf_stellungnahme || parsed.antwortschreiben_entwurf || parsed.projekt_und_sachverhalt) {
-          // Strip the routing notice from the start of antwort so it isn't duplicated in the chip.
-          if (routingNotice && typeof parsed.antwort === "string" && parsed.antwort.startsWith(routingNotice)) {
-            parsed.antwort = parsed.antwort.slice(routingNotice.length).replace(/^\s*[\n\r]\s*/, "");
-          }
-          responseText = JSON.stringify(parsed);
-        } else {
-          responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
-        }
-      } else {
-        responseText = String(data);
+      if (activeConversationRef.current === sendConversationId) {
+        setMessages((prev) => [...prev, assistantMessage]);
       }
-
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        content: responseText,
-        role: "assistant",
-        timestamp: new Date(),
-        imageUrl,
-        durationMs: performance.now() - startTime,
-        responseId,
-        usedChunkIds,
-        usedParagraphs,
-        needsClarification,
-        routingNotice,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
+      // The user may have switched away. The answer belongs to sendConversationId;
+      // persist it there — resume-on-open surfaces it when they return.
+      persistMessage("ai", responseText, meta, sendConversationId);
       if (historyEnabled) loadConversations();
+
     } catch (error) {
       console.error("Fehler beim Senden:", error);
       // Clean up progress placeholder from async analyze_pdf, if any.
@@ -735,11 +865,15 @@ export const ChatContainer = () => {
         role: "assistant",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      if (activeConversationRef.current === sendConversationId) {
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+      // Definitive failure — nothing left to resume.
+      try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       // Preserve the user's input in the composer so they can retry
-      if (content) setInputValue(content);
+      if (content && activeConversationRef.current === sendConversationId) setInputValue(content);
     } finally {
-      setIsLoading(false);
+      if (activeConversationRef.current === sendConversationId) setIsLoading(false);
     }
   };
 
