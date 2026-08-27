@@ -694,6 +694,7 @@ export const ChatContainer = () => {
         usedChunkIds,
         usedParagraphs,
         needsClarification,
+        routingNotice,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
