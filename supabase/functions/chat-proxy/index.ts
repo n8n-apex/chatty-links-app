@@ -366,23 +366,56 @@ Deno.serve(async (req) => {
         });
         const fbText = await fbResp.text();
         if (!fbResp.ok) {
-          return new Response(
-            JSON.stringify({ success: false, error: `Webhook ${fbResp.status}`, detail: fbText }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.error('submit_feedback upstream error', fbResp.status, fbText);
+          return fail('upstream_error', 502, fbText);
         }
-        return new Response(
-          JSON.stringify({ success: true, message: fbText || 'Feedback gespeichert' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+
+        // n8n answering 2xx is NOT proof the feedback row was written. A workflow
+        // branch that yields zero items ends the run silently and the webhook
+        // replies 200 with an empty body. Treat that as a failure.
+        const fbTrimmed = (fbText || '').trim();
+        if (!fbTrimmed) {
+          console.error('submit_feedback: upstream 2xx with empty body');
+          return fail('upstream_empty', 502);
+        }
+
+        let fbParsed: any = null;
+        let fbJson = true;
+        try {
+          fbParsed = JSON.parse(fbTrimmed);
+        } catch {
+          fbJson = false;
+        }
+
+        // MEASURED 2026-08-27: n8n's happy path answers this action with the
+        // plain-text body `Feedback gespeichert` — 200, non-empty, not JSON.
+        // Rejecting that would turn a working button red, so a non-empty
+        // unparseable body is passed through as success (same policy as the
+        // generic forward path). Only an empty body is a failure here.
+        if (!fbJson) {
+          console.warn('submit_feedback: non-JSON upstream body:', fbTrimmed.slice(0, 500));
+          return json({ success: true, message: fbTrimmed.slice(0, 500), upstream_raw: fbTrimmed.slice(0, 500) });
+        }
+
+        const fbObj = Array.isArray(fbParsed) ? fbParsed[0] : fbParsed;
+        const fbOk =
+          fbObj && typeof fbObj === 'object' &&
+          fbObj.success !== false &&
+          fbObj.status !== 'error' &&
+          !fbObj.error;
+
+        if (!fbOk) {
+          console.error('submit_feedback: upstream reported failure:', fbTrimmed.slice(0, 500));
+          return fail('feedback_not_saved', 502, fbTrimmed);
+        }
+
+        return json({ success: true, message: fbObj.message ?? 'Feedback gespeichert', upstream: fbObj });
       } catch (e) {
         console.error('Feedback forward error:', e);
-        return new Response(
-          JSON.stringify({ success: false, error: String(e) }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return fail('proxy_exception', 500, e);
       }
     }
+
 
 
     // --- INGEST PROJECT (bind a chat to a Drive folder) ---
