@@ -511,8 +511,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                   <div>
                     <SubHeading>Genehmigungsfiktion</SubHeading>
                     <div className="mt-1.5 grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/30 p-3 md:grid-cols-2">
-                      {genFiktion!.vorschrift && <DetailRow label="Vorschrift" value={genFiktion!.vorschrift} />}
-                      {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={String(genFiktion!.frist_tage)} />}
+                      {toText(genFiktion!.vorschrift).trim() && <DetailRow label="Vorschrift" value={toText(genFiktion!.vorschrift)} />}
+                      {genFiktion!.frist_tage != null && <DetailRow label="Frist (Tage)" value={toText(genFiktion!.frist_tage)} />}
                       <DetailRow
                         label="Eingetreten"
                         value={
@@ -522,7 +522,8 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
                           </span>
                         }
                       />
-                      {genFiktion!.begruendung && <DetailRow label="Begründung" value={genFiktion!.begruendung} />}
+                      {toText(genFiktion!.begruendung).trim() && <DetailRow label="Begründung" value={toText(genFiktion!.begruendung)} />}
+
                     </div>
                   </div>
                 )}
