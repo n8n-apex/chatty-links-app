@@ -174,32 +174,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Auto-detect Google Drive URL anywhere in the message
+    // Google Drive URL in the message: extract the file id, but do NOT decide
+    // the action — routing is the router's job (n8n). file_id is read by name
+    // downstream, so this extraction stays.
     const driveMatch = body.message?.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch && (!body.action || body.action === 'question')) {
-      body.action = 'analyze_pdf';
+    if (driveMatch && !body.file_id) {
       body.file_id = driveMatch[1].split('/')[0].split('?')[0];
-      body.file_name = 'Behördenschreiben.pdf';
-    }
-
-    // Detect action from message content if not explicitly set
-    if (body.message && !body.action) {
-      const msg = body.message.toLowerCase();
-      if (msg.startsWith('ich habe eine baurechtsfrage') || msg.includes('?')) {
-        body.action = 'question';
-        body.question = body.message;
-      } else if (msg.startsWith('erstelle eine stellungnahme')) {
-        body.action = 'draft_statement';
-        body.topic = body.message.replace('erstelle eine stellungnahme zum thema:', '').trim();
-      } else if (msg.startsWith('analysiere dieses behördenschreiben')) {
-        body.action = 'analyze_pdf';
-        body.file_name = body.file_name || 'Behördenschreiben.pdf';
-        body.state = body.state || 'Bayern';
-        delete body.question;
-      } else {
-        body.action = 'question';
-        body.question = body.message;
-      }
     }
 
     if (body.action === 'analyze_pdf') {
