@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
       'ingest_legal_pdf', 'ingest_stellungnahme', 'ingest_folder',
       'save_statement', 'suspend_document', 'submit_feedback', 'upload_source',
       'transcribe_audio', 'check_admin', 'get_chunk', 'get_result',
+      'auto',
     ];
     const effectiveAction = body.action || 'question';
     const isMessageless = MESSAGELESS_ACTIONS.includes(effectiveAction);
@@ -481,6 +482,10 @@ Deno.serve(async (req) => {
       // Turn identity. Without these the backend cannot tell one upload from the
       // next in the same conversation.
       'turn_id', 'client_turn_id',
+      // Routing corrections and attachment intent — the router reads these by
+      // name. force_action always wins (R0); attach_intent picks analysis vs
+      // plain upload; rerun_of ties a corrected turn to the one it replaces.
+      'force_action', 'attach_intent', 'rerun_of',
     ];
     for (const k of passthroughKeys) {
       if (body[k] !== undefined) forwardPayload[k] = body[k];
