@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCi
 import { cn } from '@/lib/utils';
 import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
+import { toText } from '@/lib/safeText';
+
 
 interface RechtsgrundlageItem {
   paragraph?: string;

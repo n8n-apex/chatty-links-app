@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
+import { toText, toStringList } from '@/lib/safeText';
+
 
 interface Rechtsprechung {
   display?: string;
