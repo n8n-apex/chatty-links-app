@@ -726,11 +726,15 @@ export const ChatContainer = () => {
         role: "assistant",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      if (activeConversationRef.current === sendConversationId) {
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+      // Definitive failure — nothing left to resume.
+      try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       // Preserve the user's input in the composer so they can retry
-      if (content) setInputValue(content);
+      if (content && activeConversationRef.current === sendConversationId) setInputValue(content);
     } finally {
-      setIsLoading(false);
+      if (activeConversationRef.current === sendConversationId) setIsLoading(false);
     }
   };
 
