@@ -108,6 +108,12 @@ export const ChatContainer = () => {
   // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
   const pollCancelRef = useRef(0);
   useEffect(() => () => { pollCancelRef.current += 1; }, []);
+  // Always holds the conversation actually on screen. Assigned on the SAME line as
+  // every setConversationId(...) — a useEffect would lag by one render.
+  const activeConversationRef = useRef<string | null>(null);
+  // Set after pollForResult is defined; lets loadConversationMessages resume a turn.
+  const resumePendingTurnRef = useRef<((cid: string) => void) | null>(null);
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
