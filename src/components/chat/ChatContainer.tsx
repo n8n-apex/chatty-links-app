@@ -469,6 +469,83 @@ export const ChatContainer = () => {
     throw new Error("PollTimeout");
   };
 
+  // --- Resume a pending analyze_pdf turn when a conversation is opened ---
+  // The backend stores the finished result indefinitely; without this, leaving the
+  // page (unmount, new conversation, sidebar select, reload) loses it forever.
+  const renderResumedResult = (data: any, cid: string) => {
+    const { message, responseText, meta } = buildAssistantMessage(data);
+    if (activeConversationRef.current === cid) {
+      setMessages((prev) => [...prev, message]);
+    }
+    persistMessage("ai", responseText, meta, cid);
+    try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+    if (historyEnabled) loadConversations();
+  };
+
+  resumePendingTurnRef.current = (cid: string) => {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem("pending-turn:" + cid); } catch { /* ignore */ }
+    if (!raw) return; // normal case — no network request at all
+    let pending: { turnId?: string; turnStartedAt?: number; action?: string; fileName?: string | null } | null = null;
+    try { pending = JSON.parse(raw); } catch { /* ignore */ }
+    const turnId = pending?.turnId;
+    const turnStartedAt = typeof pending?.turnStartedAt === "number" ? pending!.turnStartedAt! : 0;
+    const ageMs = Date.now() - turnStartedAt;
+    if (!turnId || !turnStartedAt || ageMs > 30 * 60 * 1000) {
+      try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+      return;
+    }
+
+    (async () => {
+      let res: any;
+      try {
+        res = await invokeChatProxy(
+          { action: "get_result", sessionId: cid, target_action: pending?.action || "analyze_pdf",
+            turn_id: turnId, client_turn_id: turnId },
+          30000,
+        );
+      } catch (e) {
+        console.warn("resume get_result failed:", e);
+        return; // keep the key; try again next time the conversation is opened
+      }
+      const p = Array.isArray(res) ? res[0] : res;
+      if (p && p.ready === true && (!p.turn_id || p.turn_id === turnId)) {
+        renderResumedResult(p.payload ?? p, cid);
+        return;
+      }
+      // Not ready. Younger than ~6 minutes → keep waiting; older → give up.
+      if (ageMs > 6 * 60 * 1000) {
+        try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+        return;
+      }
+      if (activeConversationRef.current !== cid) return;
+      const progressMsgId = crypto.randomUUID();
+      const makeText = (sec: number) =>
+        `⏳ Die Analyse läuft noch — sie wird fortgesetzt.\n\nBisher vergangen: ${sec}s`;
+      setMessages((prev) => [...prev, {
+        id: progressMsgId, content: makeText(0), role: "assistant", timestamp: new Date(),
+      }]);
+      try {
+        // The stored turn id MUST be reused — a fresh one could never match.
+        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, (sec) => {
+          setMessages((prev) => prev.map((m) =>
+            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
+          ));
+        });
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        renderResumedResult(data, cid);
+      } catch (e) {
+        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        if ((e as Error)?.message === "PollTimeout") {
+          try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
+        }
+        // PollCancelled → keep the key so the turn can be resumed again later.
+      }
+    })();
+  };
+
+
+
   const sendMessage = async (
     content: string,
     files?: File[] | null,
