@@ -411,10 +411,42 @@ export const ChatContainer = () => {
   };
 
   const invokeChatProxy = async (body: Record<string, unknown>, timeoutMs = 180000): Promise<any> => {
-    const { data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+    const { ok, status, data, rawText } = await invokeChatProxyRaw(body, timeoutMs);
+
+    // A real HTTP failure is a real failure.
+    if (!ok) {
+      const code =
+        data && typeof data === "object" && typeof (data as any).error === "string"
+          ? (data as any).error
+          : `http_${status}`;
+      console.error("chat-proxy failed:", status, rawText);
+      throw new Error(`BackendError: ${code}`);
+    }
+
     if (!rawText) throw new Error("Leere Antwort vom Server.");
+
+    // Belt and braces: a 200 body that is nothing but an error envelope is still a
+    // failure. Only treat it as one when NO answer-shaped field is present, so the
+    // deliberate user-facing guidance messages still render normally.
+    const obj = Array.isArray(data) ? data[0] : data;
+    if (
+      obj && typeof obj === "object" &&
+      typeof obj.error === "string" &&
+      obj.antwort === undefined &&
+      obj.action === undefined &&
+      obj.ready === undefined &&
+      obj.output === undefined &&
+      obj.entwurf_stellungnahme === undefined &&
+      obj.antwortschreiben_entwurf === undefined &&
+      obj.projekt_und_sachverhalt === undefined
+    ) {
+      console.error("chat-proxy returned an error envelope at 200:", rawText);
+      throw new Error(`BackendError: ${obj.error}`);
+    }
+
     return data;
   };
+
 
 
   // Poll chat-proxy `get_result` every 3s for up to 5 min. Returns the
