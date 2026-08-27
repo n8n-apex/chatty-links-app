@@ -453,7 +453,7 @@ export const ChatContainer = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
-        persistMessage("user", userMessage.content);
+        persistMessage("user", userMessage.content, undefined, sendConversationId);
 
 
         // One combined progress placeholder for the whole batch.
