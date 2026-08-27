@@ -5,6 +5,8 @@ import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-rea
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
 import { toText, toStringList } from '@/lib/safeText';
+import { toast } from 'sonner';
+
 
 
 interface Rechtsprechung {
@@ -194,39 +196,40 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
 
   const beurteilung = data.beurteilung_der_einzelfakten || [];
   const forderungen = data.analyse_der_forderungen || [];
-  const rechtsgrundlageArr = Array.isArray(data.rechtsgrundlage)
-    ? data.rechtsgrundlage
-    : typeof data.rechtsgrundlage === 'string' && data.rechtsgrundlage
-    ? [data.rechtsgrundlage]
-    : [];
-  const naechsteSchritteArr = Array.isArray(data.naechste_schritte)
-    ? data.naechste_schritte
-    : typeof data.naechste_schritte === 'string' && data.naechste_schritte
-    ? [data.naechste_schritte]
-    : [];
+  const rechtsgrundlageArr = toStringList(data.rechtsgrundlage);
+  const naechsteSchritteArr = toStringList(data.naechste_schritte);
 
-  const detailFields: Array<{ label: string; value: string | null | undefined }> = [
-    { label: 'Absender (Behörde)', value: data.absender_behoerde },
-    { label: 'Aktenzeichen', value: data.aktenzeichen },
-    { label: 'Antragsteller', value: data.antragsteller },
-    { label: 'Bauvorhaben', value: data.bauvorhaben },
-    { label: 'Bundesland', value: data.bundesland },
+  const detailFields: Array<{ label: string; value: string }> = [
+    { label: 'Absender (Behörde)', value: toText(data.absender_behoerde) },
+    { label: 'Aktenzeichen', value: toText(data.aktenzeichen) },
+    { label: 'Antragsteller', value: toText(data.antragsteller) },
+    { label: 'Bauvorhaben', value: toText(data.bauvorhaben) },
+    { label: 'Bundesland', value: toText(data.bundesland) },
   ];
-  if (data.ziel_des_nutzers) {
-    detailFields.push({ label: 'Ziel des Nutzers', value: data.ziel_des_nutzers });
+  if (toText(data.ziel_des_nutzers).trim()) {
+    detailFields.push({ label: 'Ziel des Nutzers', value: toText(data.ziel_des_nutzers) });
   }
-  const showDetails = detailFields.some((f) => f.value !== undefined && f.value !== null && String(f.value).trim() !== '');
+  const showDetails = detailFields.some((f) => f.value.trim() !== '');
+
+  const letterText = toText(data.antwortschreiben_entwurf);
 
   const handleCopyLetter = async () => {
-    if (!data.antwortschreiben_entwurf) return;
+    // The backend has shipped objects in this field before; never let a
+    // "[object Object]" string reach the clipboard of a letter to an authority.
+    if (typeof data.antwortschreiben_entwurf !== 'string' || !letterText.trim()) {
+      toast.error('Der Entwurf konnte nicht kopiert werden (unerwartetes Format). Bitte den Text manuell markieren.');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(data.antwortschreiben_entwurf);
+      await navigator.clipboard.writeText(letterText);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      toast.error('Kopieren fehlgeschlagen. Bitte den Text manuell markieren und kopieren.');
+      console.error('[BehoerdenAnalysis] clipboard write failed', e);
     }
   };
+
 
   const formattedTimestamp = (() => {
     if (!data.timestamp) return null;
