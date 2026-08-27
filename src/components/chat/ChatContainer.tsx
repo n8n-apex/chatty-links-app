@@ -181,6 +181,8 @@ export const ChatContainer = () => {
         usedParagraphs: Array.isArray(row.used_paragraphs) ? row.used_paragraphs : undefined,
       }));
       setMessages(restored);
+      // Resume a pending analyze_pdf turn for THIS conversation, if any.
+      resumePendingTurnRef.current?.(cid);
     },
     [currentUserEmail, callHistory],
   );
@@ -196,7 +198,7 @@ export const ChatContainer = () => {
       // The sessionId sent to n8n MUST equal the conversationId so that
       // gpt_session_context starts clean for every new conversation.
       const freshId = crypto.randomUUID();
-      setConversationId(freshId);
+      setConversationId(freshId); activeConversationRef.current = freshId;
       localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
       // Start fresh in Rechtsfrage mode; the pills are the single control.
@@ -209,14 +211,16 @@ export const ChatContainer = () => {
     role: "user" | "ai",
     content: string,
     meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
+    conversationIdOverride?: string | null,
   ) => {
-    if (!currentUserEmail || !content || !conversationId) return;
+    const target = conversationIdOverride ?? conversationId;
+    if (!currentUserEmail || !content || !target) return;
     const data = await callHistory({
       action: "save_message",
       user_email: currentUserEmail,
       role,
       content,
-      conversation_id: conversationId,
+      conversation_id: target,
       response_id: meta?.responseId ?? null,
       used_chunk_ids: meta?.usedChunkIds ?? null,
       used_paragraphs: meta?.usedParagraphs ?? null,
@@ -230,9 +234,10 @@ export const ChatContainer = () => {
     // always means a fresh, empty gpt_session_context on the backend.
     pollCancelRef.current += 1; // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
-    setConversationId(newId);
+    setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
+    setIsLoading(false); // never carry a spinner into another conversation
     // The pills are the single mode control; every new conversation starts fresh
     // in Rechtsfrage mode so the user is never in a mode they did not choose.
     setActiveMode("rechtsfrage");
@@ -240,8 +245,10 @@ export const ChatContainer = () => {
   };
 
   const handleSelectConversation = async (cid: string) => {
+    if (cid === conversationId) return; // clicking the active row must do nothing
     pollCancelRef.current += 1;
-    setConversationId(cid);
+    setConversationId(cid); activeConversationRef.current = cid;
+    setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
     await loadConversationMessages(cid);
@@ -260,12 +267,17 @@ export const ChatContainer = () => {
       return;
     }
     toast.success("Gespräch gelöscht");
+    try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
+      pollCancelRef.current += 1; // cancel any poll belonging to the deleted thread
       setMessages([]);
-      setConversationId(crypto.randomUUID());
+      const newId = crypto.randomUUID();
+      setConversationId(newId); activeConversationRef.current = newId;
+      setIsLoading(false);
     }
     await loadConversations();
   };
+
 
 
   const toBase64 = (file: File): Promise<string> => {
