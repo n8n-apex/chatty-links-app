@@ -19,6 +19,7 @@ export type Database = {
           content: string
           conversation_id: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           response_id: string | null
           role: string
@@ -30,6 +31,7 @@ export type Database = {
           content: string
           conversation_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           response_id?: string | null
           role: string
@@ -41,6 +43,7 @@ export type Database = {
           content?: string
           conversation_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           response_id?: string | null
           role?: string
