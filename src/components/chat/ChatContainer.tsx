@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Menu, MessageSquare, FileText, Search, Pencil, X } from "lucide-react";
+import { Menu, Pencil, X } from "lucide-react";
 import { Message } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
