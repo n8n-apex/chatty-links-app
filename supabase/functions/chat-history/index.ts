@@ -18,7 +18,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.45.0'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
+    'authorization, x-client-info, apikey, content-type, x-lawgpt-sig',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -37,6 +37,60 @@ const isUuid = (v: unknown): v is string =>
 
 const isLegacyOrUuid = (v: unknown): v is string =>
   v === 'legacy' || isUuid(v)
+
+// --- Request attestation -----------------------------------------------
+// This proves the request came from a build of THIS app, nothing more. The
+// key ships in the browser bundle, so it does not identify the person and is
+// not a substitute for a session. It removes drive-by access from the open
+// internet; per-member isolation is a separate, still-open piece of work.
+const SIG_WINDOW_SECONDS = 300
+
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+
+const timingSafeEqual = (a: string, b: string) => {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+const verifySignature = async (
+  header: string | null,
+  action: unknown,
+  email: string,
+  secret: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  if (!header) return { ok: false, reason: 'missing_signature' }
+  const parts = header.split('.')
+  if (parts.length !== 4 || parts[0] !== 'v1') {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const [, tsRaw, nonce, mac] = parts
+  const ts = Number(tsRaw)
+  if (!Number.isFinite(ts) || !nonce || !mac) {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const skew = Math.abs(Math.floor(Date.now() / 1000) - ts)
+  if (skew > SIG_WINDOW_SECONDS) return { ok: false, reason: 'stale_signature' }
+
+  const payload = `v1.${tsRaw}.${nonce}.${String(action)}.${email.toLowerCase()}`
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const expected = toHex(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload)),
+  )
+  if (!timingSafeEqual(expected, mac.toLowerCase())) {
+    return { ok: false, reason: 'bad_signature' }
+  }
+  return { ok: true }
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -73,12 +127,38 @@ Deno.serve(async (req) => {
     return json({ error: 'unresolved_user_email' }, 400)
   }
 
+  // Attestation gate. Mode `log` verifies and logs but lets the request
+  // through; `enforce` rejects. Flip via the CHAT_HISTORY_AUTH_MODE secret.
+  const authMode = (Deno.env.get('CHAT_HISTORY_AUTH_MODE') ?? 'log').toLowerCase()
+  const appKey = Deno.env.get('CHAT_HISTORY_APP_KEY')
+  if (!appKey) {
+    if (authMode === 'enforce') return json({ error: 'server_misconfigured' }, 500)
+    console.warn('chat-history: CHAT_HISTORY_APP_KEY not set; signature not checked')
+  } else {
+    const result = await verifySignature(
+      req.headers.get('x-lawgpt-sig'),
+      action,
+      userEmail,
+      appKey,
+    )
+    if (!result.ok) {
+      console.warn(
+        `chat-history: signature rejected (${result.reason}) mode=${authMode} action=${String(action)}`,
+      )
+      if (authMode === 'enforce') {
+        return json({ error: 'unauthorized', reason: result.reason }, 401)
+      }
+    }
+  }
+
+
   try {
     if (action === 'list_conversations') {
       const { data, error } = await supabase
         .from('chat_messages')
         .select('id, content, role, conversation_id, created_at')
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true })
       if (error) throw error
       return json({ success: true, rows: data ?? [] })
@@ -95,6 +175,7 @@ Deno.serve(async (req) => {
           'id, content, role, conversation_id, created_at, response_id, used_chunk_ids, used_paragraphs',
         )
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true })
       q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
       const { data, error } = await q
@@ -146,10 +227,12 @@ Deno.serve(async (req) => {
       if (!isLegacyOrUuid(cid)) {
         return json({ error: 'invalid_conversation_id' }, 400)
       }
+      // Soft delete: the row stays, it just stops being listed or loaded.
       let q = supabase
         .from('chat_messages')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
       q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
       const { error } = await q
       if (error) throw error

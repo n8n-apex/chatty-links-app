@@ -1,4 +1,7 @@
 // Integration tests for the chat-history edge function.
+// NOTE: these send UNSIGNED requests. They pass while CHAT_HISTORY_AUTH_MODE
+// is `log`. Under `enforce` they will return 401 and must be updated to sign
+// with CHAT_HISTORY_APP_KEY (see src/lib/historySig.ts for the scheme).
 // These tests hit the DEPLOYED function and exercise the end-to-end path:
 //   create rows -> list -> load -> delete.
 // Each test uses a unique synthetic email so it is fully isolated and cannot
