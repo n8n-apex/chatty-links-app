@@ -10,9 +10,13 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  // Client correspondence must never reach the browser console in production.
+  // Dropping at build time also neutralises any future console call site.
+  esbuild: mode === "production" ? { drop: ["console", "debugger"] } : undefined,
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
 }));
+

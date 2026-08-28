@@ -248,15 +248,17 @@ export const ChatContainer = () => {
     return list;
   }, [currentUserEmail, callHistory]);
 
+  // Returns true only when the transcript was actually replaced. A false return
+  // means the caller must NOT commit the new conversation identity.
   const loadConversationMessages = useCallback(
-    async (cid: string) => {
-      if (!currentUserEmail) return;
+    async (cid: string): Promise<boolean> => {
+      if (!currentUserEmail) return false;
       const data = await callHistory({
         action: "load_messages",
         user_email: currentUserEmail,
         conversation_id: cid,
       });
-      if (!data?.success) return;
+      if (!data?.success) return false;
       const restored: Message[] = ((data.rows as any[]) || []).map((row: any) => ({
         id: row.id,
         content: row.content,
@@ -274,9 +276,11 @@ export const ChatContainer = () => {
       setMessages(restored);
       // Resume a pending analyze_pdf turn for THIS conversation, if any.
       resumePendingTurnRef.current?.(cid);
+      return true;
     },
     [currentUserEmail, callHistory],
   );
+
 
   useEffect(() => {
     (async () => {
@@ -319,6 +323,23 @@ export const ChatContainer = () => {
   };
 
 
+  // The linked Drive project is per-conversation — the same pattern as
+  // `pending-turn:<id>`. A global key leaks one client's documents into
+  // another client's retrieval.
+  const projectStorageKey = (cid: string) => `chat-project-ref:${cid}`;
+
+  const applyProjectForConversation = (cid: string) => {
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(projectStorageKey(cid)); } catch { /* ignore */ }
+    if (saved) {
+      setProjectRef(saved);
+      setProjectStatus("linked");
+    } else {
+      setProjectRef(null);
+      setProjectStatus("idle");
+    }
+  };
+
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
@@ -328,20 +349,29 @@ export const ChatContainer = () => {
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
     setIsLoading(false); // never carry a spinner into another conversation
+    applyProjectForConversation(newId);
 
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleSelectConversation = async (cid: string) => {
     if (cid === conversationId) return; // clicking the active row must do nothing
+    // Load FIRST. Identity is committed only once the transcript is in hand,
+    // so a failed load can never leave the previous transcript bound to `cid`.
+    const loaded = await loadConversationMessages(cid);
+    if (!loaded) {
+      toast.error("Gespräch konnte nicht geladen werden.");
+      return;
+    }
     pollCancelRef.current += 1;
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
-    await loadConversationMessages(cid);
+    applyProjectForConversation(cid);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
+
 
   const handleDeleteConversation = async (cid: string) => {
     if (!currentUserEmail) return;
@@ -424,13 +454,24 @@ export const ChatContainer = () => {
 
     // A real HTTP failure is a real failure.
     if (!ok) {
-      const code =
-        data && typeof data === "object" && typeof (data as any).error === "string"
-          ? (data as any).error
-          : `http_${status}`;
+      const obj4xx = Array.isArray(data) ? data[0] : data;
+      // The backend sends specific, actionable German on 4xx paths. Carry it
+      // through verbatim instead of overwriting it with a generic sentence.
+      const backendMessage =
+        obj4xx && typeof obj4xx === "object" && typeof (obj4xx as any).message === "string"
+          ? ((obj4xx as any).message as string).trim()
+          : "";
       console.error("chat-proxy failed:", status, rawText);
+      if (status >= 400 && status < 500 && backendMessage) {
+        throw new Error(`BackendMessage: ${backendMessage}`);
+      }
+      const code =
+        obj4xx && typeof obj4xx === "object" && typeof (obj4xx as any).error === "string"
+          ? (obj4xx as any).error
+          : `http_${status}`;
       throw new Error(`BackendError: ${code}`);
     }
+
 
     if (!rawText) throw new Error("Leere Antwort vom Server.");
 
@@ -763,13 +804,20 @@ export const ChatContainer = () => {
       const isAbort = errName === "AbortError";
       const isPollTimeout = errMsgStr === "PollTimeout";
       const isBackendError = errMsgStr.startsWith("BackendError:");
-      const msg = isPollTimeout
+      // A 4xx that carried a German message from the backend is shown verbatim.
+      const backendMessage = errMsgStr.startsWith("BackendMessage:")
+        ? errMsgStr.slice("BackendMessage:".length).trim()
+        : "";
+      const msg = backendMessage
+        ? backendMessage
+        : isPollTimeout
         ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
         : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
         : isBackendError
         ? "Die Anfrage konnte nicht verarbeitet werden — der Server hat einen Fehler gemeldet. Bitte versuchen Sie es erneut. Wenn der Fehler erneut auftritt, melden Sie ihn bitte."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
+
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         content: JSON.stringify({
@@ -914,8 +962,11 @@ export const ChatContainer = () => {
   const bindProject = async (ref: string) => {
     const cleanRef = (ref || "").trim();
     if (!cleanRef) return;
+    const boundTo = activeConversationRef.current;
     setProjectRef(cleanRef);
-    localStorage.setItem("chat-project-ref", cleanRef);
+    if (boundTo) {
+      try { localStorage.setItem(projectStorageKey(boundTo), cleanRef); } catch { /* ignore */ }
+    }
     setProjectStatus("loading");
     try {
       const { data, error } = await supabase.functions.invoke("chat-proxy", {
@@ -931,7 +982,9 @@ export const ChatContainer = () => {
       console.error("ingest_project error:", e);
       setProjectStatus("error");
       setProjectRef(null);
-      localStorage.removeItem("chat-project-ref");
+      if (boundTo) {
+        try { localStorage.removeItem(projectStorageKey(boundTo)); } catch { /* ignore */ }
+      }
       toast.error("Projekt konnte nicht eingelesen werden.");
     }
   };
@@ -939,21 +992,26 @@ export const ChatContainer = () => {
   const unlinkProject = () => {
     setProjectRef(null);
     setProjectStatus("idle");
-    localStorage.removeItem("chat-project-ref");
+    const cid = activeConversationRef.current;
+    try {
+      if (cid) localStorage.removeItem(projectStorageKey(cid));
+      // Retire the old global key so it can never be re-read.
+      localStorage.removeItem("chat-project-ref");
+    } catch { /* ignore */ }
   };
 
-  // Rehydrate sessionId + project_ref on mount so a reload preserves the thread.
+  // Rehydrate sessionId on mount so a reload preserves the thread. The project
+  // ref is per-conversation and is applied when a conversation is opened.
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
     }
-    const savedProject = localStorage.getItem("chat-project-ref");
-    if (savedProject && !projectRef) {
-      setProjectRef(savedProject);
-      setProjectStatus("linked");
-    }
+    try { localStorage.removeItem("chat-project-ref"); } catch { /* ignore */ }
+    const cid = localStorage.getItem("chat-session-id");
+    if (cid) applyProjectForConversation(cid);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Server-verified admin check
   useEffect(() => {
