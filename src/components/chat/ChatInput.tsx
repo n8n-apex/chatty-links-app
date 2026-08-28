@@ -130,7 +130,14 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     if (list.length === 0) return;
 
     // Downscale images to keep base64 payload manageable
-    const processed = await Promise.all(list.map(downscaleImage));
+    setIsProcessingFiles(true);
+    let processed: File[];
+    try {
+      processed = await Promise.all(list.map(downscaleImage));
+    } finally {
+      setIsProcessingFiles(false);
+    }
+
 
     setAttachedFiles((prev) => {
       const combined = [...prev, ...processed];
