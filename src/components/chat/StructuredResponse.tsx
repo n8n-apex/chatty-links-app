@@ -5,7 +5,8 @@ import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCi
 import { cn } from '@/lib/utils';
 import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
-import { toText } from '@/lib/safeText';
+import { toText, toStringList } from '@/lib/safeText';
+import { UnverifizierteNormen } from './UnverifizierteNormen';
 
 
 interface RechtsgrundlageItem {
@@ -819,7 +820,9 @@ const renderCommonExtras = (data: StructuredPayload) => {
     (q) => typeof q === 'string' || (q as { validated?: boolean }).validated !== false,
   );
 
-  if (paragraphs.length === 0 && visibleQuellen.length === 0 && !konf) return null;
+  const unverifiziertCommon = toStringList(data.rechtsgrundlage_unverifiziert);
+
+  if (paragraphs.length === 0 && visibleQuellen.length === 0 && unverifiziertCommon.length === 0 && !konf) return null;
 
   return (
     <div className="mt-1 flex flex-col gap-3 border-t border-border pt-2">
@@ -836,11 +839,15 @@ const renderCommonExtras = (data: StructuredPayload) => {
           {visibleQuellen.length > 0 && (
             <div className="flex flex-col gap-1">
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
-              <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} />
+              <QuelleList
+                quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']}
+                unverifiziert={data.rechtsgrundlage_unverifiziert}
+              />
             </div>
           )}
         </div>
       )}
+      <UnverifizierteNormen value={data.rechtsgrundlage_unverifiziert} />
       {konf && (
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span className={cn('h-2 w-2 rounded-full', konf.dot)} />
@@ -877,7 +884,9 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
   // Prefer new footnote model; fall back to legacy `rechtsprechung` only if footnotes absent.
   const hasRechtsprechung = !hasFootnotes && Array.isArray(data.rechtsprechung) && data.rechtsprechung.length > 0;
 
-  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && !hasRechtsprechung && !hasFootnotes && !konf) {
+  const unverifiziertRf = toStringList(data.rechtsgrundlage_unverifiziert);
+
+  if (rechtsgrundlageChips.length === 0 && visibleQuellen.length === 0 && unverifiziertRf.length === 0 && !hasRechtsprechung && !hasFootnotes && !konf) {
     return null;
   }
 
@@ -908,9 +917,14 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
       {visibleQuellen.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
-          <QuelleList quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']} variant="inline" />
+          <QuelleList
+            quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']}
+            variant="inline"
+            unverifiziert={data.rechtsgrundlage_unverifiziert}
+          />
         </div>
       )}
+      <UnverifizierteNormen value={data.rechtsgrundlage_unverifiziert} />
       {hasFootnotes && (
         <div className="flex flex-col gap-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rechtsprechung</div>

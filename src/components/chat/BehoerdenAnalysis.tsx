@@ -5,6 +5,7 @@ import { Copy, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-rea
 import { cn } from '@/lib/utils';
 import { QuelleList, type Quelle } from './QuelleList';
 import { toText, toStringList } from '@/lib/safeText';
+import { UnverifizierteNormen } from './UnverifizierteNormen';
 import { toast } from 'sonner';
 
 
@@ -426,16 +427,9 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {/* Rechtsgrundlage unverifiziert */}
       {toStringList(data.rechtsgrundlage_unverifiziert).length > 0 && (
         <Sec>
-          <SectionHeading>Rechtsgrundlage (nicht abschließend belegt)</SectionHeading>
-          <div className="flex flex-wrap gap-1.5">
-            {toStringList(data.rechtsgrundlage_unverifiziert).map((r, i) => (
-              <span key={i} className="inline-block rounded-md border border-dashed border-border bg-muted/20 px-2 py-0.5 text-[11px] italic leading-snug text-muted-foreground max-w-full whitespace-normal break-words text-left align-top">{r}</span>
-            ))}
-          </div>
+          <UnverifizierteNormen value={data.rechtsgrundlage_unverifiziert} />
         </Sec>
       )}
-
-
 
       {/* Detailanalyse — collapsible legacy */}
       {hasLegacyDetail && (
@@ -568,7 +562,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {Array.isArray(data.quellen) && data.quellen.length > 0 && (
         <Sec>
           <SectionHeading>Quellen</SectionHeading>
-          <QuelleList quellen={data.quellen} />
+          <QuelleList quellen={data.quellen} unverifiziert={data.rechtsgrundlage_unverifiziert} />
         </Sec>
       )}
 

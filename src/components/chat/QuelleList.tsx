@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, Copy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { copyPlainText, UNVERIFIED_SUFFIX } from '@/lib/copyText';
+import { toStringList } from '@/lib/safeText';
+
 
 export interface Quelle {
   paragraph?: string;
@@ -32,7 +35,10 @@ interface QuelleListProps {
   quellen?: Array<string | Quelle> | string | null;
   className?: string;
   variant?: 'stacked' | 'inline';
+  /** Provisions without a retrieved source — appended to "Alle Quellen kopieren". */
+  unverifiziert?: unknown;
 }
+
 
 interface ChunkResponse {
   ok?: boolean;
@@ -54,7 +60,7 @@ interface ModalState {
   fallbackLabel: string;
 }
 
-export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleListProps) => {
+export const QuelleList = ({ quellen, className, variant = 'stacked', unverifiziert }: QuelleListProps) => {
   const [modal, setModal] = useState<ModalState>({
     open: false,
     loading: false,
@@ -121,8 +127,15 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
     ? modalData.full_text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)
     : [];
 
+  const unverifiedList = toStringList(unverifiziert);
+  const copyAllText = [
+    ...items.map((it) => it.label),
+    ...unverifiedList.map((u) => `${u}${UNVERIFIED_SUFFIX}`),
+  ].join('\n');
+
   return (
     <>
+      <div className="flex flex-col gap-1.5">
       <div
         className={cn(
           variant === 'inline' ? 'flex flex-wrap gap-1.5' : 'flex flex-col gap-1.5',
@@ -179,10 +192,37 @@ export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleLi
                   {isLoading && <Loader2 className="h-3 w-3 animate-spin opacity-70" />}
                 </span>
               )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyPlainText(item.label, 'Quelle kopiert');
+                }}
+                className="ml-1.5 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title="Quellenangabe kopieren"
+                aria-label="Quellenangabe kopieren"
+              >
+                <Copy className="h-2.5 w-2.5" />
+              </button>
             </span>
           );
         })}
       </div>
+      {copyAllText.trim() && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            copyPlainText(copyAllText, 'Alle Quellen kopiert');
+          }}
+          className="inline-flex w-fit items-center gap-1 rounded-md border border-border bg-background/60 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Copy className="h-3 w-3" />
+          Alle Quellen kopieren
+        </button>
+      )}
+      </div>
+
 
       <Dialog
         open={modal.open}
