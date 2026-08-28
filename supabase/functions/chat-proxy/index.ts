@@ -11,16 +11,68 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-// Every failure leaves this function in ONE shape, with a machine-readable code.
-const fail = (code: string, status: number, detail?: unknown) =>
-  json(
+// German, actionable, and safe to show an anonymous caller. Internal detail —
+// exception text, upstream bodies — NEVER travels to the client. It is reduced
+// to a size/shape note in the server log, tied to the correlation id.
+const ERROR_MESSAGES: Record<string, string> = {
+  missing_message: 'Bitte geben Sie eine Frage oder Anweisung ein.',
+  missing_session_id: 'Die Sitzung ist abgelaufen. Bitte laden Sie die Seite neu und versuchen Sie es erneut.',
+  empty_statement: 'Der Entwurf ist leer. Bitte ergänzen Sie den Text und speichern Sie erneut.',
+  missing_project_ref: 'Es wurde kein Projektordner angegeben. Bitte fügen Sie den Google-Drive-Link erneut ein.',
+  webhook_not_configured: 'Der Dienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.',
+  upstream_error: 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es in wenigen Sekunden erneut.',
+  upstream_empty: 'Die Verarbeitung hat kein Ergebnis geliefert. Bitte senden Sie die Anfrage erneut.',
+  upstream_unparseable: 'Die Antwort der Verarbeitung war unvollständig. Bitte senden Sie die Anfrage erneut.',
+  upstream_unreachable: 'Der Dienst ist momentan nicht erreichbar. Bitte versuchen Sie es in wenigen Sekunden erneut.',
+  save_not_confirmed: 'Der Entwurf konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+  ingest_not_confirmed: 'Das Projekt konnte nicht eingelesen werden. Bitte prüfen Sie die Freigabe des Ordners.',
+  feedback_not_saved: 'Das Feedback konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+  whisper_failed: 'Die Aufnahme konnte nicht transkribiert werden. Bitte sprechen Sie erneut oder tippen Sie den Text.',
+  transcription_failed: 'Die Aufnahme konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
+  missing_audio: 'Es wurde keine Aufnahme empfangen. Bitte nehmen Sie erneut auf.',
+  openai_key_missing: 'Die Spracheingabe ist derzeit nicht verfügbar. Bitte tippen Sie Ihren Text.',
+  proxy_exception: 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
+}
+const GENERIC_MESSAGE = 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.'
+
+// Server-side only. Records that something failed and how big the evidence was,
+// never the evidence itself — this system carries client correspondence.
+const logFailure = (
+  correlationId: string,
+  code: string,
+  status: number,
+  extra?: Record<string, unknown>,
+) => {
+  console.error(JSON.stringify({ correlation_id: correlationId, error: code, status, ...extra }))
+}
+
+type FailOptions = {
+  /** Logged server-side as a byte count only. Never returned to the caller. */
+  detail?: unknown
+  /** A user-safe German message from upstream, used instead of the canned one. */
+  message?: string
+  extra?: Record<string, unknown>
+}
+
+// Every failure leaves this function in ONE shape, with a machine-readable code
+// the frontend error card keys on, plus a correlation id so a user report can be
+// traced without internal detail travelling to the client.
+const fail = (code: string, status: number, opts: FailOptions = {}) => {
+  const correlationId = crypto.randomUUID()
+  const detailBytes =
+    opts.detail === undefined ? undefined : String(opts.detail).length
+  logFailure(correlationId, code, status, { detail_bytes: detailBytes, ...opts.extra })
+  return json(
     {
       status: 'error',
       error: code,
-      detail: detail === undefined ? undefined : String(detail).slice(0, 2000),
+      message: opts.message ?? ERROR_MESSAGES[code] ?? GENERIC_MESSAGE,
+      correlation_id: correlationId,
     },
     status,
   )
+}
+
 
 
 Deno.serve(async (req) => {
