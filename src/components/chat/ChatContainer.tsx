@@ -454,13 +454,24 @@ export const ChatContainer = () => {
 
     // A real HTTP failure is a real failure.
     if (!ok) {
-      const code =
-        data && typeof data === "object" && typeof (data as any).error === "string"
-          ? (data as any).error
-          : `http_${status}`;
+      const obj4xx = Array.isArray(data) ? data[0] : data;
+      // The backend sends specific, actionable German on 4xx paths. Carry it
+      // through verbatim instead of overwriting it with a generic sentence.
+      const backendMessage =
+        obj4xx && typeof obj4xx === "object" && typeof (obj4xx as any).message === "string"
+          ? ((obj4xx as any).message as string).trim()
+          : "";
       console.error("chat-proxy failed:", status, rawText);
+      if (status >= 400 && status < 500 && backendMessage) {
+        throw new Error(`BackendMessage: ${backendMessage}`);
+      }
+      const code =
+        obj4xx && typeof obj4xx === "object" && typeof (obj4xx as any).error === "string"
+          ? (obj4xx as any).error
+          : `http_${status}`;
       throw new Error(`BackendError: ${code}`);
     }
+
 
     if (!rawText) throw new Error("Leere Antwort vom Server.");
 
