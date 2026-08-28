@@ -23,17 +23,12 @@ interface ChatMessageProps {
   correctionDisabled?: boolean;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false, onSaveStatement, onCorrect, correctionDisabled }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatement, onCorrect, correctionDisabled }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
-  const isAdmin = (() => {
-    if (typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
-    const email = params.get('email') || '';
-    const adminEmails = ['sebastian@umnutzung.de', 'utkarsh@apex-consulting.ai', 'preview@test.com'];
-    if (adminEmails.includes(email.toLowerCase())) return true;
-    return (window as unknown as { __isAdminVerified?: boolean }).__isAdminVerified === true;
-  })();
+  // The admin view is gated on the server answer only (check_admin via
+  // chat-proxy, resolved in ChatContainer). It defaults to off.
+
   const [copied, setCopied] = useState(false);
   const [modal, setModal] = useState<null | "correction" | "note">(null);
   const [modalText, setModalText] = useState("");
