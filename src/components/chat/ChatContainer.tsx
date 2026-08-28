@@ -101,6 +101,7 @@ const buildAssistantMessage = (
   let responseId: string | undefined;
   let needsClarification = false;
   let routingNotice: string | undefined;
+  let verstanden: Verstanden | undefined;
 
   const parsed = Array.isArray(data) ? data[0] : data;
 
@@ -112,6 +113,7 @@ const buildAssistantMessage = (
     if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
     if (typeof parsed.response_id === "string") responseId = parsed.response_id;
     if (parsed.needs_clarification === true) needsClarification = true;
+    if (parsed.verstanden && typeof parsed.verstanden === "object") verstanden = parsed.verstanden;
     if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
       routingNotice = parsed.routing_notice.trim();
     }
@@ -122,11 +124,19 @@ const buildAssistantMessage = (
       }
       responseText = JSON.stringify(parsed);
     } else {
-      responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+      const plain = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+      // Plain-text answers would drop `verstanden` on reload, and an answer that
+      // renders without the line is the unsafe case. Store it as a structured
+      // payload instead — the renderer is content-addressed, so `antwort` renders
+      // exactly the same markdown.
+      responseText = verstanden
+        ? JSON.stringify({ action: "question", antwort: plain, verstanden })
+        : plain;
     }
   } else {
     responseText = String(data);
   }
+
 
   const message: Message = {
     id: crypto.randomUUID(),
