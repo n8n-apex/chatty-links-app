@@ -12,6 +12,8 @@ import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
 import { Gespraechsleiste } from "./Gespraechsleiste";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getUserEmail } from "@/lib/identity";
+import { signHistoryRequest } from "@/lib/historySig";
 
 type UploadVerdict = {
   state: "success" | "failure" | "unknown";
@@ -164,11 +166,7 @@ export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [currentUserEmail, setCurrentUserEmail] = useState(() => {
-    if (typeof window === "undefined") return "preview@test.com";
-    const emailFromUrl = new URLSearchParams(window.location.search).get("email");
-    return emailFromUrl || "preview@test.com";
-  });
+  const [currentUserEmail, setCurrentUserEmail] = useState(getUserEmail);
   const isUnresolvedEmail = currentUserEmail.includes("{{") || currentUserEmail.includes("}}");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -207,7 +205,15 @@ export const ChatContainer = () => {
   // which uses the service role and scopes every operation to a single
   // user_email. The table itself is locked down (no anon GRANTs / no policies).
   const callHistory = useCallback(async (payload: Record<string, unknown>) => {
-    const { data, error } = await supabase.functions.invoke("chat-history", { body: payload });
+    // Signed envelope: attests the app build, not the person. See historySig.ts.
+    const sig = await signHistoryRequest(
+      String(payload.action ?? ""),
+      String(payload.user_email ?? ""),
+    );
+    const { data, error } = await supabase.functions.invoke("chat-history", {
+      body: payload,
+      ...(sig ? { headers: { "x-lawgpt-sig": sig } } : {}),
+    });
     if (error) {
       console.error("chat-history error:", error);
       return null;
@@ -952,8 +958,7 @@ export const ChatContainer = () => {
   // Server-verified admin check
   useEffect(() => {
     const checkAdmin = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const email = params.get("email") || "";
+      const email = getUserEmail();
 
       if (!email) {
         setIsAdmin(false);
@@ -1020,6 +1025,7 @@ export const ChatContainer = () => {
           onSelect={handleSelectConversation}
           onNew={handleNewConversation}
           onDelete={handleDeleteConversation}
+          identityMissing={!currentUserEmail}
         />
       )}
 
