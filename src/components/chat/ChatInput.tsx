@@ -470,11 +470,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               type="submit"
               size="icon"
               variant="glow"
-              disabled={(!message.trim() && !hasFiles) || isLoading}
+              disabled={(!message.trim() && !hasFiles) || isLoading || isProcessingFiles}
               className="h-10 w-10 shrink-0 rounded-xl"
-              title={isLoading ? 'Bitte warten…' : 'Senden'}
+              title={isLoading ? 'Bitte warten…' : isProcessingFiles ? 'Dateien werden vorbereitet…' : 'Senden'}
             >
-              {isLoading ? (
+              {isLoading || isProcessingFiles ? (
                 <Sparkles className="h-4 w-4 animate-pulse" />
               ) : (
                 <Send className="h-4 w-4" />
@@ -487,8 +487,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> für neue Zeile
         </p>
         <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
-          Unterstützte Formate: PDF, JPG, PNG, WebP. Mehrere Seiten als einzelne Bilder anhängen möglich.
+          Max. 8 Dateien, zusammen ca. 11 MB. PDF, JPG, PNG, WebP.
         </p>
+
       </form>
     </motion.div>
   );
