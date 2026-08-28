@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
         .from('chat_messages')
         .select('id, content, role, conversation_id, created_at')
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true })
       if (error) throw error
       return json({ success: true, rows: data ?? [] })
@@ -174,6 +175,7 @@ Deno.serve(async (req) => {
           'id, content, role, conversation_id, created_at, response_id, used_chunk_ids, used_paragraphs',
         )
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true })
       q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
       const { data, error } = await q
@@ -225,10 +227,12 @@ Deno.serve(async (req) => {
       if (!isLegacyOrUuid(cid)) {
         return json({ error: 'invalid_conversation_id' }, 400)
       }
+      // Soft delete: the row stays, it just stops being listed or loaded.
       let q = supabase
         .from('chat_messages')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('user_email', userEmail)
+        .is('deleted_at', null)
       q = cid === 'legacy' ? q.is('conversation_id', null) : q.eq('conversation_id', cid)
       const { error } = await q
       if (error) throw error
