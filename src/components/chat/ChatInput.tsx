@@ -6,12 +6,15 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
+export type AttachIntent = 'schreiben' | 'quelle';
+
 interface ChatInputProps {
-  onSendMessage: (message: string, files?: File[] | null) => void;
+  onSendMessage: (message: string, files?: File[] | null, attachIntent?: AttachIntent) => void;
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
 }
+
 
 type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
 
