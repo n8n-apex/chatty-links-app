@@ -1,7 +1,6 @@
 // Integration tests for the chat-history edge function.
-// NOTE: these send UNSIGNED requests. They pass while CHAT_HISTORY_AUTH_MODE
-// is `log`. Under `enforce` they will return 401 and must be updated to sign
-// with CHAT_HISTORY_APP_KEY (see src/lib/historySig.ts for the scheme).
+// Requests are signed with the app key (see src/lib/historySig.ts) because the
+// function runs with CHAT_HISTORY_AUTH_MODE=enforce.
 // These tests hit the DEPLOYED function and exercise the end-to-end path:
 //   create rows -> list -> load -> delete.
 // Each test uses a unique synthetic email so it is fully isolated and cannot
@@ -27,10 +26,43 @@ const headers = {
   "apikey": ANON_KEY,
 }
 
-const call = async (body: Record<string, unknown>) => {
+const APP_KEY = Deno.env.get("VITE_CHAT_HISTORY_APP_KEY") ??
+  Deno.env.get("CHAT_HISTORY_APP_KEY") ?? ""
+
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0")).join("")
+
+const sign = async (
+  action: string,
+  email: string,
+  ts = Math.floor(Date.now() / 1000),
+) => {
+  const nonce = crypto.randomUUID().replace(/-/g, "")
+  const payload = `v1.${ts}.${nonce}.${action}.${email.toLowerCase()}`
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(APP_KEY),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  )
+  const mac = toHex(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)),
+  )
+  return `v1.${ts}.${nonce}.${mac}`
+}
+
+const call = async (
+  body: Record<string, unknown>,
+  opts: { sig?: string | null } = {},
+) => {
+  const sig = opts.sig === undefined
+    ? await sign(String(body.action ?? ""), String(body.user_email ?? ""))
+    : opts.sig
   const res = await fetch(FN_URL, {
     method: "POST",
-    headers,
+    headers: sig ? { ...headers, "x-lawgpt-sig": sig } : headers,
     body: JSON.stringify(body),
   })
   const text = await res.text()
@@ -178,4 +210,47 @@ Deno.test("direct anon access to chat_messages is blocked by RLS", async () => {
   } else {
     assertNotEquals(res.status, 200)
   }
+})
+
+Deno.test("enforce: missing signature header -> 401", async () => {
+  const r = await call(
+    { action: "list_conversations", user_email: uniqueEmail() },
+    { sig: null },
+  )
+  assertEquals(r.status, 401)
+  assertEquals(r.body?.error, "unauthorized")
+  assert(typeof r.body?.message === "string" && r.body.message.length > 0)
+  assertEquals(r.body?.reason, undefined)
+})
+
+Deno.test("enforce: garbage signature -> 401", async () => {
+  const r = await call(
+    { action: "list_conversations", user_email: uniqueEmail() },
+    { sig: "v1.0.deadbeef.notavalidmac" },
+  )
+  assertEquals(r.status, 401)
+  assertEquals(r.body?.error, "unauthorized")
+})
+
+Deno.test("enforce: stale timestamp -> 401", async () => {
+  const email = uniqueEmail()
+  const stale = await sign(
+    "list_conversations",
+    email,
+    Math.floor(Date.now() / 1000) - 600,
+  )
+  const r = await call(
+    { action: "list_conversations", user_email: email },
+    { sig: stale },
+  )
+  assertEquals(r.status, 401)
+})
+
+Deno.test("enforce: valid signature -> 200", async () => {
+  const r = await call({
+    action: "list_conversations",
+    user_email: uniqueEmail(),
+  })
+  assertEquals(r.status, 200, r.raw)
+  assertEquals(r.body?.success, true)
 })
