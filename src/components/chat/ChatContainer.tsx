@@ -289,9 +289,7 @@ export const ChatContainer = () => {
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
     setIsLoading(false); // never carry a spinner into another conversation
-    // The pills are the single mode control; every new conversation starts fresh
-    // in Rechtsfrage mode so the user is never in a mode they did not choose.
-    setActiveMode("rechtsfrage");
+
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
