@@ -767,22 +767,22 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
       (typeof data.fehlende_informationen === 'string' && data.fehlende_informationen.trim()) ||
       (typeof data.wichtiger_hinweis === 'string' && data.wichtiger_hinweis.trim()) ||
       (typeof data.antwort === 'string' && data.antwort.trim()) ||
-      '';
-    if (fallback) {
-      return (
-        <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
-          <Section>
-            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
-                <AlertCircle className="h-3.5 w-3.5" />
-                Rückfrage
-              </div>
-              <div className="text-sm text-foreground"><Md>{fallback}</Md></div>
+      toText(data.message).trim() ||
+      EMPTY_RESPONSE_MESSAGE;
+    // Unconditional floor: no code path may return an empty bubble.
+    return (
+      <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+        <Section>
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Rückfrage
             </div>
-          </Section>
-        </motion.div>
-      );
-    }
+            <div className="text-sm text-foreground"><Md>{fallback}</Md></div>
+          </div>
+        </Section>
+      </motion.div>
+    );
   }
 
   // B1/B2 - Rechtsfrage (default with antwort)
