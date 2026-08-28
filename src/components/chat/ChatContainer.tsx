@@ -230,7 +230,10 @@ export const ChatContainer = () => {
         responseId: row.response_id || undefined,
         usedChunkIds: Array.isArray(row.used_chunk_ids) ? row.used_chunk_ids : undefined,
         usedParagraphs: Array.isArray(row.used_paragraphs) ? row.used_paragraphs : undefined,
-      }));
+        // The Verstanden line is safety equipment — it must survive a reload,
+        // so it is read back out of the persisted payload.
+        verstanden: row.role === "ai" ? extractVerstanden(row.content) : undefined,
+
       setMessages(restored);
       // Resume a pending analyze_pdf turn for THIS conversation, if any.
       resumePendingTurnRef.current?.(cid);
