@@ -147,18 +147,8 @@ export const ChatContainer = () => {
   const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   const [projectRef, setProjectRef] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
-  // Single source of truth for which backend the next message hits.
-  // Set ONLY by clicking a tab. Never derived from input content.
-  const [activeMode, setActiveModeState] = useState<"rechtsfrage" | "stellungnahme" | "behoerdenschreiben">(() => {
-    if (typeof window === "undefined") return "rechtsfrage";
-    const saved = localStorage.getItem("chat-active-mode");
-    if (saved === "rechtsfrage" || saved === "stellungnahme" || saved === "behoerdenschreiben") return saved;
-    return "rechtsfrage";
-  });
-  const setActiveMode = (m: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben") => {
-    setActiveModeState(m);
-    try { localStorage.setItem("chat-active-mode", m); } catch { /* ignore */ }
-  };
+  // Routing is decided by the backend router (`action: "auto"`), never by the UI.
+
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
