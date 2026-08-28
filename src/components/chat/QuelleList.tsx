@@ -60,7 +60,7 @@ interface ModalState {
   fallbackLabel: string;
 }
 
-export const QuelleList = ({ quellen, className, variant = 'stacked' }: QuelleListProps) => {
+export const QuelleList = ({ quellen, className, variant = 'stacked', unverifiziert }: QuelleListProps) => {
   const [modal, setModal] = useState<ModalState>({
     open: false,
     loading: false,
