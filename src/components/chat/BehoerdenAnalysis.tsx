@@ -63,9 +63,14 @@ type Konfidenz = 'hoch' | 'mittel' | 'niedrig' | string;
 
 export interface BehoerdenAnalysisData {
   status?: string;
+  error?: string;
+  message?: string;
+  antwort?: string;
+  fehlende_informationen?: string | null;
   action?: string;
   sessionId?: string;
   dateiname?: string;
+
 
   projekt_und_sachverhalt?: string;
   rechtliche_beurteilungsgrundlage?: string;
