@@ -48,9 +48,15 @@ const downscaleImage = async (file: File): Promise<File> => {
 export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  // Default is analyse: in a chat product a paperclip means "look at this".
+  const [attachIntent, setAttachIntent] = useState<AttachIntent>('schreiben');
+  // True while files are being decoded/downscaled. Sending during this window
+  // would let the router decide on a turn whose attachment it cannot see.
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
+
 
   const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
