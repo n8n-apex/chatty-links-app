@@ -143,10 +143,18 @@ Deno.serve(async (req) => {
     )
     if (!result.ok) {
       console.warn(
-        `chat-history: signature rejected (${result.reason}) mode=${authMode} action=${String(action)}`,
+        `chat-history: sig_fail reason=${result.reason} mode=${authMode} action=${String(action)}`,
       )
       if (authMode === 'enforce') {
-        return json({ error: 'unauthorized', reason: result.reason }, 401)
+        return json(
+          {
+            status: 'error',
+            error: 'unauthorized',
+            message:
+              'Zugriff nicht möglich. Bitte laden Sie die Seite neu und versuchen Sie es erneut.',
+          },
+          401,
+        )
       }
     }
   }
