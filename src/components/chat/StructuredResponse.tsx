@@ -216,6 +216,7 @@ export const tryParseStructured = (content: string): StructuredPayload | null =>
     const obj = Array.isArray(parsed) ? parsed[0] : parsed;
     if (!obj || typeof obj !== 'object') return null;
     if (
+      obj.status === 'error' ||
       obj.antwort ||
       obj.zusammenfassung ||
       obj.entwurf_stellungnahme ||
