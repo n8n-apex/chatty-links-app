@@ -979,6 +979,36 @@ export const ChatContainer = () => {
     checkAdmin();
   }, []);
 
+  /**
+   * One-click correction: resend the text of the user turn this answer replies to,
+   * with force_action + rerun_of so the router redecides instead of guessing again.
+   */
+  const handleCorrect = (assistantMessageId: string, alternative: string, rerunOf?: string) => {
+    if (isLoading) return;
+    const idx = messages.findIndex((m) => m.id === assistantMessageId);
+    if (idx === -1) return;
+    let original = "";
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") { original = messages[i].content; break; }
+    }
+    // Strip the attachment prefix the bubble adds: "📎 [a.pdf, b.pdf] — text".
+    const text = original.replace(/^\s*📎\s*\[[^\]]*\]\s*(—\s*)?/, "").trim();
+    if (!text) {
+      toast.error("Der ursprüngliche Text ist nicht mehr verfügbar.");
+      return;
+    }
+    sendMessage(text, null, undefined, { forceAction: alternative, rerunOf });
+  };
+
+  // What the conversation currently holds, per the most recent router report.
+  const zustand = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const v = messages[i].verstanden;
+      if (v?.zustand) return v.zustand;
+    }
+    return null;
+  })();
+
   return (
     <div className="flex h-screen w-full bg-background">
       {historyEnabled && (
@@ -1045,7 +1075,15 @@ export const ChatContainer = () => {
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} onSaveStatement={handleSaveStatement} />
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    onFeedback={handleFeedback}
+                    isAdmin={isAdmin}
+                    onSaveStatement={handleSaveStatement}
+                    onCorrect={handleCorrect}
+                    correctionDisabled={isLoading}
+                  />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
                 <div ref={messagesEndRef} />
@@ -1053,6 +1091,8 @@ export const ChatContainer = () => {
             )}
           </div>
         </main>
+
+        <Gespraechsleiste zustand={zustand} />
 
         <ChatInput
           onSendMessage={(msg, files, attachIntent) => {
