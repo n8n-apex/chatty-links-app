@@ -608,7 +608,6 @@ export const ChatContainer = () => {
       : content;
 
     {
-
       const userMessage: Message = {
         id: crypto.randomUUID(),
         content: displayContent,
@@ -633,20 +632,22 @@ export const ChatContainer = () => {
         );
         payload = {
           ...payload,
-          action: "analyze_pdf",
-          source_type: "analyse",
+          // The router decides analysis vs. source ingest. Never pre-decide here.
+          action: "auto",
           files: encoded,
           // Back-compat: also send first file top-level (n8n may still read either)
           file_name: firstFile!.name,
           file_base64: encoded[0].file_base64,
           additional_question: content || null,
-          message: "Analysiere dieses Behördenschreiben",
           client_turn_id: turnId,
           turn_id: turnId,
         };
-        // The typed text is the objective in Behördenschreiben mode.
-        const effectiveZiel = (ziel && ziel.trim()) || (content || '').trim();
-        if (effectiveZiel) (payload as Record<string, unknown>).ziel = effectiveZiel;
+        const typed = (content || "").trim();
+        if (typed) {
+          payload.message = typed;
+          // Kept for the analysis branch, which reads the objective by name.
+          payload.ziel = typed;
+        }
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("Datei konnte nicht gelesen werden.");
@@ -657,37 +658,30 @@ export const ChatContainer = () => {
       setIsLoading(false);
       return;
     } else {
-      // ROUTING: action is a pure function of activeMode. Never read message text.
-      if (activeMode === "stellungnahme") {
-        payload = { ...payload, message: content, action: "draft_statement", topic: content };
-      } else if (activeMode === "behoerdenschreiben") {
-        payload = { ...payload, message: content, action: "analyze_pdf" };
-      } else {
-        payload = { ...payload, message: content, action: "question", question: content };
-      }
+      // ROUTING: the backend router decides. `action` must be sent EXPLICITLY —
+      // chat-proxy defaults a missing action to "question", which bypasses R0.
+      payload = { ...payload, message: content, action: "auto" };
     }
 
     const startTime = performance.now();
-    // Initial request is fast: analyze_pdf now returns {accepted, poll:true}
-    // in ~1s; the real work is fetched via pollForResult below. B3/B6 stay sync.
-    const timeoutMs =
-      payload.action === "analyze_pdf" ? 30000 :
-      payload.action === "draft_statement" ? 210000 :
-      120000;
-    // Progress placeholder id (only used for the async analyze_pdf path).
+    // Flat ceiling: Supabase kills a request at ~150s idle, so anything longer is
+    // unreachable and only turns a German backend error into a network error.
+    const timeoutMs = 145000;
+    // Progress placeholder id (only used for the async, poll-based path).
     let progressMsgId: string | null = null;
     try {
       let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
 
-      // --- ASYNC REQUEST-REPLY for analyze_pdf ---
+      // --- ASYNC REQUEST-REPLY ---
       // Detect on BODY (chat-proxy normalises status codes to 200).
       const initial = Array.isArray(data) ? data[0] : data;
       if (
-        payload.action === "analyze_pdf" &&
         initial && typeof initial === "object" &&
         (initial.status === "accepted" || initial.poll === true)
       ) {
+        // Under `auto` the client cannot know the action — the 202 body carries it.
+        const pollAction: string = initial.action ?? "analyze_pdf";
         progressMsgId = crypto.randomUUID();
         const makeText = (sec: number) =>
           `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
@@ -701,10 +695,11 @@ export const ChatContainer = () => {
         // Record the turn durably so it can be resumed after navigation/reload.
         try {
           localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
-            turnId, turnStartedAt, action: "analyze_pdf", fileName: firstFile?.name ?? null,
+            turnId, turnStartedAt, action: pollAction, fileName: firstFile?.name ?? null,
           }));
         } catch { /* ignore */ }
-        data = await pollForResult(sessionId, "analyze_pdf", turnId, turnStartedAt, (sec) => {
+        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, (sec) => {
+
           setMessages((prev) => prev.map((m) =>
             m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
           ));
