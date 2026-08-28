@@ -74,11 +74,13 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading) return;
+    if (isLoading || isProcessingFiles) return;
     if (!message.trim() && attachedFiles.length === 0) return;
-    onSendMessage(message.trim(), attachedFiles.length > 0 ? attachedFiles : null);
+    const files = attachedFiles.length > 0 ? attachedFiles : null;
+    onSendMessage(message.trim(), files, files ? attachIntent : undefined);
     setMessage('');
     setAttachedFiles([]);
+    setAttachIntent('schreiben');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
       setAudioStatus('idle');
@@ -90,10 +92,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isLoading) return;
+      if (isLoading || isProcessingFiles) return;
       handleSubmit(e);
     }
   };
+
+  // Pasting is the fastest way to establish a subject now that the modes are gone.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = Array.from(e.clipboardData?.files || []);
+    if (pasted.length === 0) return;
+    e.preventDefault();
+    addFiles(pasted);
+  };
+
 
   const isAcceptedFile = (file: File): boolean => {
     const name = file.name.toLowerCase();
