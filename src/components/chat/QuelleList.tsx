@@ -35,7 +35,10 @@ interface QuelleListProps {
   quellen?: Array<string | Quelle> | string | null;
   className?: string;
   variant?: 'stacked' | 'inline';
+  /** Provisions without a retrieved source — appended to "Alle Quellen kopieren". */
+  unverifiziert?: unknown;
 }
+
 
 interface ChunkResponse {
   ok?: boolean;
