@@ -233,6 +233,8 @@ export const ChatContainer = () => {
         // The Verstanden line is safety equipment — it must survive a reload,
         // so it is read back out of the persisted payload.
         verstanden: row.role === "ai" ? extractVerstanden(row.content) : undefined,
+      }));
+
 
       setMessages(restored);
       // Resume a pending analyze_pdf turn for THIS conversation, if any.
