@@ -323,6 +323,23 @@ export const ChatContainer = () => {
   };
 
 
+  // The linked Drive project is per-conversation — the same pattern as
+  // `pending-turn:<id>`. A global key leaks one client's documents into
+  // another client's retrieval.
+  const projectStorageKey = (cid: string) => `chat-project-ref:${cid}`;
+
+  const applyProjectForConversation = (cid: string) => {
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(projectStorageKey(cid)); } catch { /* ignore */ }
+    if (saved) {
+      setProjectRef(saved);
+      setProjectStatus("linked");
+    } else {
+      setProjectRef(null);
+      setProjectStatus("idle");
+    }
+  };
+
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
@@ -332,20 +349,29 @@ export const ChatContainer = () => {
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
     setIsLoading(false); // never carry a spinner into another conversation
+    applyProjectForConversation(newId);
 
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
   const handleSelectConversation = async (cid: string) => {
     if (cid === conversationId) return; // clicking the active row must do nothing
+    // Load FIRST. Identity is committed only once the transcript is in hand,
+    // so a failed load can never leave the previous transcript bound to `cid`.
+    const loaded = await loadConversationMessages(cid);
+    if (!loaded) {
+      toast.error("Gespräch konnte nicht geladen werden.");
+      return;
+    }
     pollCancelRef.current += 1;
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
-    await loadConversationMessages(cid);
+    applyProjectForConversation(cid);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
+
 
   const handleDeleteConversation = async (cid: string) => {
     if (!currentUserEmail) return;
