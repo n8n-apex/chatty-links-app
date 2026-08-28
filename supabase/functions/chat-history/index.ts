@@ -127,9 +127,13 @@ Deno.serve(async (req) => {
     return json({ error: 'unresolved_user_email' }, 400)
   }
 
-  // Attestation gate. Mode `log` verifies and logs but lets the request
-  // through; `enforce` rejects. Flip via the CHAT_HISTORY_AUTH_MODE secret.
-  const authMode = (Deno.env.get('CHAT_HISTORY_AUTH_MODE') ?? 'log').toLowerCase()
+  // Attestation gate. Enforcing is the DEFAULT: any request without a fresh,
+  // valid signature is rejected with 401. Rollback without a redeploy: set the
+  // CHAT_HISTORY_AUTH_MODE secret to `off` (verify-and-log only).
+  const authMode =
+    (Deno.env.get('CHAT_HISTORY_AUTH_MODE') ?? 'enforce').toLowerCase() === 'off'
+      ? 'off'
+      : 'enforce'
   const appKey = Deno.env.get('CHAT_HISTORY_APP_KEY')
   if (!appKey) {
     if (authMode === 'enforce') return json({ error: 'server_misconfigured' }, 500)
