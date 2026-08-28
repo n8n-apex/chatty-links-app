@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getUserEmail } from "@/lib/identity";
 import { signHistoryRequest } from "@/lib/historySig";
+import { parseBackendPayload, schemaInvalidEnvelope } from "@/lib/responseSchema";
+
 
 type UploadVerdict = {
   state: "success" | "failure" | "unknown";
