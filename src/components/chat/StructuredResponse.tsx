@@ -50,6 +50,10 @@ export interface StructuredPayload {
   rechtsprechung?: Rechtsprechung[];
   konfidenz?: 'hoch' | 'mittel' | 'niedrig' | 'unzureichend' | string;
   action?: string;
+  // Failure envelope — the backend always writes a German explanation here.
+  status?: string;
+  error?: string;
+  message?: string;
   // B4 - Behördenschreiben Analyse
   zusammenfassung?: string;
   gesamtbeurteilung?: string;
