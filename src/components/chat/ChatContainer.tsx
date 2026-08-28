@@ -150,7 +150,9 @@ const buildAssistantMessage = (
     usedParagraphs,
     needsClarification,
     routingNotice,
+    verstanden,
   };
+
   return { message, responseText, meta: { responseId, usedChunkIds, usedParagraphs } };
 };
 
