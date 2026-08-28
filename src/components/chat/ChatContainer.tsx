@@ -144,7 +144,6 @@ export const ChatContainer = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   const [projectRef, setProjectRef] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
   // Routing is decided by the backend router (`action: "auto"`), never by the UI.
@@ -626,9 +625,6 @@ export const ChatContainer = () => {
         setIsLoading(false);
         return;
       }
-    } else if (isEditDraftMode) {
-      setIsLoading(false);
-      return;
     } else {
       // ROUTING: the backend router decides. `action` must be sent EXPLICITLY —
       // chat-proxy defaults a missing action to "question", which bypasses R0.
@@ -846,110 +842,6 @@ export const ChatContainer = () => {
     } catch { return null; }
   };
 
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const lastAssistantDraft = lastAssistant ? extractDraft(lastAssistant.content) : null;
-  const isEditDraftMode = !!(lastAssistant && lastAssistantDraft && !editDraftDismissed.has(lastAssistant.id));
-
-  // --- Conversational draft edit: dedicated request, no chat history attached ---
-  const handleEditDraft = async (instruction: string) => {
-    const text = (instruction || "").trim();
-    if (!text) return;
-    const sessionId = conversationId || localStorage.getItem("chat-session-id") || "";
-    if (!sessionId) {
-      toast.error("Keine Session aktiv.");
-      return;
-    }
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content: text,
-      role: "user",
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    persistMessage("user", text);
-
-    const startTime = performance.now();
-    try {
-      const { data, error } = await supabase.functions.invoke("chat-proxy", {
-        body: {
-          action: "draft_statement",
-          mode: "edit",
-          sessionId,
-          topic: text,
-          ...(projectRef ? { project_ref: projectRef } : {}),
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      console.log("[DRAFT EDIT] n8n response:", data);
-
-      const parsed = Array.isArray(data) ? data[0] : data;
-      // Never persist or render an error envelope as a revised draft.
-      if (
-        parsed && typeof parsed === "object" &&
-        typeof (parsed as any).error === "string" &&
-        !(parsed as any).antwort && !(parsed as any).entwurf_stellungnahme &&
-        !(parsed as any).projekt_und_sachverhalt && !(parsed as any).output
-      ) {
-        throw new Error(`BackendError: ${(parsed as any).error}`);
-      }
-
-      let responseText: string;
-      let usedChunkIds: string[] = [];
-      let usedParagraphs: string[] = [];
-      let responseId: string | undefined;
-
-      if (parsed && typeof parsed === "object") {
-        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
-        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
-        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
-
-        // If backend returned a wrapped { output: "..." } where output is a JSON string with the draft, unwrap it.
-        let draftObj: Record<string, unknown> = parsed;
-        if (!parsed.entwurf_stellungnahme && typeof parsed.output === "string") {
-          try {
-            const inner = JSON.parse(parsed.output);
-            const innerObj = Array.isArray(inner) ? inner[0] : inner;
-            if (innerObj && typeof innerObj === "object" && innerObj.entwurf_stellungnahme) {
-              draftObj = { ...parsed, ...innerObj };
-            }
-          } catch { /* keep parsed */ }
-        }
-        // Ensure the action marker so tryParseStructured/StructuredResponse render this as a draft.
-        if (!draftObj.action) draftObj = { ...draftObj, action: "draft_statement" };
-        responseText = JSON.stringify(draftObj);
-      } else {
-        responseText = typeof data === "string" ? data : JSON.stringify(data);
-      }
-
-      // Append as a NEW assistant message (mirrors how a fresh draft is rendered).
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        content: responseText,
-        role: "assistant",
-        timestamp: new Date(),
-        durationMs: performance.now() - startTime,
-        responseId,
-        usedChunkIds,
-        usedParagraphs,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
-      if (historyEnabled) loadConversations();
-    } catch (e) {
-      console.error("Draft edit error:", e);
-      const m = e instanceof Error ? e.message : String(e);
-      toast.error(
-        m.startsWith("BackendError:")
-          ? "Der Server hat die Überarbeitung abgelehnt. Der Entwurf wurde nicht geändert."
-          : "Entwurf konnte nicht aktualisiert werden.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSaveStatement = async (
     messageId: string,
     newText: string,
@@ -1135,36 +1027,9 @@ export const ChatContainer = () => {
           </div>
         </main>
 
-        {isEditDraftMode && lastAssistant && (
-          <div className="border-t border-border bg-primary/5 px-4 py-2 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 text-xs">
-              <span className="flex items-center gap-2 text-primary">
-                <Pencil className="h-3 w-3" />
-                Änderung am Entwurf — z. B. „mach den dritten Absatz schärfer“
-              </span>
-              <button
-                type="button"
-                onClick={() => setEditDraftDismissed((prev) => {
-                  const next = new Set(prev);
-                  next.add(lastAssistant.id);
-                  return next;
-                })}
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                aria-label="Bearbeitungsmodus verlassen"
-                title="Bearbeitungsmodus verlassen"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
         <ChatInput
           onSendMessage={(msg, files, attachIntent) => {
-            if ((!files || files.length === 0) && isEditDraftMode) {
-              handleEditDraft(msg);
-            } else {
-              sendMessage(msg, files, attachIntent);
-            }
+            sendMessage(msg, files, attachIntent);
             setInputValue("");
           }}
           isLoading={isLoading}
