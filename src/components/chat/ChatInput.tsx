@@ -400,29 +400,42 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               className="hidden"
               onChange={handleFileChange}
             />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              disabled={isLoading}
-              onClick={() => fileInputRef.current?.click()}
-              className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-              aria-label="Datei anhängen"
-              title="PDF oder Bilder anhängen (mehrere möglich)"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  disabled={isLoading}
+                  className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  aria-label="Datei anhängen"
+                  title="PDF oder Bilder anhängen (mehrere möglich)"
+                >
+                  {isProcessingFiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuItem
+                  onSelect={() => { setAttachIntent('schreiben'); fileInputRef.current?.click(); }}
+                >
+                  Als Behördenschreiben analysieren
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => { setAttachIntent('quelle'); fileInputRef.current?.click(); }}
+                >
+                  Nur als Unterlage ablegen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <textarea
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={
-                hasFiles
-                  ? 'Optionale Frage oder Anweisung zum Dokument…'
-                  : 'Schreibe deine Nachricht…'
-              }
+              onPaste={handlePaste}
+              placeholder="Frage stellen, Schreiben anhängen oder Änderung am Entwurf beschreiben …"
               rows={1}
+
               disabled={isLoading}
               className={cn(
                 'flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none',
