@@ -395,11 +395,66 @@ const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEditorProps
   );
 };
 
-export const StructuredResponse = ({ data, draftEditor }: { data: StructuredPayload; draftEditor?: DraftEditorProps }) => {
+const ERROR_MESSAGES: Record<string, string> = {
+  analysis_too_complex:
+    'Die Analyse wurde abgebrochen, weil sie mehr Einzelprüfungen erfordert hat als vorgesehen. Das Dokument selbst wurde einwandfrei gelesen — ein erneutes Hochladen ist nicht nötig.',
+  analysis_failed:
+    'Die Analyse konnte nicht abgeschlossen werden. Das Dokument liess sich nicht laden oder nicht auslesen. Bitte laden Sie es erneut hoch.',
+  feedback_not_saved:
+    'Feedback konnte nicht gespeichert werden — zu dieser Antwort sind keine Quellen hinterlegt.',
+  JSON_VERTRAG:
+    'Die Antwort des Systems war unvollständig oder nicht auswertbar. Bitte senden Sie die Anfrage erneut.',
+};
+
+const DEFAULT_ERROR_MESSAGE =
+  'Die Anfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut — falls das Problem bestehen bleibt, laden Sie die Seite neu.';
+
+const EMPTY_RESPONSE_MESSAGE =
+  'Die Antwort kam ohne Inhalt zurück. Bitte senden Sie die Anfrage erneut.';
+
+const ErrorCard = ({ data, onRetry }: { data: StructuredPayload; onRetry?: () => void }) => {
+  const body =
+    toText(data.antwort).trim() ||
+    toText(data.message).trim() ||
+    (typeof data.error === 'string' ? ERROR_MESSAGES[data.error] : '') ||
+    DEFAULT_ERROR_MESSAGE;
+  return (
+    <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
+      <Section>
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-destructive">
+            <AlertCircle className="h-3.5 w-3.5" />
+            Fehler
+          </div>
+          <div className="text-sm text-foreground"><Md>{body}</Md></div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-3 inline-flex items-center rounded-md border border-destructive/40 px-2.5 py-1 text-xs text-destructive transition-colors hover:bg-destructive/15"
+            >
+              Erneut senden
+            </button>
+          )}
+        </div>
+      </Section>
+    </motion.div>
+  );
+};
+
+export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: StructuredPayload; draftEditor?: DraftEditorProps; onRetry?: () => void }) => {
+  // Failure path first — must sit above analyze_pdf, otherwise a failed B4
+  // analysis is handed to BehoerdenAnalysis and disappears.
+  if (data.status === 'error') {
+    return <ErrorCard data={data} onRetry={onRetry} />;
+  }
+
   // Clarification path — no sources, question in `antwort`, missing info list.
   if (data.needs_clarification === true) {
     const missing = typeof data.fehlende_informationen === 'string' ? data.fehlende_informationen.trim() : '';
     const missingItems = missing ? missing.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const clarificationBody = toText(data.antwort).trim();
+    const showFloor = !clarificationBody && missingItems.length === 0;
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
         {data.antwort && (
