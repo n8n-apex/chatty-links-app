@@ -17,6 +17,7 @@ interface ConversationSidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  identityMissing?: boolean;
 }
 
 const groupConversations = (items: ConversationSummary[]) => {
@@ -59,6 +60,7 @@ export const ConversationSidebar = ({
   onSelect,
   onNew,
   onDelete,
+  identityMissing = false,
 }: ConversationSidebarProps) => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,7 +138,11 @@ export const ConversationSidebar = ({
 
             {/* Conversation list */}
             <div className="mt-4 flex-1 overflow-y-auto px-2 pb-4">
-              {conversations.length === 0 ? (
+              {identityMissing ? (
+                <p className="mx-1 rounded-md border border-border bg-muted/40 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+                  Kein Benutzerkonto erkannt — der Verlauf kann nicht geladen werden.
+                </p>
+              ) : conversations.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-muted-foreground">
                   Noch keine Gespräche
                 </p>
