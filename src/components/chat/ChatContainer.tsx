@@ -253,8 +253,7 @@ export const ChatContainer = () => {
       setConversationId(freshId); activeConversationRef.current = freshId;
       localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
-      // Start fresh in Rechtsfrage mode; the pills are the single control.
-      setActiveMode("rechtsfrage");
+
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
