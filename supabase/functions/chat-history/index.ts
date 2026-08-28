@@ -127,6 +127,31 @@ Deno.serve(async (req) => {
     return json({ error: 'unresolved_user_email' }, 400)
   }
 
+  // Attestation gate. Mode `log` verifies and logs but lets the request
+  // through; `enforce` rejects. Flip via the CHAT_HISTORY_AUTH_MODE secret.
+  const authMode = (Deno.env.get('CHAT_HISTORY_AUTH_MODE') ?? 'log').toLowerCase()
+  const appKey = Deno.env.get('CHAT_HISTORY_APP_KEY')
+  if (!appKey) {
+    if (authMode === 'enforce') return json({ error: 'server_misconfigured' }, 500)
+    console.warn('chat-history: CHAT_HISTORY_APP_KEY not set; signature not checked')
+  } else {
+    const result = await verifySignature(
+      req.headers.get('x-lawgpt-sig'),
+      action,
+      userEmail,
+      appKey,
+    )
+    if (!result.ok) {
+      console.warn(
+        `chat-history: signature rejected (${result.reason}) mode=${authMode} action=${String(action)}`,
+      )
+      if (authMode === 'enforce') {
+        return json({ error: 'unauthorized', reason: result.reason }, 401)
+      }
+    }
+  }
+
+
   try {
     if (action === 'list_conversations') {
       const { data, error } = await supabase
