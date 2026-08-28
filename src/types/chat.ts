@@ -35,6 +35,9 @@ export interface Message {
   feedbackSubmitted?: 'correct' | 'inaccurate' | 'correction' | 'note';
   // Backend routing explanation (e.g. Behördenschreiben without doc answered as Rechtsfrage)
   routingNotice?: string;
+  // Router self-report: what the backend understood this turn to be.
+  verstanden?: Verstanden;
+
 }
 
 
