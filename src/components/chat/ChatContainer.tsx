@@ -127,15 +127,32 @@ const buildAssistantMessage = (
       }
       responseText = JSON.stringify(parsed);
     } else {
-      const plain = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
-      // Plain-text answers would drop `verstanden` on reload, and an answer that
-      // renders without the line is the unsafe case. Store it as a structured
-      // payload instead — the renderer is content-addressed, so `antwort` renders
-      // exactly the same markdown.
-      responseText = verstanden
-        ? JSON.stringify({ action: "question", antwort: plain, verstanden })
-        : plain;
+      const plainField = parsed.output || parsed.response || parsed.message || parsed.text;
+      const usablePlain = typeof plainField === "string" && plainField.trim().length > 0;
+      if (!usablePlain) {
+        // No known shape and no renderable text: validate before guessing. Only a
+        // JSON object that matches nothing at all becomes an error card.
+        const check = parseBackendPayload(parsed);
+        if (!check.ok) {
+          console.error("backend payload failed shape validation", {
+            issuePaths: check.issuePaths,
+          });
+          responseText = JSON.stringify(schemaInvalidEnvelope(check.issuePaths));
+        } else {
+          responseText = JSON.stringify(data);
+        }
+      } else {
+        const plain = plainField as string;
+        // Plain-text answers would drop `verstanden` on reload, and an answer that
+        // renders without the line is the unsafe case. Store it as a structured
+        // payload instead — the renderer is content-addressed, so `antwort` renders
+        // exactly the same markdown.
+        responseText = verstanden
+          ? JSON.stringify({ action: "question", antwort: plain, verstanden })
+          : plain;
+      }
     }
+
   } else {
     responseText = String(data);
   }
