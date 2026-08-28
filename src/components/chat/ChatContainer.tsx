@@ -581,9 +581,6 @@ export const ChatContainer = () => {
   const sendMessage = async (
     content: string,
     files?: File[] | null,
-    ziel?: string,
-    sourceType?: 'analyse',
-    suppressUserBubble?: boolean,
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -604,145 +601,14 @@ export const ChatContainer = () => {
     const hasFiles = Array.isArray(files) && files.length > 0;
     const firstFile = hasFiles ? files![0] : null;
 
-    // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
-    if (hasFiles) {
-      // Mode is the only signal: Behördenschreiben => analyse, otherwise the
-      // file is context and no source_type key is sent at all.
-      const isAnalyse = sourceType === 'analyse' || activeMode === 'behoerdenschreiben';
-
-      if (!isAnalyse) {
-        const list = files!;
-        const label = 'Kontext';
-        const typed = (content || '').trim();
-        // One user message listing every attached document, in send order,
-        // plus whatever the user typed (never discarded).
-        const fileLines = list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n");
-        const userMessage: Message = {
-          id: crypto.randomUUID(),
-          content: typed ? `${fileLines}\n\n${typed}` : fileLines,
-          role: "user",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
-        persistMessage("user", userMessage.content, undefined, sendConversationId);
-
-
-        // One combined progress placeholder for the whole batch.
-        const progressId = crypto.randomUUID();
-        const progressText = (n: number, name: string) =>
-          `⏳ Quelle ${n} von ${list.length} wird hinzugefügt… (${name})`;
-        setMessages((prev) => [
-          ...prev,
-          { id: progressId, content: progressText(1, list[0].name), role: "assistant", timestamp: new Date() },
-        ]);
-        setIsLoading(true);
-
-        const succeeded: string[] = [];
-        const failed: string[] = [];
-        const unknown: string[] = [];
-        try {
-          for (let i = 0; i < list.length; i++) {
-            const file = list[i];
-            setMessages((prev) =>
-              prev.map((m) => (m.id === progressId ? { ...m, content: progressText(i + 1, file.name) } : m)),
-            );
-            try {
-              const base64 = await toBase64(file);
-              if (!base64) throw new Error("Empty base64 result");
-              // 180s: a large PDF can still be chunking well past 2 minutes.
-              const { ok, status, data, rawText } = await invokeChatProxyRaw({
-                action: "upload_source",
-                sessionId,
-                file_name: file.name,
-                file_base64: base64,
-                ...(projectRef ? { project_ref: projectRef } : {}),
-              }, 180000);
-
-              // A real HTTP error is a real failure.
-              if (!ok) {
-                console.error("upload_source HTTP error:", status, rawText);
-                failed.push(file.name);
-                continue;
-              }
-
-              const verdict = classifyUploadSource(data);
-              const fileName = verdict.fileName || file.name;
-              const chunks = verdict.chunks;
-              if (verdict.state === "success") {
-                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
-              } else if (verdict.state === "failure") {
-                console.error("upload_source backend failure:", verdict.error, data);
-                failed.push(file.name);
-              } else {
-                // 200 OK but no readable verdict (the workflow frequently answers
-                // with an empty body while indexing continues server-side).
-                console.warn("upload_source unknown result:", rawText);
-                unknown.push(file.name);
-              }
-            } catch (e) {
-              // Timeout / network drop: the upload may well have completed.
-              console.error("upload_source error:", e);
-              unknown.push(file.name);
-            }
-          }
-        } finally {
-          setMessages((prev) => prev.filter((m) => m.id !== progressId));
-          setIsLoading(false);
-        }
-
-        const parts: string[] = [];
-        if (succeeded.length > 0) {
-          parts.push(
-            `✓ ${succeeded.length} von ${list.length} Quellen hinzugefügt (${label}) — werden in dieser Unterhaltung berücksichtigt:\n` +
-              succeeded.map((s, i) => `${i + 1}. ${s}`).join("\n"),
-          );
-        }
-        if (unknown.length > 0) {
-          parts.push(
-            `ℹ Status unklar:\n` +
-              unknown.map((f, i) => `${i + 1}. ${f}`).join("\n") +
-              `\nDie Verarbeitung läuft möglicherweise noch im Hintergrund. ` +
-              `Diese Datei${unknown.length > 1 ? "en" : ""} wurde${unknown.length > 1 ? "n" : ""} vermutlich bereits gespeichert — ` +
-              `bitte nicht erneut hinzufügen, sondern zunächst eine Frage dazu stellen.`,
-          );
-        }
-        if (failed.length > 0) {
-          parts.push(
-            `⚠ Nicht verarbeitet:\n` +
-              failed.map((f, i) => `${i + 1}. ${f}`).join("\n") +
-              `\nBitte diese Datei${failed.length > 1 ? "en" : ""} erneut hinzufügen.`,
-          );
-        }
-
-        const summary = parts.join("\n\n");
-        const ackMessage: Message = {
-          id: crypto.randomUUID(),
-          content: summary,
-          role: "assistant",
-          timestamp: new Date(),
-        };
-        if (activeConversationRef.current === sendConversationId) {
-          setMessages((prev) => [...prev, ackMessage]);
-        }
-        persistMessage("ai", summary, undefined, sendConversationId);
-        // The typed text is a real request — run it after the uploads, without
-        // duplicating the user bubble that already contains it.
-        if (typed) {
-          await sendMessage(typed, null, undefined, undefined, true);
-        }
-        return;
-      }
-
-    }
-
-    // === analyze_pdf (multi-file) OR text-only Q&A ===
     const displayContent = hasFiles
       ? (content
           ? `📎 [${files!.map((f) => f.name).join(", ")}] — ${content}`
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    if (!suppressUserBubble) {
+    {
+
       const userMessage: Message = {
         id: crypto.randomUUID(),
         content: displayContent,
