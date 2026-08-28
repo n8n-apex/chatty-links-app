@@ -11,16 +11,68 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-// Every failure leaves this function in ONE shape, with a machine-readable code.
-const fail = (code: string, status: number, detail?: unknown) =>
-  json(
+// German, actionable, and safe to show an anonymous caller. Internal detail —
+// exception text, upstream bodies — NEVER travels to the client. It is reduced
+// to a size/shape note in the server log, tied to the correlation id.
+const ERROR_MESSAGES: Record<string, string> = {
+  missing_message: 'Bitte geben Sie eine Frage oder Anweisung ein.',
+  missing_session_id: 'Die Sitzung ist abgelaufen. Bitte laden Sie die Seite neu und versuchen Sie es erneut.',
+  empty_statement: 'Der Entwurf ist leer. Bitte ergänzen Sie den Text und speichern Sie erneut.',
+  missing_project_ref: 'Es wurde kein Projektordner angegeben. Bitte fügen Sie den Google-Drive-Link erneut ein.',
+  webhook_not_configured: 'Der Dienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.',
+  upstream_error: 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es in wenigen Sekunden erneut.',
+  upstream_empty: 'Die Verarbeitung hat kein Ergebnis geliefert. Bitte senden Sie die Anfrage erneut.',
+  upstream_unparseable: 'Die Antwort der Verarbeitung war unvollständig. Bitte senden Sie die Anfrage erneut.',
+  upstream_unreachable: 'Der Dienst ist momentan nicht erreichbar. Bitte versuchen Sie es in wenigen Sekunden erneut.',
+  save_not_confirmed: 'Der Entwurf konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+  ingest_not_confirmed: 'Das Projekt konnte nicht eingelesen werden. Bitte prüfen Sie die Freigabe des Ordners.',
+  feedback_not_saved: 'Das Feedback konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
+  whisper_failed: 'Die Aufnahme konnte nicht transkribiert werden. Bitte sprechen Sie erneut oder tippen Sie den Text.',
+  transcription_failed: 'Die Aufnahme konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
+  missing_audio: 'Es wurde keine Aufnahme empfangen. Bitte nehmen Sie erneut auf.',
+  openai_key_missing: 'Die Spracheingabe ist derzeit nicht verfügbar. Bitte tippen Sie Ihren Text.',
+  proxy_exception: 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
+}
+const GENERIC_MESSAGE = 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.'
+
+// Server-side only. Records that something failed and how big the evidence was,
+// never the evidence itself — this system carries client correspondence.
+const logFailure = (
+  correlationId: string,
+  code: string,
+  status: number,
+  extra?: Record<string, unknown>,
+) => {
+  console.error(JSON.stringify({ correlation_id: correlationId, error: code, status, ...extra }))
+}
+
+type FailOptions = {
+  /** Logged server-side as a byte count only. Never returned to the caller. */
+  detail?: unknown
+  /** A user-safe German message from upstream, used instead of the canned one. */
+  message?: string
+  extra?: Record<string, unknown>
+}
+
+// Every failure leaves this function in ONE shape, with a machine-readable code
+// the frontend error card keys on, plus a correlation id so a user report can be
+// traced without internal detail travelling to the client.
+const fail = (code: string, status: number, opts: FailOptions = {}) => {
+  const correlationId = crypto.randomUUID()
+  const detailBytes =
+    opts.detail === undefined ? undefined : String(opts.detail).length
+  logFailure(correlationId, code, status, { detail_bytes: detailBytes, ...opts.extra })
+  return json(
     {
       status: 'error',
       error: code,
-      detail: detail === undefined ? undefined : String(detail).slice(0, 2000),
+      message: opts.message ?? ERROR_MESSAGES[code] ?? GENERIC_MESSAGE,
+      correlation_id: correlationId,
     },
     status,
   )
+}
+
 
 
 Deno.serve(async (req) => {
@@ -79,7 +131,6 @@ Deno.serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (e) {
-        console.error('LS API error:', e);
         return new Response(
           JSON.stringify({ isAdmin: false, error: 'api_error' }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -89,21 +140,33 @@ Deno.serve(async (req) => {
 
     // --- TRANSCRIBE AUDIO via OpenAI Whisper ---
     if (body.action === 'transcribe_audio') {
+      // The mic path answers 200 by contract (the client reads `text`), but the
+      // error shape is the same as everywhere else — and never carries the raw
+      // upstream body.
+      const micFail = (code: string, detail?: unknown) => {
+        const correlationId = crypto.randomUUID()
+        logFailure(correlationId, code, 200, {
+          action: 'transcribe_audio',
+          detail_bytes: detail === undefined ? undefined : String(detail).length,
+        })
+        return json({
+          status: 'error',
+          error: code,
+          message: ERROR_MESSAGES[code] ?? GENERIC_MESSAGE,
+          correlation_id: correlationId,
+          text: '',
+        })
+      }
+
       const openaiKey = Deno.env.get('OPENAI_API_KEY');
       if (!openaiKey) {
-        return new Response(
-          JSON.stringify({ error: 'openai_key_missing', text: '' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return micFail('openai_key_missing');
       }
       try {
         const audioB64: string = body.audio_base64 || '';
         const mime: string = body.mime_type || 'audio/webm';
         if (!audioB64) {
-          return new Response(
-            JSON.stringify({ error: 'missing_audio', text: '' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return micFail('missing_audio');
         }
         const bin = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
         const blob = new Blob([bin], { type: mime });
@@ -119,11 +182,7 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          console.error('Whisper error', resp.status, txt);
-          return new Response(
-            JSON.stringify({ error: 'whisper_failed', detail: txt, text: '' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return micFail('whisper_failed', txt);
         }
         let parsed: any;
         try { parsed = JSON.parse(txt); } catch { parsed = { text: txt }; }
@@ -132,13 +191,10 @@ Deno.serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (e) {
-        console.error('transcribe_audio error', e);
-        return new Response(
-          JSON.stringify({ error: String(e), text: '' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return micFail('transcription_failed', e);
       }
     }
+
 
     const MESSAGELESS_ACTIONS = [
       'analyze_pdf', 'draft_statement', 'ingest_project',
@@ -249,12 +305,10 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          console.error('draft_statement edit upstream error', resp.status, txt);
-          return fail('upstream_error', 502, txt);
+          return fail('upstream_error', 502, { detail: txt, extra: { upstream_status: resp.status } });
         }
         const trimmed = (txt || '').trim();
         if (!trimmed) {
-          console.error('draft_statement edit: upstream 2xx with empty body');
           return fail('upstream_empty', 502);
         }
         let parsed: unknown;
@@ -262,8 +316,7 @@ Deno.serve(async (req) => {
         try { parsed = JSON.parse(trimmed); } catch { parsed = { output: trimmed }; }
         return json(parsed);
       } catch (e) {
-        console.error('draft_statement edit error:', e);
-        return fail('upstream_unreachable', 502, e);
+        return fail('upstream_unreachable', 502, { detail: e });
       }
     }
 
@@ -290,29 +343,25 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          console.error('save_statement upstream error', resp.status, txt);
-          return fail('upstream_error', 502, txt);
+          return fail('upstream_error', 502, { detail: txt, extra: { upstream_status: resp.status } });
         }
         const trimmed = (txt || '').trim();
         if (!trimmed) {
-          console.error('save_statement: upstream 2xx with empty body');
           return fail('upstream_empty', 502);
         }
         let parsed: any;
         try {
           parsed = JSON.parse(trimmed);
         } catch {
-          console.error('save_statement: unparseable upstream body:', trimmed.slice(0, 500));
-          return fail('upstream_unparseable', 502, trimmed);
+          return fail('upstream_unparseable', 502, { detail: trimmed });
         }
         const obj = Array.isArray(parsed) ? parsed[0] : parsed;
         if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.saved === false || obj.error) {
-          return fail('save_not_confirmed', 502, trimmed);
+          return fail('save_not_confirmed', 502, { detail: trimmed });
         }
         return json(obj);
       } catch (e) {
-        console.error('save_statement error:', e);
-        return fail('upstream_unreachable', 502, e);
+        return fail('upstream_unreachable', 502, { detail: e });
       }
     }
 
@@ -347,8 +396,7 @@ Deno.serve(async (req) => {
         });
         const fbText = await fbResp.text();
         if (!fbResp.ok) {
-          console.error('submit_feedback upstream error', fbResp.status, fbText);
-          return fail('upstream_error', 502, fbText);
+          return fail('upstream_error', 502, { detail: fbText, extra: { upstream_status: fbResp.status } });
         }
 
         // n8n answering 2xx is NOT proof the feedback row was written. A workflow
@@ -356,7 +404,6 @@ Deno.serve(async (req) => {
         // replies 200 with an empty body. Treat that as a failure.
         const fbTrimmed = (fbText || '').trim();
         if (!fbTrimmed) {
-          console.error('submit_feedback: upstream 2xx with empty body');
           return fail('upstream_empty', 502);
         }
 
@@ -374,7 +421,6 @@ Deno.serve(async (req) => {
         // unparseable body is passed through as success (same policy as the
         // generic forward path). Only an empty body is a failure here.
         if (!fbJson) {
-          console.warn('submit_feedback: non-JSON upstream body:', fbTrimmed.slice(0, 500));
           return json({ success: true, message: fbTrimmed.slice(0, 500), upstream_raw: fbTrimmed.slice(0, 500) });
         }
 
@@ -386,14 +432,12 @@ Deno.serve(async (req) => {
           !fbObj.error;
 
         if (!fbOk) {
-          console.error('submit_feedback: upstream reported failure:', fbTrimmed.slice(0, 500));
-          return fail('feedback_not_saved', 502, fbTrimmed);
+          return fail('feedback_not_saved', 502, { detail: fbTrimmed });
         }
 
         return json({ success: true, message: fbObj.message ?? 'Feedback gespeichert', upstream: fbObj });
       } catch (e) {
-        console.error('Feedback forward error:', e);
-        return fail('proxy_exception', 500, e);
+        return fail('proxy_exception', 500, { detail: e });
       }
     }
 
@@ -416,29 +460,25 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          console.error('ingest_project upstream error', resp.status, txt);
-          return fail('upstream_error', 502, txt);
+          return fail('upstream_error', 502, { detail: txt, extra: { upstream_status: resp.status } });
         }
         const trimmed = (txt || '').trim();
         if (!trimmed) {
-          console.error('ingest_project: upstream 2xx with empty body');
           return fail('upstream_empty', 502);
         }
         let parsed: any;
         try {
           parsed = JSON.parse(trimmed);
         } catch {
-          console.error('ingest_project: unparseable upstream body:', trimmed.slice(0, 500));
-          return fail('upstream_unparseable', 502, trimmed);
+          return fail('upstream_unparseable', 502, { detail: trimmed });
         }
         const obj = Array.isArray(parsed) ? parsed[0] : parsed;
         if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
-          return fail('ingest_not_confirmed', 502, trimmed);
+          return fail('ingest_not_confirmed', 502, { detail: trimmed });
         }
         return json(obj);
       } catch (e) {
-        console.error('ingest_project error:', e);
-        return fail('upstream_unreachable', 502, e);
+        return fail('upstream_unreachable', 502, { detail: e });
       }
     }
 
@@ -474,7 +514,19 @@ Deno.serve(async (req) => {
       forwardPayload.statement_type = 'Stellungnahme';
     }
 
-    console.log('Forwarding to n8n:', JSON.stringify({ ...forwardPayload, file_base64: forwardPayload.file_base64 ? '[omitted]' : undefined }));
+    // Metadata only. This system carries real clients' authority correspondence,
+    // so no question text, no answer text and no base64 is ever written to logs.
+    const requestId = crypto.randomUUID();
+    console.log(JSON.stringify({
+      correlation_id: requestId,
+      event: 'forward',
+      action: effectiveAction,
+      sessionId: forwardPayload.sessionId ?? null,
+      turn_id: forwardPayload.turn_id ?? null,
+      message_bytes: typeof forwardPayload.message === 'string' ? forwardPayload.message.length : 0,
+      file_bytes: typeof forwardPayload.file_base64 === 'string' ? forwardPayload.file_base64.length : 0,
+      file_count: Array.isArray(forwardPayload.files) ? forwardPayload.files.length : 0,
+    }));
 
     let response: Response
     try {
@@ -484,12 +536,19 @@ Deno.serve(async (req) => {
         body: JSON.stringify(forwardPayload),
       })
     } catch (e) {
-      console.error('Webhook unreachable:', e)
-      return fail('upstream_unreachable', 502, e)
+      return fail('upstream_unreachable', 502, { detail: e })
     }
 
     const rawText = await response.text()
-    console.log('Webhook raw response status:', response.status, 'body:', rawText)
+    console.log(JSON.stringify({
+      correlation_id: requestId,
+      event: 'upstream_response',
+      action: effectiveAction,
+      sessionId: forwardPayload.sessionId ?? null,
+      turn_id: forwardPayload.turn_id ?? null,
+      status: response.status,
+      body_bytes: rawText.length,
+    }))
 
     if (!response.ok) {
       // Upstream 4xx means the request was rejected cleanly by n8n.
@@ -498,26 +557,22 @@ Deno.serve(async (req) => {
         try {
           const parsed = JSON.parse(rawText)
           if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
-            return json(
-              {
-                status: 'error',
-                error: parsed.error || 'upstream_error',
-                message: parsed.message,
-              },
-              response.status,
-            )
+            // Upstream produced its own user-safe German message: keep it.
+            return fail(parsed.error || 'upstream_error', response.status, {
+              message: parsed.message,
+              extra: { upstream_status: response.status, correlation_of: requestId },
+            })
           }
         } catch {
           // Body doesn't parse: fall through to the existing 502 behavior.
         }
       }
-      return fail('upstream_error', 502, rawText)
+      return fail('upstream_error', 502, { detail: rawText, extra: { upstream_status: response.status } })
     }
 
     // An empty 2xx is the known n8n trap: a branch that yields zero items ends
     // the run silently and the webhook answers 200 with nothing in it.
     if (!rawText || !rawText.trim()) {
-      console.error('upstream 2xx with empty body for action', effectiveAction)
       return fail('upstream_empty', 502)
     }
 
@@ -531,8 +586,7 @@ Deno.serve(async (req) => {
 
     return json(data)
   } catch (error) {
-    console.error('Chat proxy error:', error)
-    return fail('proxy_exception', 500, error)
+    return fail('proxy_exception', 500, { detail: error })
   }
 })
 
