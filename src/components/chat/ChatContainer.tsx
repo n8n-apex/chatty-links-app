@@ -1153,56 +1153,6 @@ export const ChatContainer = () => {
           </div>
         </main>
 
-        <div className="border-t border-border bg-background/80 px-4 pt-3 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
-            {(() => {
-              const hasB4Analysis = messages.some((m) => {
-                if (m.role !== "assistant") return false;
-                const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-                const lower = content.toLowerCase();
-                return (
-                  lower.includes("analyse der forderungen") ||
-                  lower.includes("behördenschreiben") ||
-                  lower.includes("behoerdenschreiben") ||
-                  lower.includes("analyze_pdf")
-                );
-              });
-              console.log("[Stellungnahme] hasB4Analysis =", hasB4Analysis, "messages:", messages.length);
-              const stellungnahmePrefill = hasB4Analysis
-                ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
-                : "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]";
-              const buttons: Array<{
-                icon: typeof MessageSquare;
-                label: string;
-                mode: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben";
-              }> = [
-                { icon: MessageSquare, label: "Rechtsfrage", mode: "rechtsfrage" },
-                { icon: FileText, label: "Stellungnahme", mode: "stellungnahme" },
-                { icon: Search, label: "Behördenschreiben", mode: "behoerdenschreiben" },
-              ];
-              return buttons.map(({ icon: Icon, label, mode }) => {
-                const isActive = activeMode === mode;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setActiveMode(mode)}
-                    aria-pressed={isActive}
-                    className={
-                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors " +
-                      (isActive
-                        ? "border-primary bg-primary/15 text-foreground shadow-sm"
-                        : "border-border bg-background/50 text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-foreground")
-                    }
-                  >
-                    <Icon className="h-3 w-3" />
-                    {label}
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        </div>
         {isEditDraftMode && lastAssistant && (
           <div className="border-t border-border bg-primary/5 px-4 py-2 backdrop-blur-xl">
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 text-xs">
@@ -1227,19 +1177,19 @@ export const ChatContainer = () => {
           </div>
         )}
         <ChatInput
-          onSendMessage={(msg, files, ziel, sourceType) => {
+          onSendMessage={(msg, files) => {
             if ((!files || files.length === 0) && isEditDraftMode) {
               handleEditDraft(msg);
             } else {
-              sendMessage(msg, files, ziel, sourceType);
+              sendMessage(msg, files);
             }
             setInputValue("");
           }}
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
-          mode={activeMode}
         />
+
       </div>
     </div>
   );
