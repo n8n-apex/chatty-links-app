@@ -346,23 +346,6 @@ export const ChatContainer = () => {
     });
   };
 
-  // Detect the current "mode" from the input text prefix (same prefixes the
-  // mode buttons prefill). Falls back to "behoerdenschreiben" to preserve
-  // existing default attach behavior.
-  const detectMode = (text: string): "rechtsfrage" | "stellungnahme" | "behoerdenschreiben" => {
-    const m = (text || "").trim().toLowerCase();
-    if (m.startsWith("ich habe eine baurechtsfrage")) return "rechtsfrage";
-    if (
-      m.startsWith("erstelle eine stellungnahme") ||
-      m.startsWith("projekt:") ||
-      m.startsWith("zielsetzung:")
-    ) return "stellungnahme";
-    if (m.startsWith("analysiere dieses behördenschreiben") || m.startsWith("analysiere dieses behoerdenschreiben")) {
-      return "behoerdenschreiben";
-    }
-    return "behoerdenschreiben";
-  };
-
   // Direct fetch to chat-proxy with a longer timeout than supabase.functions.invoke's default.
   // analyze_pdf/draft_statement can legitimately take up to ~3 min.
   // Returns the HTTP status alongside the parsed body so callers can tell a real
@@ -568,6 +551,7 @@ export const ChatContainer = () => {
   const sendMessage = async (
     content: string,
     files?: File[] | null,
+    attachIntent?: 'schreiben' | 'quelle',
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -628,6 +612,7 @@ export const ChatContainer = () => {
           additional_question: content || null,
           client_turn_id: turnId,
           turn_id: turnId,
+          attach_intent: attachIntent ?? 'schreiben',
         };
         const typed = (content || "").trim();
         if (typed) {
@@ -1174,11 +1159,11 @@ export const ChatContainer = () => {
           </div>
         )}
         <ChatInput
-          onSendMessage={(msg, files) => {
+          onSendMessage={(msg, files, attachIntent) => {
             if ((!files || files.length === 0) && isEditDraftMode) {
               handleEditDraft(msg);
             } else {
-              sendMessage(msg, files);
+              sendMessage(msg, files, attachIntent);
             }
             setInputValue("");
           }}
