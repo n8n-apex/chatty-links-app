@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Menu, MessageSquare, FileText, Search, Pencil, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Message } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
@@ -144,21 +144,10 @@ export const ChatContainer = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [editDraftDismissed, setEditDraftDismissed] = useState<Set<string>>(new Set());
   const [projectRef, setProjectRef] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
-  // Single source of truth for which backend the next message hits.
-  // Set ONLY by clicking a tab. Never derived from input content.
-  const [activeMode, setActiveModeState] = useState<"rechtsfrage" | "stellungnahme" | "behoerdenschreiben">(() => {
-    if (typeof window === "undefined") return "rechtsfrage";
-    const saved = localStorage.getItem("chat-active-mode");
-    if (saved === "rechtsfrage" || saved === "stellungnahme" || saved === "behoerdenschreiben") return saved;
-    return "rechtsfrage";
-  });
-  const setActiveMode = (m: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben") => {
-    setActiveModeState(m);
-    try { localStorage.setItem("chat-active-mode", m); } catch { /* ignore */ }
-  };
+  // Routing is decided by the backend router (`action: "auto"`), never by the UI.
+
   // Sidebar is always available; conversations are filtered by user_email so each
   // email only sees its own history.
   const historyEnabled = true;
@@ -263,8 +252,7 @@ export const ChatContainer = () => {
       setConversationId(freshId); activeConversationRef.current = freshId;
       localStorage.setItem("chat-session-id", freshId);
       setMessages([]);
-      // Start fresh in Rechtsfrage mode; the pills are the single control.
-      setActiveMode("rechtsfrage");
+
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserEmail]);
@@ -300,9 +288,7 @@ export const ChatContainer = () => {
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
     setIsLoading(false); // never carry a spinner into another conversation
-    // The pills are the single mode control; every new conversation starts fresh
-    // in Rechtsfrage mode so the user is never in a mode they did not choose.
-    setActiveMode("rechtsfrage");
+
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -357,23 +343,6 @@ export const ChatContainer = () => {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  };
-
-  // Detect the current "mode" from the input text prefix (same prefixes the
-  // mode buttons prefill). Falls back to "behoerdenschreiben" to preserve
-  // existing default attach behavior.
-  const detectMode = (text: string): "rechtsfrage" | "stellungnahme" | "behoerdenschreiben" => {
-    const m = (text || "").trim().toLowerCase();
-    if (m.startsWith("ich habe eine baurechtsfrage")) return "rechtsfrage";
-    if (
-      m.startsWith("erstelle eine stellungnahme") ||
-      m.startsWith("projekt:") ||
-      m.startsWith("zielsetzung:")
-    ) return "stellungnahme";
-    if (m.startsWith("analysiere dieses behördenschreiben") || m.startsWith("analysiere dieses behoerdenschreiben")) {
-      return "behoerdenschreiben";
-    }
-    return "behoerdenschreiben";
   };
 
   // Direct fetch to chat-proxy with a longer timeout than supabase.functions.invoke's default.
@@ -581,9 +550,7 @@ export const ChatContainer = () => {
   const sendMessage = async (
     content: string,
     files?: File[] | null,
-    ziel?: string,
-    sourceType?: 'analyse',
-    suppressUserBubble?: boolean,
+    attachIntent?: 'schreiben' | 'quelle',
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -604,145 +571,13 @@ export const ChatContainer = () => {
     const hasFiles = Array.isArray(files) && files.length > 0;
     const firstFile = hasFiles ? files![0] : null;
 
-    // === upload_source path (Rechtsquelle / Kontext attachments) — one call per file ===
-    if (hasFiles) {
-      // Mode is the only signal: Behördenschreiben => analyse, otherwise the
-      // file is context and no source_type key is sent at all.
-      const isAnalyse = sourceType === 'analyse' || activeMode === 'behoerdenschreiben';
-
-      if (!isAnalyse) {
-        const list = files!;
-        const label = 'Kontext';
-        const typed = (content || '').trim();
-        // One user message listing every attached document, in send order,
-        // plus whatever the user typed (never discarded).
-        const fileLines = list.map((f, i) => `📎 [${i + 1}/${list.length}] ${f.name}`).join("\n");
-        const userMessage: Message = {
-          id: crypto.randomUUID(),
-          content: typed ? `${fileLines}\n\n${typed}` : fileLines,
-          role: "user",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
-        persistMessage("user", userMessage.content, undefined, sendConversationId);
-
-
-        // One combined progress placeholder for the whole batch.
-        const progressId = crypto.randomUUID();
-        const progressText = (n: number, name: string) =>
-          `⏳ Quelle ${n} von ${list.length} wird hinzugefügt… (${name})`;
-        setMessages((prev) => [
-          ...prev,
-          { id: progressId, content: progressText(1, list[0].name), role: "assistant", timestamp: new Date() },
-        ]);
-        setIsLoading(true);
-
-        const succeeded: string[] = [];
-        const failed: string[] = [];
-        const unknown: string[] = [];
-        try {
-          for (let i = 0; i < list.length; i++) {
-            const file = list[i];
-            setMessages((prev) =>
-              prev.map((m) => (m.id === progressId ? { ...m, content: progressText(i + 1, file.name) } : m)),
-            );
-            try {
-              const base64 = await toBase64(file);
-              if (!base64) throw new Error("Empty base64 result");
-              // 180s: a large PDF can still be chunking well past 2 minutes.
-              const { ok, status, data, rawText } = await invokeChatProxyRaw({
-                action: "upload_source",
-                sessionId,
-                file_name: file.name,
-                file_base64: base64,
-                ...(projectRef ? { project_ref: projectRef } : {}),
-              }, 180000);
-
-              // A real HTTP error is a real failure.
-              if (!ok) {
-                console.error("upload_source HTTP error:", status, rawText);
-                failed.push(file.name);
-                continue;
-              }
-
-              const verdict = classifyUploadSource(data);
-              const fileName = verdict.fileName || file.name;
-              const chunks = verdict.chunks;
-              if (verdict.state === "success") {
-                succeeded.push(`${fileName}${chunks ? ` (${chunks} Abschnitte)` : ""}`);
-              } else if (verdict.state === "failure") {
-                console.error("upload_source backend failure:", verdict.error, data);
-                failed.push(file.name);
-              } else {
-                // 200 OK but no readable verdict (the workflow frequently answers
-                // with an empty body while indexing continues server-side).
-                console.warn("upload_source unknown result:", rawText);
-                unknown.push(file.name);
-              }
-            } catch (e) {
-              // Timeout / network drop: the upload may well have completed.
-              console.error("upload_source error:", e);
-              unknown.push(file.name);
-            }
-          }
-        } finally {
-          setMessages((prev) => prev.filter((m) => m.id !== progressId));
-          setIsLoading(false);
-        }
-
-        const parts: string[] = [];
-        if (succeeded.length > 0) {
-          parts.push(
-            `✓ ${succeeded.length} von ${list.length} Quellen hinzugefügt (${label}) — werden in dieser Unterhaltung berücksichtigt:\n` +
-              succeeded.map((s, i) => `${i + 1}. ${s}`).join("\n"),
-          );
-        }
-        if (unknown.length > 0) {
-          parts.push(
-            `ℹ Status unklar:\n` +
-              unknown.map((f, i) => `${i + 1}. ${f}`).join("\n") +
-              `\nDie Verarbeitung läuft möglicherweise noch im Hintergrund. ` +
-              `Diese Datei${unknown.length > 1 ? "en" : ""} wurde${unknown.length > 1 ? "n" : ""} vermutlich bereits gespeichert — ` +
-              `bitte nicht erneut hinzufügen, sondern zunächst eine Frage dazu stellen.`,
-          );
-        }
-        if (failed.length > 0) {
-          parts.push(
-            `⚠ Nicht verarbeitet:\n` +
-              failed.map((f, i) => `${i + 1}. ${f}`).join("\n") +
-              `\nBitte diese Datei${failed.length > 1 ? "en" : ""} erneut hinzufügen.`,
-          );
-        }
-
-        const summary = parts.join("\n\n");
-        const ackMessage: Message = {
-          id: crypto.randomUUID(),
-          content: summary,
-          role: "assistant",
-          timestamp: new Date(),
-        };
-        if (activeConversationRef.current === sendConversationId) {
-          setMessages((prev) => [...prev, ackMessage]);
-        }
-        persistMessage("ai", summary, undefined, sendConversationId);
-        // The typed text is a real request — run it after the uploads, without
-        // duplicating the user bubble that already contains it.
-        if (typed) {
-          await sendMessage(typed, null, undefined, undefined, true);
-        }
-        return;
-      }
-
-    }
-
-    // === analyze_pdf (multi-file) OR text-only Q&A ===
     const displayContent = hasFiles
       ? (content
           ? `📎 [${files!.map((f) => f.name).join(", ")}] — ${content}`
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    if (!suppressUserBubble) {
+    {
       const userMessage: Message = {
         id: crypto.randomUUID(),
         content: displayContent,
@@ -767,61 +602,54 @@ export const ChatContainer = () => {
         );
         payload = {
           ...payload,
-          action: "analyze_pdf",
-          source_type: "analyse",
+          // The router decides analysis vs. source ingest. Never pre-decide here.
+          action: "auto",
           files: encoded,
           // Back-compat: also send first file top-level (n8n may still read either)
           file_name: firstFile!.name,
           file_base64: encoded[0].file_base64,
           additional_question: content || null,
-          message: "Analysiere dieses Behördenschreiben",
           client_turn_id: turnId,
           turn_id: turnId,
+          attach_intent: attachIntent ?? 'schreiben',
         };
-        // The typed text is the objective in Behördenschreiben mode.
-        const effectiveZiel = (ziel && ziel.trim()) || (content || '').trim();
-        if (effectiveZiel) (payload as Record<string, unknown>).ziel = effectiveZiel;
+        const typed = (content || "").trim();
+        if (typed) {
+          payload.message = typed;
+          // Kept for the analysis branch, which reads the objective by name.
+          payload.ziel = typed;
+        }
       } catch (err) {
         console.error("PDF konnte nicht gelesen werden:", err);
         toast.error("Datei konnte nicht gelesen werden.");
         setIsLoading(false);
         return;
       }
-    } else if (isEditDraftMode) {
-      setIsLoading(false);
-      return;
     } else {
-      // ROUTING: action is a pure function of activeMode. Never read message text.
-      if (activeMode === "stellungnahme") {
-        payload = { ...payload, message: content, action: "draft_statement", topic: content };
-      } else if (activeMode === "behoerdenschreiben") {
-        payload = { ...payload, message: content, action: "analyze_pdf" };
-      } else {
-        payload = { ...payload, message: content, action: "question", question: content };
-      }
+      // ROUTING: the backend router decides. `action` must be sent EXPLICITLY —
+      // chat-proxy defaults a missing action to "question", which bypasses R0.
+      payload = { ...payload, message: content, action: "auto" };
     }
 
     const startTime = performance.now();
-    // Initial request is fast: analyze_pdf now returns {accepted, poll:true}
-    // in ~1s; the real work is fetched via pollForResult below. B3/B6 stay sync.
-    const timeoutMs =
-      payload.action === "analyze_pdf" ? 30000 :
-      payload.action === "draft_statement" ? 210000 :
-      120000;
-    // Progress placeholder id (only used for the async analyze_pdf path).
+    // Flat ceiling: Supabase kills a request at ~150s idle, so anything longer is
+    // unreachable and only turns a German backend error into a network error.
+    const timeoutMs = 145000;
+    // Progress placeholder id (only used for the async, poll-based path).
     let progressMsgId: string | null = null;
     try {
       let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
 
-      // --- ASYNC REQUEST-REPLY for analyze_pdf ---
+      // --- ASYNC REQUEST-REPLY ---
       // Detect on BODY (chat-proxy normalises status codes to 200).
       const initial = Array.isArray(data) ? data[0] : data;
       if (
-        payload.action === "analyze_pdf" &&
         initial && typeof initial === "object" &&
         (initial.status === "accepted" || initial.poll === true)
       ) {
+        // Under `auto` the client cannot know the action — the 202 body carries it.
+        const pollAction: string = initial.action ?? "analyze_pdf";
         progressMsgId = crypto.randomUUID();
         const makeText = (sec: number) =>
           `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
@@ -835,10 +663,11 @@ export const ChatContainer = () => {
         // Record the turn durably so it can be resumed after navigation/reload.
         try {
           localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
-            turnId, turnStartedAt, action: "analyze_pdf", fileName: firstFile?.name ?? null,
+            turnId, turnStartedAt, action: pollAction, fileName: firstFile?.name ?? null,
           }));
         } catch { /* ignore */ }
-        data = await pollForResult(sessionId, "analyze_pdf", turnId, turnStartedAt, (sec) => {
+        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, (sec) => {
+
           setMessages((prev) => prev.map((m) =>
             m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
           ));
@@ -1001,121 +830,6 @@ export const ChatContainer = () => {
     }
   };
 
-  // --- Draft helpers (entwurf_stellungnahme) ---
-  const extractDraft = (content: string): string | null => {
-    try {
-      const trimmed = (content || "").trim();
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
-      const parsed = JSON.parse(trimmed);
-      const obj = Array.isArray(parsed) ? parsed[0] : parsed;
-      const d = obj?.entwurf_stellungnahme;
-      return typeof d === "string" && d.trim() ? d : null;
-    } catch { return null; }
-  };
-
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const lastAssistantDraft = lastAssistant ? extractDraft(lastAssistant.content) : null;
-  const isEditDraftMode = !!(lastAssistant && lastAssistantDraft && !editDraftDismissed.has(lastAssistant.id));
-
-  // --- Conversational draft edit: dedicated request, no chat history attached ---
-  const handleEditDraft = async (instruction: string) => {
-    const text = (instruction || "").trim();
-    if (!text) return;
-    const sessionId = conversationId || localStorage.getItem("chat-session-id") || "";
-    if (!sessionId) {
-      toast.error("Keine Session aktiv.");
-      return;
-    }
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content: text,
-      role: "user",
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    persistMessage("user", text);
-
-    const startTime = performance.now();
-    try {
-      const { data, error } = await supabase.functions.invoke("chat-proxy", {
-        body: {
-          action: "draft_statement",
-          mode: "edit",
-          sessionId,
-          topic: text,
-          ...(projectRef ? { project_ref: projectRef } : {}),
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      console.log("[DRAFT EDIT] n8n response:", data);
-
-      const parsed = Array.isArray(data) ? data[0] : data;
-      // Never persist or render an error envelope as a revised draft.
-      if (
-        parsed && typeof parsed === "object" &&
-        typeof (parsed as any).error === "string" &&
-        !(parsed as any).antwort && !(parsed as any).entwurf_stellungnahme &&
-        !(parsed as any).projekt_und_sachverhalt && !(parsed as any).output
-      ) {
-        throw new Error(`BackendError: ${(parsed as any).error}`);
-      }
-
-      let responseText: string;
-      let usedChunkIds: string[] = [];
-      let usedParagraphs: string[] = [];
-      let responseId: string | undefined;
-
-      if (parsed && typeof parsed === "object") {
-        if (Array.isArray(parsed.used_chunk_ids)) usedChunkIds = parsed.used_chunk_ids;
-        if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
-        if (typeof parsed.response_id === "string") responseId = parsed.response_id;
-
-        // If backend returned a wrapped { output: "..." } where output is a JSON string with the draft, unwrap it.
-        let draftObj: Record<string, unknown> = parsed;
-        if (!parsed.entwurf_stellungnahme && typeof parsed.output === "string") {
-          try {
-            const inner = JSON.parse(parsed.output);
-            const innerObj = Array.isArray(inner) ? inner[0] : inner;
-            if (innerObj && typeof innerObj === "object" && innerObj.entwurf_stellungnahme) {
-              draftObj = { ...parsed, ...innerObj };
-            }
-          } catch { /* keep parsed */ }
-        }
-        // Ensure the action marker so tryParseStructured/StructuredResponse render this as a draft.
-        if (!draftObj.action) draftObj = { ...draftObj, action: "draft_statement" };
-        responseText = JSON.stringify(draftObj);
-      } else {
-        responseText = typeof data === "string" ? data : JSON.stringify(data);
-      }
-
-      // Append as a NEW assistant message (mirrors how a fresh draft is rendered).
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        content: responseText,
-        role: "assistant",
-        timestamp: new Date(),
-        durationMs: performance.now() - startTime,
-        responseId,
-        usedChunkIds,
-        usedParagraphs,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      persistMessage("ai", responseText, { responseId, usedChunkIds, usedParagraphs });
-      if (historyEnabled) loadConversations();
-    } catch (e) {
-      console.error("Draft edit error:", e);
-      const m = e instanceof Error ? e.message : String(e);
-      toast.error(
-        m.startsWith("BackendError:")
-          ? "Der Server hat die Überarbeitung abgelehnt. Der Entwurf wurde nicht geändert."
-          : "Entwurf konnte nicht aktualisiert werden.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSaveStatement = async (
     messageId: string,
@@ -1302,93 +1016,16 @@ export const ChatContainer = () => {
           </div>
         </main>
 
-        <div className="border-t border-border bg-background/80 px-4 pt-3 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
-            {(() => {
-              const hasB4Analysis = messages.some((m) => {
-                if (m.role !== "assistant") return false;
-                const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-                const lower = content.toLowerCase();
-                return (
-                  lower.includes("analyse der forderungen") ||
-                  lower.includes("behördenschreiben") ||
-                  lower.includes("behoerdenschreiben") ||
-                  lower.includes("analyze_pdf")
-                );
-              });
-              console.log("[Stellungnahme] hasB4Analysis =", hasB4Analysis, "messages:", messages.length);
-              const stellungnahmePrefill = hasB4Analysis
-                ? "Zielsetzung: [Ziel der Stellungnahme]\n\nℹ️ Projekt und Sachverhalt werden automatisch aus dem analysierten Behördenschreiben übernommen."
-                : "Projekt: [Projektbeschreibung]\nSachverhalt: [Fakten die bewertet werden sollen]\nZielsetzung: [Ziel der Stellungnahme]";
-              const buttons: Array<{
-                icon: typeof MessageSquare;
-                label: string;
-                mode: "rechtsfrage" | "stellungnahme" | "behoerdenschreiben";
-              }> = [
-                { icon: MessageSquare, label: "Rechtsfrage", mode: "rechtsfrage" },
-                { icon: FileText, label: "Stellungnahme", mode: "stellungnahme" },
-                { icon: Search, label: "Behördenschreiben", mode: "behoerdenschreiben" },
-              ];
-              return buttons.map(({ icon: Icon, label, mode }) => {
-                const isActive = activeMode === mode;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setActiveMode(mode)}
-                    aria-pressed={isActive}
-                    className={
-                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors " +
-                      (isActive
-                        ? "border-primary bg-primary/15 text-foreground shadow-sm"
-                        : "border-border bg-background/50 text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-foreground")
-                    }
-                  >
-                    <Icon className="h-3 w-3" />
-                    {label}
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        </div>
-        {isEditDraftMode && lastAssistant && (
-          <div className="border-t border-border bg-primary/5 px-4 py-2 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 text-xs">
-              <span className="flex items-center gap-2 text-primary">
-                <Pencil className="h-3 w-3" />
-                Änderung am Entwurf — z. B. „mach den dritten Absatz schärfer“
-              </span>
-              <button
-                type="button"
-                onClick={() => setEditDraftDismissed((prev) => {
-                  const next = new Set(prev);
-                  next.add(lastAssistant.id);
-                  return next;
-                })}
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                aria-label="Bearbeitungsmodus verlassen"
-                title="Bearbeitungsmodus verlassen"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
         <ChatInput
-          onSendMessage={(msg, files, ziel, sourceType) => {
-            if ((!files || files.length === 0) && isEditDraftMode) {
-              handleEditDraft(msg);
-            } else {
-              sendMessage(msg, files, ziel, sourceType);
-            }
+          onSendMessage={(msg, files, attachIntent) => {
+            sendMessage(msg, files, attachIntent);
             setInputValue("");
           }}
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
-          mode={activeMode}
         />
+
       </div>
     </div>
   );
