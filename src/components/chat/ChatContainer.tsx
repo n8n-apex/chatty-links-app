@@ -248,15 +248,17 @@ export const ChatContainer = () => {
     return list;
   }, [currentUserEmail, callHistory]);
 
+  // Returns true only when the transcript was actually replaced. A false return
+  // means the caller must NOT commit the new conversation identity.
   const loadConversationMessages = useCallback(
-    async (cid: string) => {
-      if (!currentUserEmail) return;
+    async (cid: string): Promise<boolean> => {
+      if (!currentUserEmail) return false;
       const data = await callHistory({
         action: "load_messages",
         user_email: currentUserEmail,
         conversation_id: cid,
       });
-      if (!data?.success) return;
+      if (!data?.success) return false;
       const restored: Message[] = ((data.rows as any[]) || []).map((row: any) => ({
         id: row.id,
         content: row.content,
@@ -274,9 +276,11 @@ export const ChatContainer = () => {
       setMessages(restored);
       // Resume a pending analyze_pdf turn for THIS conversation, if any.
       resumePendingTurnRef.current?.(cid);
+      return true;
     },
     [currentUserEmail, callHistory],
   );
+
 
   useEffect(() => {
     (async () => {
