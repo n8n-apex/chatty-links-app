@@ -6,15 +6,11 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
-export type SourceType = 'analyse';
-export type ChatMode = 'rechtsfrage' | 'stellungnahme' | 'behoerdenschreiben';
-
 interface ChatInputProps {
-  onSendMessage: (message: string, files?: File[] | null, ziel?: string, sourceType?: SourceType) => void;
+  onSendMessage: (message: string, files?: File[] | null) => void;
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
-  mode?: ChatMode;
 }
 
 type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
@@ -46,25 +42,19 @@ const downscaleImage = async (file: File): Promise<File> => {
   }
 };
 
-export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, mode = 'behoerdenschreiben' }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [ziel, setZiel] = useState('');
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
-  const [zielAudioStatus, setZielAudioStatus] = useState<AudioStatus>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
 
   const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const zielMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const zielRecordedChunksRef = useRef<Blob[]>([]);
   const recStartRef = useRef<number>(0);
-  const zielRecStartRef = useRef<number>(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const zielRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const message = inputValue !== undefined ? inputValue : internalMessage;
@@ -77,24 +67,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     e.preventDefault();
     if (isLoading) return;
     if (!message.trim() && attachedFiles.length === 0) return;
-    // In Behördenschreiben analyze mode, the bottom input IS the goal (ziel),
-    // but the typed text is still sent as the message so it never disappears.
-    const isBehoerdenAnalyze =
-      mode === 'behoerdenschreiben' && attachedFiles.length > 0;
-    const trimmedMessage = message.trim();
-    const trimmedZiel = ziel.trim();
-    const outgoingZiel = isBehoerdenAnalyze
-      ? (trimmedMessage || undefined)
-      : (trimmedZiel || undefined);
-    onSendMessage(
-      trimmedMessage,
-      attachedFiles.length > 0 ? attachedFiles : null,
-      outgoingZiel,
-      isBehoerdenAnalyze ? 'analyse' : undefined,
-    );
+    onSendMessage(message.trim(), attachedFiles.length > 0 ? attachedFiles : null);
     setMessage('');
     setAttachedFiles([]);
-    setZiel('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
       setAudioStatus('idle');
@@ -120,8 +95,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
 
   const addFiles = async (incoming: File[]) => {
     if (incoming.length === 0) return;
-    // Multiple files are always allowed. For Rechtsquelle/Kontext the client
-    // sends them as sequential upload_source calls (one document per call).
     const list: File[] = [];
     for (const f of incoming) {
       if (!isAcceptedFile(f)) {
@@ -141,15 +114,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
 
     setAttachedFiles((prev) => {
       const combined = [...prev, ...processed];
-      if (combined.length > MAX_FILES) {
-        toast.error(`Maximal ${MAX_FILES} Dateien pro Analyse.`);
-        return combined.slice(0, MAX_FILES);
-      }
+      // Size cap FIRST — otherwise an over-count batch returned early and
+      // bypassed the 15 MB ceiling entirely.
       const total = combined.reduce((s, f) => s + f.size, 0);
       // Base64 inflates ~33% → ~1.34x
       if (total * 1.34 > MAX_TOTAL_BYTES) {
         toast.error('Anhang zu groß (max. ~15 MB nach Kodierung). Bitte weniger/kleinere Dateien.');
         return prev;
+      }
+      if (combined.length > MAX_FILES) {
+        toast.error(`Maximal ${MAX_FILES} Dateien pro Analyse.`);
+        return combined.slice(0, MAX_FILES);
       }
       return combined;
     });
@@ -236,7 +211,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     return stripAsrArtifacts((data?.text || '').trim());
   };
 
-  // ---------- Main-input mic ----------
+  // ---------- Mic ----------
   const startRecording = async () => {
     if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting' || isLoading) return;
     try {
@@ -289,56 +264,12 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
     setAudioStatus('transcribing');
   };
 
-  // ---------- Ziel-field mic ----------
-  const startZielRecording = async () => {
-    if (zielAudioStatus === 'recording' || zielAudioStatus === 'transcribing' || isLoading) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      zielRecordedChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) zielRecordedChunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const durationMs = Date.now() - zielRecStartRef.current;
-        const blob = new Blob(zielRecordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0 || durationMs < 500) { setZielAudioStatus('idle'); return; }
-        setZielAudioStatus('transcribing');
-        try {
-          const text = await transcribe(blob);
-          if (text) setZiel((prev) => (prev ? `${prev} ${text}` : text));
-          setZielAudioStatus('idle');
-        } catch {
-          toast.error('Transkription fehlgeschlagen.');
-          setZielAudioStatus('idle');
-        }
-      };
-      zielMediaRecorderRef.current = mr;
-      zielRecStartRef.current = Date.now();
-      mr.start();
-      setZielAudioStatus('recording');
-    } catch {
-      toast.error('Mikrofon-Zugriff verweigert.');
-    }
-  };
-  const stopZielRecording = () => {
-    const mr = zielMediaRecorderRef.current;
-    if (mr && mr.state !== 'inactive') mr.stop();
-    setZielAudioStatus('transcribing');
-  };
-
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
   }, [message]);
-
-  useEffect(() => {
-    if (zielRef.current) {
-      zielRef.current.style.height = 'auto';
-      zielRef.current.style.height = `${Math.min(Math.max(zielRef.current.scrollHeight, 72), 144)}px`;
-    }
-  }, [ziel, attachedFiles.length]);
 
   const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
   const recording = audioStatus === 'recording';
@@ -450,7 +381,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               onClick={() => fileInputRef.current?.click()}
               className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
               aria-label="Datei anhängen"
-              title="PDF oder Bilder anhängen (mehrere möglich für Behördenschreiben)"
+              title="PDF oder Bilder anhängen (mehrere möglich)"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
@@ -460,11 +391,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                mode === 'behoerdenschreiben' && hasFiles
-                  ? "Ziel der Antwort oder Anweisung (optional) – z. B. 'Ablehnung abwehren', 'Befreiung erwirken'"
-                  : hasFiles
-                    ? 'Optionale Frage / Anweisung…'
-                    : 'Schreibe deine Nachricht…'
+                hasFiles
+                  ? 'Optionale Frage oder Anweisung zum Dokument…'
+                  : 'Schreibe deine Nachricht…'
               }
               rows={1}
               disabled={isLoading}
