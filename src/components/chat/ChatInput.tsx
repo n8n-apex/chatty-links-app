@@ -307,6 +307,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     }
   }, [message]);
 
+  // Files dropped anywhere outside the composer arrive via this app-level
+  // event (see App.tsx global drop guard). Feed them through the same
+  // addFiles path as picker/drop/paste so all three admit the same set.
+  useEffect(() => {
+    const onGlobalDrop = (e: Event) => {
+      if (isLoading) return;
+      const files = (e as CustomEvent<File[]>).detail;
+      if (Array.isArray(files) && files.length > 0) addFiles(files);
+    };
+    window.addEventListener('lawgpt:global-drop', onGlobalDrop);
+    return () => window.removeEventListener('lawgpt:global-drop', onGlobalDrop);
+  }, [isLoading]);
+
   const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
   const recording = audioStatus === 'recording';
   const transcribing = audioStatus === 'transcribing';
