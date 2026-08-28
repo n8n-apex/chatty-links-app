@@ -10,6 +10,7 @@ import { ConfidenceIndicator } from "./ConfidenceIndicator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { toText } from "@/lib/safeText";
+import { VerstandenZeile } from "./VerstandenZeile";
 
 export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
@@ -18,9 +19,11 @@ interface ChatMessageProps {
   onFeedback?: (messageId: string, status: FeedbackStatus, text?: string) => Promise<boolean> | void | Promise<void>;
   isAdmin?: boolean;
   onSaveStatement?: (messageId: string, newText: string) => Promise<true | { error: string }>;
+  onCorrect?: (messageId: string, alternative: string, rerunOf?: string) => void;
+  correctionDisabled?: boolean;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false, onSaveStatement }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false, onSaveStatement, onCorrect, correctionDisabled }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
   const isAdmin = (() => {
@@ -167,6 +170,13 @@ export const ChatMessage = ({ message, onFeedback, isAdmin: _isAdminProp = false
       </div>
 
       <div className={cn("flex max-w-[75%] flex-col gap-1", isUser ? "items-end" : "items-start")}>
+        {!isUser && (
+          <VerstandenZeile
+            verstanden={message.verstanden}
+            onCorrect={onCorrect ? (alt, rerunOf) => onCorrect(message.id, alt, rerunOf) : undefined}
+            disabled={correctionDisabled}
+          />
+        )}
         {!isUser && message.routingNotice && (
           <div className="mb-1 inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
             {message.routingNotice}

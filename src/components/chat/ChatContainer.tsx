@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Menu } from "lucide-react";
-import { Message } from "@/types/chat";
+import { Message, Verstanden } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -9,6 +9,7 @@ import { TypingIndicator } from "./TypingIndicator";
 import { EmptyState } from "./EmptyState";
 import { ConversationSidebar, ConversationSummary } from "./ConversationSidebar";
 import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
+import { Gespraechsleiste } from "./Gespraechsleiste";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -70,6 +71,22 @@ const classifyUploadSource = (raw: unknown): UploadVerdict => {
 
 type AssistantMeta = { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] };
 
+/** Read `verstanden` back out of a persisted assistant message. Never throws. */
+const extractVerstanden = (content: unknown): Verstanden | undefined => {
+  if (typeof content !== "string") return undefined;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+    const v = obj?.verstanden;
+    return v && typeof v === "object" ? (v as Verstanden) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+
 /**
  * Turn a backend payload into the assistant Message. Shared by the live send frame
  * and by resume-on-open, so both render results identically.
@@ -85,6 +102,7 @@ const buildAssistantMessage = (
   let responseId: string | undefined;
   let needsClarification = false;
   let routingNotice: string | undefined;
+  let verstanden: Verstanden | undefined;
 
   const parsed = Array.isArray(data) ? data[0] : data;
 
@@ -96,6 +114,7 @@ const buildAssistantMessage = (
     if (Array.isArray(parsed.used_paragraphs)) usedParagraphs = parsed.used_paragraphs;
     if (typeof parsed.response_id === "string") responseId = parsed.response_id;
     if (parsed.needs_clarification === true) needsClarification = true;
+    if (parsed.verstanden && typeof parsed.verstanden === "object") verstanden = parsed.verstanden;
     if (typeof parsed.routing_notice === "string" && parsed.routing_notice.trim()) {
       routingNotice = parsed.routing_notice.trim();
     }
@@ -106,11 +125,19 @@ const buildAssistantMessage = (
       }
       responseText = JSON.stringify(parsed);
     } else {
-      responseText = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+      const plain = parsed.output || parsed.response || parsed.message || parsed.text || JSON.stringify(data);
+      // Plain-text answers would drop `verstanden` on reload, and an answer that
+      // renders without the line is the unsafe case. Store it as a structured
+      // payload instead — the renderer is content-addressed, so `antwort` renders
+      // exactly the same markdown.
+      responseText = verstanden
+        ? JSON.stringify({ action: "question", antwort: plain, verstanden })
+        : plain;
     }
   } else {
     responseText = String(data);
   }
+
 
   const message: Message = {
     id: crypto.randomUUID(),
@@ -124,7 +151,9 @@ const buildAssistantMessage = (
     usedParagraphs,
     needsClarification,
     routingNotice,
+    verstanden,
   };
+
   return { message, responseText, meta: { responseId, usedChunkIds, usedParagraphs } };
 };
 
@@ -230,7 +259,12 @@ export const ChatContainer = () => {
         responseId: row.response_id || undefined,
         usedChunkIds: Array.isArray(row.used_chunk_ids) ? row.used_chunk_ids : undefined,
         usedParagraphs: Array.isArray(row.used_paragraphs) ? row.used_paragraphs : undefined,
+        // The Verstanden line is safety equipment — it must survive a reload,
+        // so it is read back out of the persisted payload.
+        verstanden: row.role === "ai" ? extractVerstanden(row.content) : undefined,
       }));
+
+
       setMessages(restored);
       // Resume a pending analyze_pdf turn for THIS conversation, if any.
       resumePendingTurnRef.current?.(cid);
@@ -551,6 +585,7 @@ export const ChatContainer = () => {
     content: string,
     files?: File[] | null,
     attachIntent?: 'schreiben' | 'quelle',
+    opts?: { forceAction?: string; rerunOf?: string },
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -593,6 +628,9 @@ export const ChatContainer = () => {
       sessionId,
       timestamp: new Date().toISOString(),
       ...(projectRef ? { project_ref: projectRef } : {}),
+      // One-click correction of a wrong routing decision.
+      ...(opts?.forceAction ? { force_action: opts.forceAction } : {}),
+      ...(opts?.rerunOf ? { rerun_of: opts.rerunOf } : {}),
     };
 
     if (hasFiles) {
@@ -941,6 +979,36 @@ export const ChatContainer = () => {
     checkAdmin();
   }, []);
 
+  /**
+   * One-click correction: resend the text of the user turn this answer replies to,
+   * with force_action + rerun_of so the router redecides instead of guessing again.
+   */
+  const handleCorrect = (assistantMessageId: string, alternative: string, rerunOf?: string) => {
+    if (isLoading) return;
+    const idx = messages.findIndex((m) => m.id === assistantMessageId);
+    if (idx === -1) return;
+    let original = "";
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") { original = messages[i].content; break; }
+    }
+    // Strip the attachment prefix the bubble adds: "📎 [a.pdf, b.pdf] — text".
+    const text = original.replace(/^\s*📎\s*\[[^\]]*\]\s*(—\s*)?/, "").trim();
+    if (!text) {
+      toast.error("Der ursprüngliche Text ist nicht mehr verfügbar.");
+      return;
+    }
+    sendMessage(text, null, undefined, { forceAction: alternative, rerunOf });
+  };
+
+  // What the conversation currently holds, per the most recent router report.
+  const zustand = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const v = messages[i].verstanden;
+      if (v?.zustand) return v.zustand;
+    }
+    return null;
+  })();
+
   return (
     <div className="flex h-screen w-full bg-background">
       {historyEnabled && (
@@ -1007,7 +1075,15 @@ export const ChatContainer = () => {
             ) : (
               <div className="py-4">
                 {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} onFeedback={handleFeedback} isAdmin={isAdmin} onSaveStatement={handleSaveStatement} />
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    onFeedback={handleFeedback}
+                    isAdmin={isAdmin}
+                    onSaveStatement={handleSaveStatement}
+                    onCorrect={handleCorrect}
+                    correctionDisabled={isLoading}
+                  />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
                 <div ref={messagesEndRef} />
@@ -1015,6 +1091,8 @@ export const ChatContainer = () => {
             )}
           </div>
         </main>
+
+        <Gespraechsleiste zustand={zustand} />
 
         <ChatInput
           onSendMessage={(msg, files, attachIntent) => {
