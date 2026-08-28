@@ -457,14 +457,14 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
     const showFloor = !clarificationBody && missingItems.length === 0;
     return (
       <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
-        {data.antwort && (
+        {(clarificationBody || showFloor) && (
           <Section>
             <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
               <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-yellow-600">
                 <AlertCircle className="h-3.5 w-3.5" />
                 Rückfrage
               </div>
-              <div className="text-sm text-foreground"><Md>{data.antwort}</Md></div>
+              <div className="text-sm text-foreground"><Md>{clarificationBody || EMPTY_RESPONSE_MESSAGE}</Md></div>
             </div>
           </Section>
         )}
