@@ -140,21 +140,33 @@ Deno.serve(async (req) => {
 
     // --- TRANSCRIBE AUDIO via OpenAI Whisper ---
     if (body.action === 'transcribe_audio') {
+      // The mic path answers 200 by contract (the client reads `text`), but the
+      // error shape is the same as everywhere else — and never carries the raw
+      // upstream body.
+      const micFail = (code: string, detail?: unknown) => {
+        const correlationId = crypto.randomUUID()
+        logFailure(correlationId, code, 200, {
+          action: 'transcribe_audio',
+          detail_bytes: detail === undefined ? undefined : String(detail).length,
+        })
+        return json({
+          status: 'error',
+          error: code,
+          message: ERROR_MESSAGES[code] ?? GENERIC_MESSAGE,
+          correlation_id: correlationId,
+          text: '',
+        })
+      }
+
       const openaiKey = Deno.env.get('OPENAI_API_KEY');
       if (!openaiKey) {
-        return new Response(
-          JSON.stringify({ error: 'openai_key_missing', text: '' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return micFail('openai_key_missing');
       }
       try {
         const audioB64: string = body.audio_base64 || '';
         const mime: string = body.mime_type || 'audio/webm';
         if (!audioB64) {
-          return new Response(
-            JSON.stringify({ error: 'missing_audio', text: '' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return micFail('missing_audio');
         }
         const bin = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
         const blob = new Blob([bin], { type: mime });
@@ -170,10 +182,7 @@ Deno.serve(async (req) => {
         });
         const txt = await resp.text();
         if (!resp.ok) {
-          return new Response(
-            JSON.stringify({ error: 'whisper_failed', detail: txt, text: '' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return micFail('whisper_failed', txt);
         }
         let parsed: any;
         try { parsed = JSON.parse(txt); } catch { parsed = { text: txt }; }
@@ -182,12 +191,10 @@ Deno.serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (e) {
-        return new Response(
-          JSON.stringify({ error: String(e), text: '' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return micFail('transcription_failed', e);
       }
     }
+
 
     const MESSAGELESS_ACTIONS = [
       'analyze_pdf', 'draft_statement', 'ingest_project',
