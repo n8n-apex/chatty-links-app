@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Menu } from "lucide-react";
-import { Message } from "@/types/chat";
+import { Message, Verstanden } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -9,6 +9,7 @@ import { TypingIndicator } from "./TypingIndicator";
 import { EmptyState } from "./EmptyState";
 import { ConversationSidebar, ConversationSummary } from "./ConversationSidebar";
 import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
+import { Gespraechsleiste } from "./Gespraechsleiste";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -584,6 +585,7 @@ export const ChatContainer = () => {
     content: string,
     files?: File[] | null,
     attachIntent?: 'schreiben' | 'quelle',
+    opts?: { forceAction?: string; rerunOf?: string },
   ) => {
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
@@ -626,6 +628,9 @@ export const ChatContainer = () => {
       sessionId,
       timestamp: new Date().toISOString(),
       ...(projectRef ? { project_ref: projectRef } : {}),
+      // One-click correction of a wrong routing decision.
+      ...(opts?.forceAction ? { force_action: opts.forceAction } : {}),
+      ...(opts?.rerunOf ? { rerun_of: opts.rerunOf } : {}),
     };
 
     if (hasFiles) {
