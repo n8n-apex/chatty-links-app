@@ -63,9 +63,14 @@ type Konfidenz = 'hoch' | 'mittel' | 'niedrig' | string;
 
 export interface BehoerdenAnalysisData {
   status?: string;
+  error?: string;
+  message?: string;
+  antwort?: string;
+  fehlende_informationen?: string | null;
   action?: string;
   sessionId?: string;
   dateiname?: string;
+
 
   projekt_und_sachverhalt?: string;
   rechtliche_beurteilungsgrundlage?: string;
@@ -280,6 +285,22 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
           </div>
         </div>
       </Sec>
+
+      {/* Belt and braces: prose carried on the payload must never be dropped. */}
+      {(toText(data.antwort).trim() || toText(data.message).trim()) && (
+        <Sec>
+          <div className="rounded-lg border border-border bg-background/30 p-3 text-sm text-foreground">
+            <Md>{toText(data.antwort).trim() || toText(data.message)}</Md>
+          </div>
+        </Sec>
+      )}
+
+      {toText(data.fehlende_informationen).trim() && (
+        <Sec>
+          <SectionHeading>Fehlende Informationen</SectionHeading>
+          <div className="text-sm text-foreground"><Md>{data.fehlende_informationen}</Md></div>
+        </Sec>
+      )}
 
       {/* Dokumentdetails */}
       {showDetails && (

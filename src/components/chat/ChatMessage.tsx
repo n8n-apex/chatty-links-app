@@ -51,6 +51,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
   const noChunksTitle = "Keine Quellen-Chunks für Feedback verfügbar";
 
   const structured = !isUser ? tryParseStructured(message.content) : null;
+  const isErrorPayload = structured?.status === 'error';
   const hasDraft = !!(structured && typeof structured.entwurf_stellungnahme === "string" && structured.entwurf_stellungnahme.trim().length > 0 && onSaveStatement);
 
   const handleSaveDraft = async () => {
@@ -213,6 +214,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
                     if (structured) {
                       return (
                         <StructuredResponse
+                          onRetry={onCorrect && !correctionDisabled ? () => onCorrect(message.id, "") : undefined}
                           data={hasDraft && isEditingDraft ? { ...structured, entwurf_stellungnahme: draftText } : structured}
                           draftEditor={hasDraft ? {
                             isEditing: isEditingDraft,
@@ -287,7 +289,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
 
 
 
-        {!isUser && isAdmin && (
+        {!isUser && isAdmin && !isErrorPayload && (
           <div className="mt-1 w-full">
             <div className="flex items-center gap-1">
               <button
@@ -354,7 +356,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
           </div>
         )}
 
-        {!isUser && sourceCount > 0 && <ConfidenceIndicator sources={sourceCount} className="px-2" />}
+        {!isUser && !isErrorPayload && sourceCount > 0 && <ConfidenceIndicator sources={sourceCount} className="px-2" />}
 
         <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
           <span>
