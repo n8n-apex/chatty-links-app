@@ -830,17 +830,6 @@ export const ChatContainer = () => {
     }
   };
 
-  // --- Draft helpers (entwurf_stellungnahme) ---
-  const extractDraft = (content: string): string | null => {
-    try {
-      const trimmed = (content || "").trim();
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
-      const parsed = JSON.parse(trimmed);
-      const obj = Array.isArray(parsed) ? parsed[0] : parsed;
-      const d = obj?.entwurf_stellungnahme;
-      return typeof d === "string" && d.trim() ? d : null;
-    } catch { return null; }
-  };
 
   const handleSaveStatement = async (
     messageId: string,
