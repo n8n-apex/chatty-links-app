@@ -514,7 +514,19 @@ Deno.serve(async (req) => {
       forwardPayload.statement_type = 'Stellungnahme';
     }
 
-    console.log('Forwarding to n8n:', JSON.stringify({ ...forwardPayload, file_base64: forwardPayload.file_base64 ? '[omitted]' : undefined }));
+    // Metadata only. This system carries real clients' authority correspondence,
+    // so no question text, no answer text and no base64 is ever written to logs.
+    const requestId = crypto.randomUUID();
+    console.log(JSON.stringify({
+      correlation_id: requestId,
+      event: 'forward',
+      action: effectiveAction,
+      sessionId: forwardPayload.sessionId ?? null,
+      turn_id: forwardPayload.turn_id ?? null,
+      message_bytes: typeof forwardPayload.message === 'string' ? forwardPayload.message.length : 0,
+      file_bytes: typeof forwardPayload.file_base64 === 'string' ? forwardPayload.file_base64.length : 0,
+      file_count: Array.isArray(forwardPayload.files) ? forwardPayload.files.length : 0,
+    }));
 
     let response: Response
     try {
@@ -528,7 +540,15 @@ Deno.serve(async (req) => {
     }
 
     const rawText = await response.text()
-    console.log('Webhook raw response status:', response.status, 'body:', rawText)
+    console.log(JSON.stringify({
+      correlation_id: requestId,
+      event: 'upstream_response',
+      action: effectiveAction,
+      sessionId: forwardPayload.sessionId ?? null,
+      turn_id: forwardPayload.turn_id ?? null,
+      status: response.status,
+      body_bytes: rawText.length,
+    }))
 
     if (!response.ok) {
       // Upstream 4xx means the request was rejected cleanly by n8n.
@@ -537,14 +557,11 @@ Deno.serve(async (req) => {
         try {
           const parsed = JSON.parse(rawText)
           if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
-            return json(
-              {
-                status: 'error',
-                error: parsed.error || 'upstream_error',
-                message: parsed.message,
-              },
-              response.status,
-            )
+            // Upstream produced its own user-safe German message: keep it.
+            return fail(parsed.error || 'upstream_error', response.status, {
+              message: parsed.message,
+              extra: { upstream_status: response.status, correlation_of: requestId },
+            })
           }
         } catch {
           // Body doesn't parse: fall through to the existing 502 behavior.
