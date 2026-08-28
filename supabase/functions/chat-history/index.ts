@@ -18,7 +18,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.45.0'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
+    'authorization, x-client-info, apikey, content-type, x-lawgpt-sig',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -37,6 +37,60 @@ const isUuid = (v: unknown): v is string =>
 
 const isLegacyOrUuid = (v: unknown): v is string =>
   v === 'legacy' || isUuid(v)
+
+// --- Request attestation -----------------------------------------------
+// This proves the request came from a build of THIS app, nothing more. The
+// key ships in the browser bundle, so it does not identify the person and is
+// not a substitute for a session. It removes drive-by access from the open
+// internet; per-member isolation is a separate, still-open piece of work.
+const SIG_WINDOW_SECONDS = 300
+
+const toHex = (buf: ArrayBuffer) =>
+  Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+
+const timingSafeEqual = (a: string, b: string) => {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+const verifySignature = async (
+  header: string | null,
+  action: unknown,
+  email: string,
+  secret: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  if (!header) return { ok: false, reason: 'missing_signature' }
+  const parts = header.split('.')
+  if (parts.length !== 4 || parts[0] !== 'v1') {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const [, tsRaw, nonce, mac] = parts
+  const ts = Number(tsRaw)
+  if (!Number.isFinite(ts) || !nonce || !mac) {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const skew = Math.abs(Math.floor(Date.now() / 1000) - ts)
+  if (skew > SIG_WINDOW_SECONDS) return { ok: false, reason: 'stale_signature' }
+
+  const payload = `v1.${tsRaw}.${nonce}.${String(action)}.${email.toLowerCase()}`
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const expected = toHex(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload)),
+  )
+  if (!timingSafeEqual(expected, mac.toLowerCase())) {
+    return { ok: false, reason: 'bad_signature' }
+  }
+  return { ok: true }
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
