@@ -70,6 +70,22 @@ const classifyUploadSource = (raw: unknown): UploadVerdict => {
 
 type AssistantMeta = { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] };
 
+/** Read `verstanden` back out of a persisted assistant message. Never throws. */
+const extractVerstanden = (content: unknown): Verstanden | undefined => {
+  if (typeof content !== "string") return undefined;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+    const v = obj?.verstanden;
+    return v && typeof v === "object" ? (v as Verstanden) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+
 /**
  * Turn a backend payload into the assistant Message. Shared by the live send frame
  * and by resume-on-open, so both render results identically.
