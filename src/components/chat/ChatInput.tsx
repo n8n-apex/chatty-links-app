@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +70,12 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recStartRef = useRef<number>(0);
+  // Voice UI feedback: elapsed clock + recording length (for the estimate) +
+  // a cancel flag honoured by the async onstop handler.
+  const [audioElapsedMs, setAudioElapsedMs] = useState(0);
+  const [lastRecordingMs, setLastRecordingMs] = useState(0);
+  const [transcribeStartMs, setTranscribeStartMs] = useState(0);
+  const transcribeCancelRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -242,8 +249,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
       body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm', language: 'de' },
     });
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
+    if (error) {
+      // Non-2xx from chat-proxy (prompt D): the body carries a German message.
+      let msg = '';
+      try {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx) msg = (await ctx.clone().json())?.message || '';
+      } catch { /* body unreadable — fall through */ }
+      throw new Error(msg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
+    }
+    // 2xx error envelope: prefer the German message over the error code.
+    if (data?.error) throw new Error(data.message || data.error);
     return stripAsrArtifacts((data?.text || '').trim());
   };
 
@@ -260,14 +276,28 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const durationMs = Date.now() - recStartRef.current;
+        setLastRecordingMs(durationMs);
+        // Cancelled while the recorder wound down: discard silently.
+        if (transcribeCancelRef.current) {
+          transcribeCancelRef.current = false;
+          setAudioStatus('idle');
+          return;
+        }
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
         if (blob.size === 0 || durationMs < 500) {
           setAudioStatus('idle');
           return;
         }
+        setTranscribeStartMs(Date.now());
         setAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
+          // Cancelled during the request: discard the result, keep the field.
+          if (transcribeCancelRef.current) {
+            transcribeCancelRef.current = false;
+            setAudioStatus('idle');
+            return;
+          }
           if (!text) {
             // Whole transcript was artifact / empty → leave field untouched.
             setAudioStatus('idle');
@@ -279,9 +309,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           setAudioStatus('idle');
           setTimeout(() => setAudioTranscript(null), 400);
         } catch (err) {
+          if (transcribeCancelRef.current) {
+            transcribeCancelRef.current = false;
+            setAudioStatus('idle');
+            return;
+          }
           console.error('Transcription error:', err);
           setAudioStatus('error');
-          setAudioError('Transkription fehlgeschlagen. Bitte erneut versuchen.');
+          // chat-proxy (prompt D) returns a German message — surface it, never
+          // replace it with a generic string. Fall back only if absent.
+          const backendMsg = err instanceof Error ? err.message : '';
+          setAudioError(backendMsg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
         }
       };
       mediaRecorderRef.current = mr;
@@ -297,8 +335,34 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const stopRecording = () => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') mr.stop();
+    setTranscribeStartMs(Date.now());
     setAudioStatus('transcribing');
   };
+
+  // Escape hatch: cancel an in-flight transcription. The flag is honoured by
+  // the onstop handler above (before, during, and after the request).
+  const cancelTranscription = () => {
+    transcribeCancelRef.current = true;
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setAudioStatus('idle');
+    setAudioTranscript(null);
+    setAudioError(null);
+  };
+
+  // Elapsed clock for the voice UI: ticks while recording (from recStartRef)
+  // and while transcribing (from transcribeStartMs). Shows real seconds, never
+  // an invented percentage.
+  useEffect(() => {
+    if (audioStatus !== 'recording' && audioStatus !== 'transcribing') return;
+    const tick = () => {
+      const start = audioStatus === 'recording' ? recStartRef.current : transcribeStartMs;
+      setAudioElapsedMs(start ? Date.now() - start : 0);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [audioStatus, transcribeStartMs]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -325,6 +389,15 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const transcribing = audioStatus === 'transcribing';
   const submitting = audioStatus === 'submitting';
   const hasFiles = attachedFiles.length > 0;
+
+  const fmtElapsed = (ms: number) => {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
+  // Whisper is roughly an order of magnitude faster than real time — an
+  // estimate, never a countdown to a hard number.
+  const transcribeEstimateS = Math.max(2, Math.round(lastRecordingMs / 10000));
+  const transcribeSlowHint = transcribing && audioElapsedMs / 1000 > transcribeEstimateS;
 
   return (
     <motion.div
@@ -391,12 +464,33 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
                   </span>
                   <span>Aufnahme läuft… (klick zum Stoppen)</span>
+                  <span className="ml-auto font-mono tabular-nums" aria-label="Aufnahmedauer">
+                    {fmtElapsed(audioElapsedMs)}
+                  </span>
                 </div>
               )}
               {transcribing && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Wird transkribiert…</span>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Transkription läuft…</span>
+                    <span className="font-mono tabular-nums">{fmtElapsed(audioElapsedMs)}</span>
+                    <button
+                      type="button"
+                      onClick={cancelTranscription}
+                      className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                  {/* Indeterminate by design — Whisper sends no progress events,
+                      so any percentage would be invented. Full bar, pulsing. */}
+                  <Progress value={100} className="h-1.5 animate-pulse" aria-label="Transkription läuft" />
+                  <div className="text-[11px] opacity-80">
+                    {transcribeSlowHint
+                      ? 'Längere Aufnahmen dauern etwas.'
+                      : `Geschätzt ca. ${transcribeEstimateS}s.`}
+                  </div>
                 </div>
               )}
               {audioStatus === 'error' && (
