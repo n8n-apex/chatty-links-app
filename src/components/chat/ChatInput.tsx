@@ -335,8 +335,34 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const stopRecording = () => {
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== 'inactive') mr.stop();
+    setTranscribeStartMs(Date.now());
     setAudioStatus('transcribing');
   };
+
+  // Escape hatch: cancel an in-flight transcription. The flag is honoured by
+  // the onstop handler above (before, during, and after the request).
+  const cancelTranscription = () => {
+    transcribeCancelRef.current = true;
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setAudioStatus('idle');
+    setAudioTranscript(null);
+    setAudioError(null);
+  };
+
+  // Elapsed clock for the voice UI: ticks while recording (from recStartRef)
+  // and while transcribing (from transcribeStartMs). Shows real seconds, never
+  // an invented percentage.
+  useEffect(() => {
+    if (audioStatus !== 'recording' && audioStatus !== 'transcribing') return;
+    const tick = () => {
+      const start = audioStatus === 'recording' ? recStartRef.current : transcribeStartMs;
+      setAudioElapsedMs(start ? Date.now() - start : 0);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [audioStatus, transcribeStartMs]);
 
   useEffect(() => {
     if (textareaRef.current) {
