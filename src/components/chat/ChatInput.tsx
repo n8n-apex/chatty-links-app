@@ -249,8 +249,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
       body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm', language: 'de' },
     });
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
+    if (error) {
+      // Non-2xx from chat-proxy (prompt D): the body carries a German message.
+      let msg = '';
+      try {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx) msg = (await ctx.clone().json())?.message || '';
+      } catch { /* body unreadable — fall through */ }
+      throw new Error(msg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
+    }
+    // 2xx error envelope: prefer the German message over the error code.
+    if (data?.error) throw new Error(data.message || data.error);
     return stripAsrArtifacts((data?.text || '').trim());
   };
 
