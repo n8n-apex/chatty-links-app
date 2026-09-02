@@ -70,6 +70,12 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recStartRef = useRef<number>(0);
+  // Voice UI feedback: elapsed clock + recording length (for the estimate) +
+  // a cancel flag honoured by the async onstop handler.
+  const [audioElapsedMs, setAudioElapsedMs] = useState(0);
+  const [lastRecordingMs, setLastRecordingMs] = useState(0);
+  const [transcribeStartMs, setTranscribeStartMs] = useState(0);
+  const transcribeCancelRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
