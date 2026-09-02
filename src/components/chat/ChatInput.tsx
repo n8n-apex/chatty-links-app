@@ -267,14 +267,28 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const durationMs = Date.now() - recStartRef.current;
+        setLastRecordingMs(durationMs);
+        // Cancelled while the recorder wound down: discard silently.
+        if (transcribeCancelRef.current) {
+          transcribeCancelRef.current = false;
+          setAudioStatus('idle');
+          return;
+        }
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
         if (blob.size === 0 || durationMs < 500) {
           setAudioStatus('idle');
           return;
         }
+        setTranscribeStartMs(Date.now());
         setAudioStatus('transcribing');
         try {
           const text = await transcribe(blob);
+          // Cancelled during the request: discard the result, keep the field.
+          if (transcribeCancelRef.current) {
+            transcribeCancelRef.current = false;
+            setAudioStatus('idle');
+            return;
+          }
           if (!text) {
             // Whole transcript was artifact / empty → leave field untouched.
             setAudioStatus('idle');
@@ -286,9 +300,17 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           setAudioStatus('idle');
           setTimeout(() => setAudioTranscript(null), 400);
         } catch (err) {
+          if (transcribeCancelRef.current) {
+            transcribeCancelRef.current = false;
+            setAudioStatus('idle');
+            return;
+          }
           console.error('Transcription error:', err);
           setAudioStatus('error');
-          setAudioError('Transkription fehlgeschlagen. Bitte erneut versuchen.');
+          // chat-proxy (prompt D) returns a German message — surface it, never
+          // replace it with a generic string. Fall back only if absent.
+          const backendMsg = err instanceof Error ? err.message : '';
+          setAudioError(backendMsg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
         }
       };
       mediaRecorderRef.current = mr;
