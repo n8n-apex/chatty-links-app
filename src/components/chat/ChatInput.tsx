@@ -390,6 +390,15 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const submitting = audioStatus === 'submitting';
   const hasFiles = attachedFiles.length > 0;
 
+  const fmtElapsed = (ms: number) => {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
+  // Whisper is roughly an order of magnitude faster than real time — an
+  // estimate, never a countdown to a hard number.
+  const transcribeEstimateS = Math.max(2, Math.round(lastRecordingMs / 10000));
+  const transcribeSlowHint = transcribing && audioElapsedMs / 1000 > transcribeEstimateS;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
