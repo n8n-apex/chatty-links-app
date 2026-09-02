@@ -464,12 +464,33 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
                   </span>
                   <span>Aufnahme läuft… (klick zum Stoppen)</span>
+                  <span className="ml-auto font-mono tabular-nums" aria-label="Aufnahmedauer">
+                    {fmtElapsed(audioElapsedMs)}
+                  </span>
                 </div>
               )}
               {transcribing && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Wird transkribiert…</span>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Transkription läuft…</span>
+                    <span className="font-mono tabular-nums">{fmtElapsed(audioElapsedMs)}</span>
+                    <button
+                      type="button"
+                      onClick={cancelTranscription}
+                      className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                  {/* Indeterminate by design — Whisper sends no progress events,
+                      so any percentage would be invented. Full bar, pulsing. */}
+                  <Progress value={100} className="h-1.5 animate-pulse" aria-label="Transkription läuft" />
+                  <div className="text-[11px] opacity-80">
+                    {transcribeSlowHint
+                      ? 'Längere Aufnahmen dauern etwas.'
+                      : `Geschätzt ca. ${transcribeEstimateS}s.`}
+                  </div>
                 </div>
               )}
               {audioStatus === 'error' && (
