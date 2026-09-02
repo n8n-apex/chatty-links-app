@@ -134,8 +134,8 @@ const buildAssistantMessage = (
       if (!usablePlain) {
         // No known shape and no renderable text: validate before guessing. Only a
         // JSON object that matches nothing at all becomes an error card.
-        const check = parseBackendPayload(parsed);
-        if (!check.ok) {
+        const check: BackendParseResult = parseBackendPayload(parsed);
+        if (check.ok === false) {
           console.error("backend payload failed shape validation", {
             issuePaths: check.issuePaths,
           });
