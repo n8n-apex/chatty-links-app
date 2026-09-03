@@ -446,16 +446,20 @@ Deno.serve(async (req) => {
     // --- INGEST PROJECT (bind a chat to a Drive folder) ---
     if (body.action === 'ingest_project') {
       try {
-        const projectRef = body.project_ref || body.projectRef || '';
+        const projectRef = typeof (body.project_ref || body.projectRef) === 'string'
+          ? (body.project_ref || body.projectRef).trim()
+          : '';
         if (!projectRef) {
           return fail('missing_project_ref', 400);
         }
+        const sessionId = body.sessionId || body.session_id || null;
         const resp = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'ingest_project',
             project_ref: projectRef,
+            ...(sessionId ? { sessionId } : {}),
           }),
         });
         const txt = await resp.text();
@@ -464,19 +468,31 @@ Deno.serve(async (req) => {
         }
         const trimmed = (txt || '').trim();
         if (!trimmed) {
-          return fail('upstream_empty', 502);
+          // The ingest workflow performs the Drive import as a side effect and
+          // can legitimately finish with no response item. A successful HTTP
+          // status is therefore the acknowledgement; preserve the exact ref so
+          // the client can bind it to this conversation immediately.
+          return json({ status: 'success', success: true, projectRef });
         }
         let parsed: any;
         try {
           parsed = JSON.parse(trimmed);
         } catch {
-          return fail('upstream_unparseable', 502, { detail: trimmed });
+          // Some workflow versions answer with a short success sentence rather
+          // than JSON. As with the empty 2xx response, HTTP success confirms the
+          // ingestion request was accepted.
+          return json({ status: 'success', success: true, projectRef });
         }
         const obj = Array.isArray(parsed) ? parsed[0] : parsed;
         if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
           return fail('ingest_not_confirmed', 502, { detail: trimmed });
         }
-        return json(obj);
+        return json({
+          ...obj,
+          status: 'success',
+          success: true,
+          projectRef: obj.projectRef || obj.project_ref || projectRef,
+        });
       } catch (e) {
         return fail('upstream_unreachable', 502, { detail: e });
       }
