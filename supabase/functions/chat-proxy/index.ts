@@ -487,7 +487,12 @@ Deno.serve(async (req) => {
         if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
           return fail('ingest_not_confirmed', 502, { detail: trimmed });
         }
-        return json({ ...obj, projectRef: obj.projectRef || obj.project_ref || projectRef });
+        return json({
+          ...obj,
+          status: 'success',
+          success: true,
+          projectRef: obj.projectRef || obj.project_ref || projectRef,
+        });
       } catch (e) {
         return fail('upstream_unreachable', 502, { detail: e });
       }
