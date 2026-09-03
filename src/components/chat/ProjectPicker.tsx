@@ -10,27 +10,20 @@ interface ProjectPickerProps {
   onUnlink: () => void;
 }
 
-// Extract folder id from a Google Drive folder URL, or pass through raw IDs.
-const extractFolderId = (input: string): string => {
-  const s = (input || "").trim();
-  if (!s) return "";
-  const m = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-  if (m) return m[1];
-  // strip any query string from a bare token
-  return s.split("?")[0].split("/")[0];
-};
-
 export const ProjectPicker = ({ projectRef, status, onBind, onUnlink }: ProjectPickerProps) => {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
 
   const handleConfirm = () => {
-    const id = extractFolderId(value);
-    if (!id) return;
-    onBind(id);
+    // Send the pasted value essentially unchanged — the backend normalises both
+    // full Drive URLs and bare folder ids. Parsing here is what broke it before.
+    const ref = (value || "").trim();
+    if (!ref) return;
+    onBind(ref);
     setOpen(false);
     setValue("");
   };
+
 
   return (
     <div className="border-b border-border bg-background/40 px-4 py-2 backdrop-blur-xl">
