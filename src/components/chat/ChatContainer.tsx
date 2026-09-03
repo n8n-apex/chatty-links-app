@@ -981,7 +981,7 @@ export const ChatContainer = () => {
   const bindProject = async (ref: string) => {
     const cleanRef = (ref || "").trim();
     if (!cleanRef) return;
-    const boundTo = activeConversationRef.current;
+    const boundTo = activeConversationRef.current || localStorage.getItem("chat-session-id");
     setProjectRef(cleanRef);
     if (boundTo) {
       try { localStorage.setItem(projectStorageKey(boundTo), cleanRef); } catch { /* ignore */ }
@@ -995,8 +995,18 @@ export const ChatContainer = () => {
       const parsed = Array.isArray(data) ? data[0] : data;
       const ok = parsed && (parsed.status === "success" || parsed.success === true);
       if (!ok) throw new Error(parsed?.error || "ingest_failed");
+      // Adopt the reference the backend normalised to, so the chip and the
+      // stored value match what the backend actually uses.
+      const finalRef = typeof parsed?.projectRef === "string" && parsed.projectRef.trim()
+        ? parsed.projectRef.trim()
+        : cleanRef;
+      setProjectRef(finalRef);
+      if (boundTo) {
+        try { localStorage.setItem(projectStorageKey(boundTo), finalRef); } catch { /* ignore */ }
+      }
       setProjectStatus("linked");
       toast.success("Projekt verknüpft");
+
     } catch (e) {
       console.error("ingest_project error:", e);
       setProjectStatus("error");
