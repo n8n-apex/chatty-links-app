@@ -989,7 +989,11 @@ export const ChatContainer = () => {
     setProjectStatus("loading");
     try {
       const { data, error } = await supabase.functions.invoke("chat-proxy", {
-        body: { action: "ingest_project", project_ref: cleanRef },
+        body: {
+          action: "ingest_project",
+          project_ref: cleanRef,
+          ...(boundTo ? { sessionId: boundTo } : {}),
+        },
       });
       if (error) throw new Error(error.message);
       const parsed = Array.isArray(data) ? data[0] : data;
