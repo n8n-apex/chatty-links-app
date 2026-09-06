@@ -25,7 +25,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   upstream_unparseable: 'Die Antwort der Verarbeitung war unvollständig. Bitte senden Sie die Anfrage erneut.',
   upstream_unreachable: 'Der Dienst ist momentan nicht erreichbar. Bitte versuchen Sie es in wenigen Sekunden erneut.',
   save_not_confirmed: 'Der Entwurf konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
-  ingest_not_confirmed: 'Das Projekt konnte nicht eingelesen werden. Bitte prüfen Sie die Freigabe des Ordners.',
+  
   feedback_not_saved: 'Das Feedback konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.',
   whisper_failed: 'Die Aufnahme konnte nicht transkribiert werden. Bitte sprechen Sie erneut oder tippen Sie den Text.',
   transcription_failed: 'Die Aufnahme konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
