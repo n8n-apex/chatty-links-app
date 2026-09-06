@@ -8,7 +8,7 @@ import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
 import { EmptyState } from "./EmptyState";
 import { ConversationSidebar, ConversationSummary } from "./ConversationSidebar";
-import { ProjectPicker, ProjectStatus } from "./ProjectPicker";
+
 import { Gespraechsleiste } from "./Gespraechsleiste";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -190,8 +190,6 @@ export const ChatContainer = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [projectRef, setProjectRef] = useState<string | null>(null);
-  const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
   // Routing is decided by the backend router (`action: "auto"`), never by the UI.
 
   // Sidebar is always available; conversations are filtered by user_email so each
@@ -342,21 +340,18 @@ export const ChatContainer = () => {
   };
 
 
-  // The linked Drive project is per-conversation — the same pattern as
-  // `pending-turn:<id>`. A global key leaks one client's documents into
-  // another client's retrieval.
-  const projectStorageKey = (cid: string) => `chat-project-ref:${cid}`;
-
-  const applyProjectForConversation = (cid: string) => {
-    let saved: string | null = null;
-    try { saved = localStorage.getItem(projectStorageKey(cid)); } catch { /* ignore */ }
-    if (saved) {
-      setProjectRef(saved);
-      setProjectStatus("linked");
-    } else {
-      setProjectRef(null);
-      setProjectStatus("idle");
-    }
+  // Project linking ("Projekt verknüpfen") was withdrawn on 2026-09-03; the
+  // backend no longer accepts `ingest_project`. Sweep any persisted refs so a
+  // session that was linked before the withdrawal opens cleanly.
+  const purgeStoredProjectRefs = () => {
+    try {
+      const doomed: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k === "chat-project-ref" || k.startsWith("chat-project-ref:"))) doomed.push(k);
+      }
+      doomed.forEach((k) => localStorage.removeItem(k));
+    } catch { /* ignore */ }
   };
 
   const handleNewConversation = () => {
@@ -368,7 +363,7 @@ export const ChatContainer = () => {
     localStorage.setItem("chat-session-id", newId);
     setMessages([]);
     setIsLoading(false); // never carry a spinner into another conversation
-    applyProjectForConversation(newId);
+    
 
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
@@ -387,7 +382,6 @@ export const ChatContainer = () => {
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
-    applyProjectForConversation(cid);
     if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -693,7 +687,7 @@ export const ChatContainer = () => {
     let payload: Record<string, unknown> = {
       sessionId,
       timestamp: new Date().toISOString(),
-      ...(projectRef ? { project_ref: projectRef } : {}),
+      
       // One-click correction of a wrong routing decision.
       ...(opts?.forceAction ? { force_action: opts.forceAction } : {}),
       ...(opts?.rerunOf ? { rerun_of: opts.rerunOf } : {}),
@@ -977,71 +971,13 @@ export const ChatContainer = () => {
   };
 
 
-  // --- PROJECT PICKER: bind a chat to a Google Drive project folder ---
-  const bindProject = async (ref: string) => {
-    const cleanRef = (ref || "").trim();
-    if (!cleanRef) return;
-    const boundTo = activeConversationRef.current || localStorage.getItem("chat-session-id");
-    setProjectRef(cleanRef);
-    if (boundTo) {
-      try { localStorage.setItem(projectStorageKey(boundTo), cleanRef); } catch { /* ignore */ }
-    }
-    setProjectStatus("loading");
-    try {
-      const { data, error } = await supabase.functions.invoke("chat-proxy", {
-        body: {
-          action: "ingest_project",
-          project_ref: cleanRef,
-          ...(boundTo ? { sessionId: boundTo } : {}),
-        },
-      });
-      if (error) throw new Error(error.message);
-      const parsed = Array.isArray(data) ? data[0] : data;
-      const ok = parsed && (parsed.status === "success" || parsed.success === true);
-      if (!ok) throw new Error(parsed?.error || "ingest_failed");
-      // Adopt the reference the backend normalised to, so the chip and the
-      // stored value match what the backend actually uses.
-      const finalRef = typeof parsed?.projectRef === "string" && parsed.projectRef.trim()
-        ? parsed.projectRef.trim()
-        : cleanRef;
-      setProjectRef(finalRef);
-      if (boundTo) {
-        try { localStorage.setItem(projectStorageKey(boundTo), finalRef); } catch { /* ignore */ }
-      }
-      setProjectStatus("linked");
-      toast.success("Projekt verknüpft");
-
-    } catch (e) {
-      console.error("ingest_project error:", e);
-      setProjectStatus("error");
-      setProjectRef(null);
-      if (boundTo) {
-        try { localStorage.removeItem(projectStorageKey(boundTo)); } catch { /* ignore */ }
-      }
-      toast.error("Projekt konnte nicht eingelesen werden.");
-    }
-  };
-
-  const unlinkProject = () => {
-    setProjectRef(null);
-    setProjectStatus("idle");
-    const cid = activeConversationRef.current;
-    try {
-      if (cid) localStorage.removeItem(projectStorageKey(cid));
-      // Retire the old global key so it can never be re-read.
-      localStorage.removeItem("chat-project-ref");
-    } catch { /* ignore */ }
-  };
-
-  // Rehydrate sessionId on mount so a reload preserves the thread. The project
-  // ref is per-conversation and is applied when a conversation is opened.
+  // Rehydrate sessionId on mount so a reload preserves the thread, and purge
+  // any project refs stored by the withdrawn "Projekt verknüpfen" feature.
   useEffect(() => {
     if (!localStorage.getItem("chat-session-id")) {
       localStorage.setItem("chat-session-id", crypto.randomUUID());
     }
-    try { localStorage.removeItem("chat-project-ref"); } catch { /* ignore */ }
-    const cid = localStorage.getItem("chat-session-id");
-    if (cid) applyProjectForConversation(cid);
+    purgeStoredProjectRefs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1156,14 +1092,6 @@ export const ChatContainer = () => {
             )}
           </div>
         </div>
-
-        <ProjectPicker
-          projectRef={projectRef}
-          status={projectStatus}
-          onBind={bindProject}
-          onUnlink={unlinkProject}
-        />
-
 
         <main className="relative flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl">
