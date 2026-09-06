@@ -18,7 +18,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_message: 'Bitte geben Sie eine Frage oder Anweisung ein.',
   missing_session_id: 'Die Sitzung ist abgelaufen. Bitte laden Sie die Seite neu und versuchen Sie es erneut.',
   empty_statement: 'Der Entwurf ist leer. Bitte ergänzen Sie den Text und speichern Sie erneut.',
-  missing_project_ref: 'Es wurde kein Projektordner angegeben. Bitte fügen Sie den Google-Drive-Link erneut ein.',
+  
   webhook_not_configured: 'Der Dienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.',
   upstream_error: 'Die Anfrage konnte nicht verarbeitet werden. Bitte versuchen Sie es in wenigen Sekunden erneut.',
   upstream_empty: 'Die Verarbeitung hat kein Ergebnis geliefert. Bitte senden Sie die Anfrage erneut.',
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
 
 
     const MESSAGELESS_ACTIONS = [
-      'analyze_pdf', 'draft_statement', 'ingest_project',
+      'analyze_pdf', 'draft_statement',
       'ingest_legal_pdf', 'ingest_stellungnahme', 'ingest_folder',
       'save_statement', 'suspend_document', 'submit_feedback', 'upload_source',
       'transcribe_audio', 'check_admin', 'get_chunk', 'get_result',
@@ -443,60 +443,6 @@ Deno.serve(async (req) => {
 
 
 
-    // --- INGEST PROJECT (bind a chat to a Drive folder) ---
-    if (body.action === 'ingest_project') {
-      try {
-        const projectRef = typeof (body.project_ref || body.projectRef) === 'string'
-          ? (body.project_ref || body.projectRef).trim()
-          : '';
-        if (!projectRef) {
-          return fail('missing_project_ref', 400);
-        }
-        const sessionId = body.sessionId || body.session_id || null;
-        const resp = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'ingest_project',
-            project_ref: projectRef,
-            ...(sessionId ? { sessionId } : {}),
-          }),
-        });
-        const txt = await resp.text();
-        if (!resp.ok) {
-          return fail('upstream_error', 502, { detail: txt, extra: { upstream_status: resp.status } });
-        }
-        const trimmed = (txt || '').trim();
-        if (!trimmed) {
-          // The ingest workflow performs the Drive import as a side effect and
-          // can legitimately finish with no response item. A successful HTTP
-          // status is therefore the acknowledgement; preserve the exact ref so
-          // the client can bind it to this conversation immediately.
-          return json({ status: 'success', success: true, projectRef });
-        }
-        let parsed: any;
-        try {
-          parsed = JSON.parse(trimmed);
-        } catch {
-          // Some workflow versions answer with a short success sentence rather
-          // than JSON. As with the empty 2xx response, HTTP success confirms the
-          // ingestion request was accepted.
-          return json({ status: 'success', success: true, projectRef });
-        }
-        const obj = Array.isArray(parsed) ? parsed[0] : parsed;
-        if (!obj || typeof obj !== 'object' || obj.status === 'error' || obj.success === false || obj.error) {
-          return fail('ingest_not_confirmed', 502, { detail: trimmed });
-        }
-        return json({
-          ...obj,
-          status: 'success',
-          success: true,
-          projectRef: obj.projectRef || obj.project_ref || projectRef,
-        });
-      } catch (e) {
-        return fail('upstream_unreachable', 502, { detail: e });
-      }
-    }
 
 
 
@@ -513,7 +459,7 @@ Deno.serve(async (req) => {
     const passthroughKeys = [
       'file_id', 'file_base64', 'file_name', 'files',
       'state', 'question', 'topic', 'statement_type',
-      'ziel', 'mode', 'source_type', 'upload_type', 'project_ref',
+      'ziel', 'mode', 'source_type', 'upload_type',
       'chunk_id', 'target_action',
       // Turn identity. Without these the backend cannot tell one upload from the
       // next in the same conversation.
