@@ -95,7 +95,9 @@ export interface StructuredPayload {
     method?: string | null;
     sections_touched?: string[];
     failed?: boolean;
+    _splice_fallback?: boolean;
   } | null;
+  _revert_to?: number;
 }
 
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
