@@ -526,6 +526,14 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
     !!(data as BehoerdenAnalysisData).antwortschreiben_entwurf ||
     !!(data as BehoerdenAnalysisData).gesamtbeurteilung;
   if (isB4) {
+    // A48: an analysis card must never render empty with confidence.
+    // If both main content fields are empty (and this is not a clarification),
+    // show the standard error card with retry instead of an empty analysis.
+    const hasZusammenfassung = !!(data.zusammenfassung && String(data.zusammenfassung).trim());
+    const hasForderungen = Array.isArray(data.analyse_der_forderungen) && data.analyse_der_forderungen.length > 0;
+    if (!hasZusammenfassung && !hasForderungen && data.needs_clarification !== true) {
+      return <ErrorCard data={{ ...data, status: 'error' }} onRetry={onRetry} />;
+    }
     return <BehoerdenAnalysis data={data as BehoerdenAnalysisData} />;
   }
 
