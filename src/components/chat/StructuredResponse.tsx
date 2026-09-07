@@ -554,7 +554,6 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
   // B6 - Stellungnahme
   if (hasEntwurfStellung || hasB6Items || hasB6Schluss) {
     const isEdit = data.is_edit === true;
-    const spliceFailed = isEdit && (data.edit_splice?.failed === true || data.edit_splice?.applied === false);
     // Backend alias map: normalise short/legacy section names to canonical block keys.
     // Notably 'einzelfakt' is pushed literally by B6_Edit_Splice for edits to beurteilung_der_einzelfakten.
     const SECTION_ALIASES: Record<string, string> = {
@@ -717,6 +716,7 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
         <BeurteilungsgrundlageBlock />
         <EinzelfaktenBlock />
         <SchlussBlock />
+        <RevertLine />
         <DraftBlock />
         <FehlendeInfoBlock />
         <Section>{renderRechtsfrageExtras(data)}</Section>
