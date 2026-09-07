@@ -639,6 +639,35 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
       </Section>
     ) : null;
 
+    // Revert affordance: the backend restored an earlier draft version.
+    const revertTo = typeof data._revert_to === 'number' ? data._revert_to : null;
+    const RevertLine = () => revertTo !== null ? (
+      <Section>
+        <div className="text-xs text-muted-foreground">Fassung {revertTo} wiederhergestellt.</div>
+      </Section>
+    ) : null;
+
+    // Edit feedback line: one German line naming what the splice touched.
+    const spliceFallback = data.edit_splice?._splice_fallback === true;
+    const spliceFailedFlag = data.edit_splice?.failed === true;
+    const touchedLabels = rawTouched.map((s) => String(s).trim()).filter(Boolean);
+    const EditFeedbackLine = () => {
+      let text: string | null = null;
+      if (spliceFailedFlag) {
+        text = 'Die gewünschte Stelle wurde nicht gefunden; der Entwurf ist unverändert.';
+      } else if (spliceFallback) {
+        text = 'Der Entwurf wurde vollständig neu gefasst.';
+      } else if (touchedLabels.length > 0) {
+        text = `Geändert: ${touchedLabels.join(', ')}`;
+      }
+      if (!text) return null;
+      return (
+        <Section>
+          <div className={cn('text-xs', spliceFailedFlag ? 'text-yellow-600' : 'text-muted-foreground')}>{text}</div>
+        </Section>
+      );
+    };
+
     if (isEdit) {
       const sectionMap: Record<string, () => React.ReactNode> = {
         projekt_und_sachverhalt: ProjektBlock,
