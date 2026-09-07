@@ -685,13 +685,8 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
 
       return (
         <motion.div className="flex flex-col gap-3" variants={containerVariants} initial="hidden" animate="show">
-          {spliceFailed && (
-            <Section>
-              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-foreground">
-                Die gewünschte Änderung konnte nicht zugeordnet werden — der Entwurf ist unverändert. Bitte benennen Sie die zu ändernde Stelle konkreter.
-              </div>
-            </Section>
-          )}
+          <RevertLine />
+          <EditFeedbackLine />
           <DraftBlock />
           {touchedNodes}
           <FehlendeInfoBlock />
