@@ -695,10 +695,22 @@ export const ChatContainer = () => {
       setMessages((prev) => [...prev, userMessage]);
       persistMessage("user", displayContent, undefined, sendConversationId);
     } else {
-      // The old answer disappears immediately; its slot is held by the indicator.
-      setMessages((prev) => prev.filter((m) => m.id !== replaceMessageId));
+      // The replaced answer is dropped from the stored history right away; on
+      // screen it stays until the new one takes its exact place.
       deletePersistedMessage(replacedMessage?.historyId);
     }
+
+    /** Append, or put the new answer exactly where the replaced one stood. */
+    const placeAssistantMessage = (msg: Message) => {
+      setMessages((prev) => {
+        if (!replaceMessageId) return [...prev, msg];
+        const idx = prev.findIndex((m) => m.id === replaceMessageId);
+        if (idx === -1) return [...prev, msg];
+        const next = [...prev];
+        next.splice(idx, 1, msg);
+        return next;
+      });
+    };
     setIsLoading(true);
 
     let payload: Record<string, unknown> = {
