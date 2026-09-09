@@ -805,20 +805,20 @@ export const ChatContainer = () => {
 
 
       if (activeConversationRef.current === sendConversationId) {
-        setMessages((prev) => [...prev, assistantMessage]);
+        placeAssistantMessage(assistantMessage);
       }
       // The user may have switched away. The answer belongs to sendConversationId;
       // persist it there — resume-on-open surfaces it when they return.
-      persistMessage("ai", responseText, meta, sendConversationId);
+      persistMessage("ai", responseText, meta, sendConversationId).then((rowId) => {
+        if (!rowId) return;
+        setMessages((prev) => prev.map((m) =>
+          m.id === assistantMessage.id ? { ...m, historyId: rowId } : m,
+        ));
+      });
       if (historyEnabled) loadConversations();
 
     } catch (error) {
       console.error("Fehler beim Senden:", error);
-      // Clean up progress placeholder from async analyze_pdf, if any.
-      if (progressMsgId) {
-        const pid = progressMsgId;
-        setMessages((prev) => prev.filter((m) => m.id !== pid));
-      }
       const errName = (error as Error)?.name;
       const errMsgStr = (error as Error)?.message || "";
       if (errMsgStr === "PollCancelled") {
