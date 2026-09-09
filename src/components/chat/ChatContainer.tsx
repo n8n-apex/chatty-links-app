@@ -858,7 +858,8 @@ export const ChatContainer = () => {
         timestamp: new Date(),
       };
       if (activeConversationRef.current === sendConversationId) {
-        setMessages((prev) => [...prev, errorMessage]);
+        // A failed retry shows the error card in the replaced answer's position.
+        placeAssistantMessage(errorMessage);
       }
       // Definitive failure — nothing left to resume.
       try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
