@@ -685,7 +685,7 @@ export const ChatContainer = () => {
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    {
+    if (!replaceMessageId) {
       const userMessage: Message = {
         id: crypto.randomUUID(),
         content: displayContent,
@@ -694,6 +694,10 @@ export const ChatContainer = () => {
       };
       setMessages((prev) => [...prev, userMessage]);
       persistMessage("user", displayContent, undefined, sendConversationId);
+    } else {
+      // The old answer disappears immediately; its slot is held by the indicator.
+      setMessages((prev) => prev.filter((m) => m.id !== replaceMessageId));
+      deletePersistedMessage(replacedMessage?.historyId);
     }
     setIsLoading(true);
 
