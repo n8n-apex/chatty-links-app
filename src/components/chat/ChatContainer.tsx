@@ -337,7 +337,21 @@ export const ChatContainer = () => {
       used_chunk_ids: meta?.usedChunkIds ?? null,
       used_paragraphs: meta?.usedParagraphs ?? null,
     });
-    if (!data?.success) console.error("Fehler beim Speichern der Nachricht");
+    if (!data?.success) {
+      console.error("Fehler beim Speichern der Nachricht");
+      return null;
+    }
+    return typeof data.id === "string" ? data.id : null;
+  };
+
+  /** Remove one persisted message (soft delete) — used when a retry replaces it. */
+  const deletePersistedMessage = async (historyId?: string) => {
+    if (!historyId || !currentUserEmail) return;
+    await callHistory({
+      action: "delete_message",
+      user_email: currentUserEmail,
+      message_id: historyId,
+    });
   };
 
 
