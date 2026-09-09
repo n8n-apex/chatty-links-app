@@ -324,9 +324,9 @@ export const ChatContainer = () => {
     content: string,
     meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
     conversationIdOverride?: string | null,
-  ) => {
+  ): Promise<string | null> => {
     const target = conversationIdOverride ?? conversationId;
-    if (!currentUserEmail || !content || !target) return;
+    if (!currentUserEmail || !content || !target) return null;
     const data = await callHistory({
       action: "save_message",
       user_email: currentUserEmail,
