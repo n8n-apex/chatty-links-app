@@ -98,6 +98,7 @@ export interface StructuredPayload {
     _splice_fallback?: boolean;
   } | null;
   _revert_to?: number;
+  _revert_blocked?: boolean;
 }
 
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
