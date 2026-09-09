@@ -278,6 +278,7 @@ export const ChatContainer = () => {
       if (!data?.success) return false;
       const restored: Message[] = ((data.rows as any[]) || []).map((row: any) => ({
         id: row.id,
+        historyId: row.id,
         content: row.content,
         role: row.role === "ai" ? "assistant" : "user",
         timestamp: new Date(row.created_at),
