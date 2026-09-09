@@ -278,6 +278,7 @@ export const ChatContainer = () => {
       if (!data?.success) return false;
       const restored: Message[] = ((data.rows as any[]) || []).map((row: any) => ({
         id: row.id,
+        historyId: row.id,
         content: row.content,
         role: row.role === "ai" ? "assistant" : "user",
         timestamp: new Date(row.created_at),
@@ -323,9 +324,9 @@ export const ChatContainer = () => {
     content: string,
     meta?: { responseId?: string; usedChunkIds?: string[]; usedParagraphs?: string[] },
     conversationIdOverride?: string | null,
-  ) => {
+  ): Promise<string | null> => {
     const target = conversationIdOverride ?? conversationId;
-    if (!currentUserEmail || !content || !target) return;
+    if (!currentUserEmail || !content || !target) return null;
     const data = await callHistory({
       action: "save_message",
       user_email: currentUserEmail,
@@ -336,7 +337,21 @@ export const ChatContainer = () => {
       used_chunk_ids: meta?.usedChunkIds ?? null,
       used_paragraphs: meta?.usedParagraphs ?? null,
     });
-    if (!data?.success) console.error("Fehler beim Speichern der Nachricht");
+    if (!data?.success) {
+      console.error("Fehler beim Speichern der Nachricht");
+      return null;
+    }
+    return typeof data.id === "string" ? data.id : null;
+  };
+
+  /** Remove one persisted message (soft delete) — used when a retry replaces it. */
+  const deletePersistedMessage = async (historyId?: string) => {
+    if (!historyId || !currentUserEmail) return;
+    await callHistory({
+      action: "delete_message",
+      user_email: currentUserEmail,
+      message_id: historyId,
+    });
   };
 
 
@@ -614,23 +629,15 @@ export const ChatContainer = () => {
         return;
       }
       if (activeConversationRef.current !== cid) return;
-      const progressMsgId = crypto.randomUUID();
-      const makeText = (sec: number) =>
-        `⏳ Die Analyse läuft noch — sie wird fortgesetzt.\n\nBisher vergangen: ${sec}s`;
-      setMessages((prev) => [...prev, {
-        id: progressMsgId, content: makeText(0), role: "assistant", timestamp: new Date(),
-      }]);
+      // No progress text: the three-dot typing indicator is the only signal.
+      setIsLoading(true);
       try {
         // The stored turn id MUST be reused — a fresh one could never match.
-        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, (sec) => {
-          setMessages((prev) => prev.map((m) =>
-            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
-          ));
-        });
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, () => {});
+        if (activeConversationRef.current === cid) setIsLoading(false);
         renderResumedResult(data, cid);
       } catch (e) {
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        if (activeConversationRef.current === cid) setIsLoading(false);
         if ((e as Error)?.message === "PollTimeout") {
           try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
         }
@@ -645,8 +652,14 @@ export const ChatContainer = () => {
     content: string,
     files?: File[] | null,
     attachIntent?: 'schreiben' | 'quelle',
-    opts?: { forceAction?: string; rerunOf?: string },
+    opts?: { forceAction?: string; rerunOf?: string; replaceMessageId?: string },
   ) => {
+    // Retry / "Stattdessen …": the new answer takes the old one's place instead of
+    // being appended, and the old one is dropped from the persisted history.
+    const replaceMessageId = opts?.replaceMessageId;
+    const replacedMessage = replaceMessageId
+      ? messages.find((m) => m.id === replaceMessageId)
+      : undefined;
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
     // The conversation this send belongs to. Answers must be stored here even if
@@ -672,7 +685,7 @@ export const ChatContainer = () => {
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
-    {
+    if (!replaceMessageId) {
       const userMessage: Message = {
         id: crypto.randomUUID(),
         content: displayContent,
@@ -681,7 +694,23 @@ export const ChatContainer = () => {
       };
       setMessages((prev) => [...prev, userMessage]);
       persistMessage("user", displayContent, undefined, sendConversationId);
+    } else {
+      // The replaced answer is dropped from the stored history right away; on
+      // screen it stays until the new one takes its exact place.
+      deletePersistedMessage(replacedMessage?.historyId);
     }
+
+    /** Append, or put the new answer exactly where the replaced one stood. */
+    const placeAssistantMessage = (msg: Message) => {
+      setMessages((prev) => {
+        if (!replaceMessageId) return [...prev, msg];
+        const idx = prev.findIndex((m) => m.id === replaceMessageId);
+        if (idx === -1) return [...prev, msg];
+        const next = [...prev];
+        next.splice(idx, 1, msg);
+        return next;
+      });
+    };
     setIsLoading(true);
 
     let payload: Record<string, unknown> = {
@@ -733,8 +762,6 @@ export const ChatContainer = () => {
     // Flat ceiling: Supabase kills a request at ~150s idle, so anything longer is
     // unreachable and only turns a German backend error into a network error.
     const timeoutMs = 145000;
-    // Progress placeholder id (only used for the async, poll-based path).
-    let progressMsgId: string | null = null;
     try {
       let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
@@ -748,31 +775,15 @@ export const ChatContainer = () => {
       ) {
         // Under `auto` the client cannot know the action — the 202 body carries it.
         const pollAction: string = initial.action ?? "analyze_pdf";
-        progressMsgId = crypto.randomUUID();
-        const makeText = (sec: number) =>
-          `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
-        const progressMsg: Message = {
-          id: progressMsgId,
-          content: makeText(0),
-          role: "assistant",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, progressMsg]);
+        // No progress text while the analysis runs — the three-dot typing
+        // indicator (driven by isLoading) is the only signal.
         // Record the turn durably so it can be resumed after navigation/reload.
         try {
           localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
             turnId, turnStartedAt, action: pollAction, fileName: firstFile?.name ?? null,
           }));
         } catch { /* ignore */ }
-        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, (sec) => {
-
-          setMessages((prev) => prev.map((m) =>
-            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
-          ));
-        });
-        // Remove the placeholder before rendering the final assistant message.
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
-        progressMsgId = null;
+        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, () => {});
         // The result is in hand — the turn no longer needs resuming.
         try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
@@ -794,20 +805,20 @@ export const ChatContainer = () => {
 
 
       if (activeConversationRef.current === sendConversationId) {
-        setMessages((prev) => [...prev, assistantMessage]);
+        placeAssistantMessage(assistantMessage);
       }
       // The user may have switched away. The answer belongs to sendConversationId;
       // persist it there — resume-on-open surfaces it when they return.
-      persistMessage("ai", responseText, meta, sendConversationId);
+      persistMessage("ai", responseText, meta, sendConversationId).then((rowId) => {
+        if (!rowId) return;
+        setMessages((prev) => prev.map((m) =>
+          m.id === assistantMessage.id ? { ...m, historyId: rowId } : m,
+        ));
+      });
       if (historyEnabled) loadConversations();
 
     } catch (error) {
       console.error("Fehler beim Senden:", error);
-      // Clean up progress placeholder from async analyze_pdf, if any.
-      if (progressMsgId) {
-        const pid = progressMsgId;
-        setMessages((prev) => prev.filter((m) => m.id !== pid));
-      }
       const errName = (error as Error)?.name;
       const errMsgStr = (error as Error)?.message || "";
       if (errMsgStr === "PollCancelled") {
@@ -847,7 +858,8 @@ export const ChatContainer = () => {
         timestamp: new Date(),
       };
       if (activeConversationRef.current === sendConversationId) {
-        setMessages((prev) => [...prev, errorMessage]);
+        // A failed retry shows the error card in the replaced answer's position.
+        placeAssistantMessage(errorMessage);
       }
       // Definitive failure — nothing left to resume.
       try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
@@ -1029,15 +1041,36 @@ export const ChatContainer = () => {
       toast.error("Der ursprüngliche Text ist nicht mehr verfügbar.");
       return;
     }
-    sendMessage(text, null, undefined, { forceAction: alternative, rerunOf });
+    sendMessage(text, null, undefined, {
+      forceAction: alternative || undefined,
+      // rerun_of identifies the answer being replaced.
+      rerunOf: rerunOf || assistantMessageId,
+      replaceMessageId: assistantMessageId,
+    });
   };
 
   // What the conversation currently holds, per the most recent router report.
   const zustand = (() => {
+    // A file that was re-filed as "Unterlage" must stop counting as "Schreiben",
+    // even when the last state report still came from its earlier analysis.
+    let reclassified = false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const v = messages[i].verstanden;
-      if (v?.zustand) return v.zustand;
+      if (v?.typ === "upload_source" && v?.grund === "unterlage_umgewidmet") {
+        reclassified = true;
+      }
+      if (v?.zustand) {
+        if (!reclassified) return v.zustand;
+        const count = typeof v.zustand.source_count === "number" ? v.zustand.source_count : 0;
+        return {
+          ...v.zustand,
+          subject_file: null,
+          has_sources: true,
+          source_count: Math.max(1, count),
+        };
+      }
     }
+    if (reclassified) return { subject_file: null, has_sources: true, source_count: 1 };
     return null;
   })();
 

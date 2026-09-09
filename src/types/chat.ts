@@ -37,6 +37,8 @@ export interface Message {
   routingNotice?: string;
   // Router self-report: what the backend understood this turn to be.
   verstanden?: Verstanden;
+  /** Row id in the persisted history, when this message has been stored. */
+  historyId?: string;
 
 }
 
