@@ -1051,10 +1051,26 @@ export const ChatContainer = () => {
 
   // What the conversation currently holds, per the most recent router report.
   const zustand = (() => {
+    // A file that was re-filed as "Unterlage" must stop counting as "Schreiben",
+    // even when the last state report still came from its earlier analysis.
+    let reclassified = false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const v = messages[i].verstanden;
-      if (v?.zustand) return v.zustand;
+      if (v?.typ === "upload_source" && v?.grund === "unterlage_umgewidmet") {
+        reclassified = true;
+      }
+      if (v?.zustand) {
+        if (!reclassified) return v.zustand;
+        const count = typeof v.zustand.source_count === "number" ? v.zustand.source_count : 0;
+        return {
+          ...v.zustand,
+          subject_file: null,
+          has_sources: true,
+          source_count: Math.max(1, count),
+        };
+      }
     }
+    if (reclassified) return { subject_file: null, has_sources: true, source_count: 1 };
     return null;
   })();
 
