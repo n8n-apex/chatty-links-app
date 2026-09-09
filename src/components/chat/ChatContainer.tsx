@@ -775,16 +775,8 @@ export const ChatContainer = () => {
       ) {
         // Under `auto` the client cannot know the action — the 202 body carries it.
         const pollAction: string = initial.action ?? "analyze_pdf";
-        progressMsgId = crypto.randomUUID();
-        const makeText = (sec: number) =>
-          `⏳ Die Analyse läuft — das kann bei umfangreichen Schreiben 2–3 Minuten dauern.\n\nBisher vergangen: ${sec}s`;
-        const progressMsg: Message = {
-          id: progressMsgId,
-          content: makeText(0),
-          role: "assistant",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, progressMsg]);
+        // No progress text while the analysis runs — the three-dot typing
+        // indicator (driven by isLoading) is the only signal.
         // Record the turn durably so it can be resumed after navigation/reload.
         try {
           localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
