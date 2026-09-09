@@ -629,23 +629,15 @@ export const ChatContainer = () => {
         return;
       }
       if (activeConversationRef.current !== cid) return;
-      const progressMsgId = crypto.randomUUID();
-      const makeText = (sec: number) =>
-        `⏳ Die Analyse läuft noch — sie wird fortgesetzt.\n\nBisher vergangen: ${sec}s`;
-      setMessages((prev) => [...prev, {
-        id: progressMsgId, content: makeText(0), role: "assistant", timestamp: new Date(),
-      }]);
+      // No progress text: the three-dot typing indicator is the only signal.
+      setIsLoading(true);
       try {
         // The stored turn id MUST be reused — a fresh one could never match.
-        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, (sec) => {
-          setMessages((prev) => prev.map((m) =>
-            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
-          ));
-        });
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        const data = await pollForResult(cid, pending?.action || "analyze_pdf", turnId, turnStartedAt, () => {});
+        if (activeConversationRef.current === cid) setIsLoading(false);
         renderResumedResult(data, cid);
       } catch (e) {
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
+        if (activeConversationRef.current === cid) setIsLoading(false);
         if ((e as Error)?.message === "PollTimeout") {
           try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
         }
