@@ -652,8 +652,14 @@ export const ChatContainer = () => {
     content: string,
     files?: File[] | null,
     attachIntent?: 'schreiben' | 'quelle',
-    opts?: { forceAction?: string; rerunOf?: string },
+    opts?: { forceAction?: string; rerunOf?: string; replaceMessageId?: string },
   ) => {
+    // Retry / "Stattdessen …": the new answer takes the old one's place instead of
+    // being appended, and the old one is dropped from the persisted history.
+    const replaceMessageId = opts?.replaceMessageId;
+    const replacedMessage = replaceMessageId
+      ? messages.find((m) => m.id === replaceMessageId)
+      : undefined;
     // sessionId sent to n8n is ALWAYS the current conversationId.
     const sessionId = conversationId || crypto.randomUUID();
     // The conversation this send belongs to. Answers must be stored here even if
