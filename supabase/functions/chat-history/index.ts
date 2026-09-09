@@ -251,6 +251,22 @@ Deno.serve(async (req) => {
       return json({ success: true })
     }
 
+    if (action === 'delete_message') {
+      const mid = body.message_id
+      if (!isUuid(mid)) {
+        return json({ error: 'invalid_message_id' }, 400)
+      }
+      // Soft delete of a single row, scoped to the caller's own history.
+      const { error } = await supabase
+        .from('chat_messages')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('user_email', userEmail)
+        .eq('id', mid)
+        .is('deleted_at', null)
+      if (error) throw error
+      return json({ success: true })
+    }
+
     return json({ error: 'unknown_action' }, 400)
   } catch (e) {
     console.error('chat-history error:', e)
