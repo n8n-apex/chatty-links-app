@@ -1041,7 +1041,12 @@ export const ChatContainer = () => {
       toast.error("Der ursprüngliche Text ist nicht mehr verfügbar.");
       return;
     }
-    sendMessage(text, null, undefined, { forceAction: alternative, rerunOf });
+    sendMessage(text, null, undefined, {
+      forceAction: alternative || undefined,
+      // rerun_of identifies the answer being replaced.
+      rerunOf: rerunOf || assistantMessageId,
+      replaceMessageId: assistantMessageId,
+    });
   };
 
   // What the conversation currently holds, per the most recent router report.
