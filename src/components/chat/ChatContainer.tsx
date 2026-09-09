@@ -762,8 +762,6 @@ export const ChatContainer = () => {
     // Flat ceiling: Supabase kills a request at ~150s idle, so anything longer is
     // unreachable and only turns a German backend error into a network error.
     const timeoutMs = 145000;
-    // Progress placeholder id (only used for the async, poll-based path).
-    let progressMsgId: string | null = null;
     try {
       let data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
