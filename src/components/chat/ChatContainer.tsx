@@ -783,15 +783,7 @@ export const ChatContainer = () => {
             turnId, turnStartedAt, action: pollAction, fileName: firstFile?.name ?? null,
           }));
         } catch { /* ignore */ }
-        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, (sec) => {
-
-          setMessages((prev) => prev.map((m) =>
-            m.id === progressMsgId ? { ...m, content: makeText(sec) } : m,
-          ));
-        });
-        // Remove the placeholder before rendering the final assistant message.
-        setMessages((prev) => prev.filter((m) => m.id !== progressMsgId));
-        progressMsgId = null;
+        data = await pollForResult(sessionId, pollAction, turnId, turnStartedAt, () => {});
         // The result is in hand — the turn no longer needs resuming.
         try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       }
