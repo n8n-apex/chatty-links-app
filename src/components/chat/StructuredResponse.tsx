@@ -641,9 +641,16 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
 
     // Revert affordance: the backend restored an earlier draft version.
     const revertTo = typeof data._revert_to === 'number' ? data._revert_to : null;
+    const revertBlocked = data._revert_blocked === true;
     const RevertLine = () => revertTo !== null ? (
       <Section>
         <div className="text-xs text-muted-foreground">Fassung {revertTo} wiederhergestellt.</div>
+      </Section>
+    ) : revertBlocked ? (
+      <Section>
+        <div className="text-xs text-muted-foreground">
+          Dies ist die erste Fassung dieses Entwurfs; es gibt keine vorherige. Mit „Fassung 2“ o. ä. laden Sie eine frühere Stellungnahme dieser Sitzung.
+        </div>
       </Section>
     ) : null;
 
