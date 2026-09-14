@@ -806,6 +806,59 @@ export const ChatContainer = () => {
         throw new Error(`BackendError: ${parsedFinal.error}`);
       }
 
+      // --- then_ask: the documents were filed, the question is still unanswered ---
+      // One interaction for the user: filing note, then the real answer.
+      if (parsedFinal && typeof parsedFinal === "object" && parsedFinal.then_ask === true) {
+        // The ingest path files exactly ONE document per request, so files 2..N
+        // are sent one by one before the question is asked again.
+        const rest = encodedFiles.slice(1);
+        let filed = 1;
+        for (const f of rest) {
+          try {
+            await invokeChatProxy({
+              action: "upload_source",
+              sessionId,
+              turn_id: crypto.randomUUID(),
+              file_name: f.file_name,
+              file_base64: f.file_base64,
+            }, timeoutMs);
+            filed += 1;
+          } catch (e) {
+            console.error("Unterlage konnte nicht abgelegt werden:", e);
+          }
+        }
+
+        const noteData = { ...parsedFinal };
+        if (filed > 1) {
+          noteData.antwort = `${filed} Unterlagen abgelegt. Der Inhalt bleibt in dieser Sitzung verfügbar.`;
+        }
+        const note = buildAssistantMessage(noteData, performance.now() - startTime);
+        if (activeConversationRef.current === sendConversationId) {
+          placeAssistantMessage(note.message);
+        }
+        replaceConsumed = true;
+        persistMessage("ai", note.responseText, note.meta, sendConversationId).then((rowId) => {
+          if (!rowId) return;
+          setMessages((prev) => prev.map((m) =>
+            m.id === note.message.id ? { ...m, historyId: rowId } : m,
+          ));
+        });
+
+        const typedAgain = (content || "").trim();
+        if (!typedAgain) {
+          if (historyEnabled) loadConversations();
+          return;
+        }
+        // Same message, asked again now that the documents are available.
+        data = await invokeChatProxy({
+          action: "auto",
+          sessionId,
+          timestamp: new Date().toISOString(),
+          message: typedAgain,
+          turn_id: crypto.randomUUID(),
+        }, timeoutMs);
+      }
+
       const { message: assistantMessage, responseText, meta } =
         buildAssistantMessage(data, performance.now() - startTime);
 
