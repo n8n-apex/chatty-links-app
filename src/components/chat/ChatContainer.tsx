@@ -722,11 +722,15 @@ export const ChatContainer = () => {
       ...(opts?.rerunOf ? { rerun_of: opts.rerunOf } : {}),
     };
 
+    // Kept outside the branch: a `then_ask` answer needs files 2..N again.
+    let encodedFiles: { file_name: string; file_base64: string }[] = [];
+
     if (hasFiles) {
       try {
         const encoded = await Promise.all(
           files!.map(async (f) => ({ file_name: f.name, file_base64: await toBase64(f) })),
         );
+        encodedFiles = encoded;
         payload = {
           ...payload,
           // The router decides analysis vs. source ingest. Never pre-decide here.
