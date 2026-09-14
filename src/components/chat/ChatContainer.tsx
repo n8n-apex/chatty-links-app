@@ -700,10 +700,13 @@ export const ChatContainer = () => {
       deletePersistedMessage(replacedMessage?.historyId);
     }
 
+    // A two-part turn (filing note + answer) uses the replacement slot once.
+    let replaceConsumed = false;
+
     /** Append, or put the new answer exactly where the replaced one stood. */
     const placeAssistantMessage = (msg: Message) => {
       setMessages((prev) => {
-        if (!replaceMessageId) return [...prev, msg];
+        if (!replaceMessageId || replaceConsumed) return [...prev, msg];
         const idx = prev.findIndex((m) => m.id === replaceMessageId);
         if (idx === -1) return [...prev, msg];
         const next = [...prev];
