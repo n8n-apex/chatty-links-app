@@ -738,7 +738,9 @@ export const ChatContainer = () => {
           additional_question: content || null,
           client_turn_id: turnId,
           turn_id: turnId,
-          attach_intent: attachIntent ?? 'schreiben',
+          // Absent on purpose when the user did not pick a menu item: the router
+          // must then decide from the typed message, not from a made-up default.
+          ...(attachIntent ? { attach_intent: attachIntent } : {}),
         };
         const typed = (content || "").trim();
         if (typed) {
