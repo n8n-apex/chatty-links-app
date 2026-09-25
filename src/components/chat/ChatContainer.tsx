@@ -853,13 +853,41 @@ export const ChatContainer = () => {
           return;
         }
         // Same message, asked again now that the documents are available.
+        const askTurnId = crypto.randomUUID();
+        const askStartedAt = Date.now();
         data = await invokeChatProxy({
           action: "auto",
           sessionId,
           timestamp: new Date().toISOString(),
           message: typedAgain,
-          turn_id: crypto.randomUUID(),
+          turn_id: askTurnId,
         }, timeoutMs);
+
+        // The re-sent question may become a background job (draft, edit, analysis):
+        // poll exactly like the main send path, resumable after reload.
+        const askInitial = Array.isArray(data) ? data[0] : data;
+        if (
+          askInitial && typeof askInitial === "object" &&
+          (askInitial.status === "accepted" || askInitial.poll === true)
+        ) {
+          const askAction: string = askInitial.action ?? "draft_statement";
+          try {
+            localStorage.setItem("pending-turn:" + sendConversationId, JSON.stringify({
+              turnId: askTurnId, turnStartedAt: askStartedAt, action: askAction, fileName: null,
+            }));
+          } catch { /* ignore */ }
+          data = await pollForResult(sessionId, askAction, askTurnId, askStartedAt, () => {});
+          try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
+        }
+        const askFinal = Array.isArray(data) ? data[0] : data;
+        if (
+          askFinal && typeof askFinal === "object" &&
+          typeof askFinal.error === "string" &&
+          !askFinal.antwort && !askFinal.action && !askFinal.entwurf_stellungnahme &&
+          !askFinal.antwortschreiben_entwurf && !askFinal.projekt_und_sachverhalt
+        ) {
+          throw new Error(`BackendError: ${askFinal.error}`);
+        }
       }
 
       const { message: assistantMessage, responseText, meta } =
