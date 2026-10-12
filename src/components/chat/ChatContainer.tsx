@@ -203,6 +203,8 @@ export const ChatContainer = () => {
   // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
   const pollCancelRef = useRef(0);
   useEffect(() => () => { pollCancelRef.current += 1; }, []);
+  // Clear stale progress whenever a poll is cancelled (new chat, switch, delete).
+  const [pollProgress, setPollProgress] = useState<string | null>(null);
   // Always holds the conversation actually on screen. Assigned on the SAME line as
   // every setConversationId(...) — a useEffect would lag by one render.
   const activeConversationRef = useRef<string | null>(null);
@@ -372,7 +374,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
-    pollCancelRef.current += 1; // cancel any pending analyze_pdf poll
+    pollCancelRef.current += 1; setPollProgress(null); // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
@@ -415,7 +417,7 @@ export const ChatContainer = () => {
     toast.success("Gespräch gelöscht");
     try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
-      pollCancelRef.current += 1; // cancel any poll belonging to the deleted thread
+      pollCancelRef.current += 1; setPollProgress(null); // cancel any poll belonging to the deleted thread
       setMessages([]);
       const newId = crypto.randomUUID();
       setConversationId(newId); activeConversationRef.current = newId;
@@ -537,6 +539,14 @@ export const ChatContainer = () => {
     onTick: (elapsedSec: number) => void,
   ): Promise<any> => {
     const token = ++pollCancelRef.current;
+    setPollProgress(null);
+    try {
+      return await pollLoop(token);
+    } finally {
+      // Never show a progress line once the answer (or an error) is in.
+      if (pollCancelRef.current === token) setPollProgress(null);
+    }
+    async function pollLoop(token: number): Promise<any> {
     const startedAt = Date.now();
     const maxMs = 5 * 60 * 1000;
     const intervalMs = 3000;
@@ -553,6 +563,14 @@ export const ChatContainer = () => {
         );
         if (pollCancelRef.current !== token) throw new Error("PollCancelled");
         const p = Array.isArray(res) ? res[0] : res;
+        if (p && p.ready !== true && pollCancelRef.current === token) {
+          const pr = p.progress;
+          if (pr && typeof pr === "object" && typeof pr.text === "string" && pr.text.trim()) {
+            const el = typeof pr.elapsed_seconds === "number" ? pr.elapsed_seconds : null;
+            const line = pr.text.trim() + (el !== null && el >= 30 ? ` · ${Math.round(el)} s` : "");
+            setPollProgress((prev) => (prev === line ? prev : line));
+          }
+        }
         if (p && p.ready === true) {
           // BELT — the server was asked for this turn. If it answers with a
           // different one, it is a stale row and must never be rendered.
@@ -577,6 +595,7 @@ export const ChatContainer = () => {
       }
     }
     throw new Error("PollTimeout");
+    }
   };
 
   // --- Resume a pending analyze_pdf turn when a conversation is opened ---
@@ -1233,7 +1252,7 @@ export const ChatContainer = () => {
                     correctionDisabled={isLoading}
                   />
                 ))}
-                <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
+                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress} />}</AnimatePresence>
                 <div ref={messagesEndRef} />
               </div>
             )}
