@@ -394,7 +394,7 @@ export const ChatContainer = () => {
       toast.error("Gespräch konnte nicht geladen werden.");
       return;
     }
-    pollCancelRef.current += 1;
+    pollCancelRef.current += 1; setPollProgress(null);
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
