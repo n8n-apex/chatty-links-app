@@ -156,7 +156,8 @@ export const structuredToPlainText = (data: StructuredPayload): string => {
     });
     parts.push(`3. Beurteilung der Einzelfakten:\n${lines.join('\n')}`);
   }
-  if (b6Schluss) pushSection('4. Schlussfolgerung', b6Schluss);
+  const hasB6FrameText = !!(b6Sachverhalt || b6Beurteilungsgrundlage || (Array.isArray(b6Items) && b6Items.length > 0));
+  if (b6Schluss) pushSection(hasB6FrameText ? '4. Schlussfolgerung' : 'Hinweise (intern)', b6Schluss);
   if (data.entwurf_stellungnahme) pushSection('Entwurf Stellungnahme', data.entwurf_stellungnahme);
 
   // B4
@@ -619,7 +620,7 @@ export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: Struc
     const SchlussBlock = () => b6Schluss ? (
       <Section>
         <div className="border-l-2 border-border pl-3 py-1">
-          <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Schlussfolgerung</div>
+          <div className="mb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{(b6Sachverhalt || b6Beurteilungsgrundlage || hasB6Items) ? '4. Schlussfolgerung' : 'Hinweise'}</div>
           <Md>{b6Schluss}</Md>
         </div>
       </Section>
