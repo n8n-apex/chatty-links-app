@@ -83,8 +83,6 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
     let count = 0;
     if (Array.isArray(structured.quellen)) count += structured.quellen.length;
     else if (typeof structured.quellen === "string" && structured.quellen.trim()) count += 1;
-    if (Array.isArray(structured.rechtsgrundlage)) count += structured.rechtsgrundlage.length;
-    else if (typeof structured.rechtsgrundlage === "string" && structured.rechtsgrundlage.trim()) count += 1;
     return count;
   })();
 

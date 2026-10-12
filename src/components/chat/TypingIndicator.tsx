@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Bot } from 'lucide-react';
 
-export const TypingIndicator = () => {
+export const TypingIndicator = ({ status }: { status?: string | null } = {}) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -13,6 +13,7 @@ export const TypingIndicator = () => {
         <Bot className="h-4 w-4 text-primary" />
       </div>
 
+      <div className="flex flex-col gap-1">
       <div className="glass rounded-2xl rounded-bl-md px-4 py-3">
         <div className="flex gap-1">
           {[0, 1, 2].map((i) => (
@@ -34,6 +35,8 @@ export const TypingIndicator = () => {
             />
           ))}
         </div>
+      </div>
+      <div aria-live="polite" className="px-2 text-xs text-muted-foreground">{status || ""}</div>
       </div>
     </motion.div>
   );
