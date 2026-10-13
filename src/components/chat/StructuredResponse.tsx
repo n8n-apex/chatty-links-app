@@ -7,6 +7,7 @@ import { QuelleList } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 import { toText, toStringList } from '@/lib/safeText';
 import { UnverifizierteNormen } from './UnverifizierteNormen';
+import type { Arbeitsbericht } from './Arbeitsschritte';
 
 
 interface RechtsgrundlageItem {
@@ -40,6 +41,7 @@ interface ForderungAnalyse {
 }
 
 export interface StructuredPayload {
+  arbeitsschritte?: Arbeitsbericht;
   // B1/B2 - Rechtsfrage
   antwort?: string;
   rechtsgrundlage?: Array<string | RechtsgrundlageItem> | string;
