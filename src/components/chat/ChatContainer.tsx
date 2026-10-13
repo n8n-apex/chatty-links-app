@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getUserEmail } from "@/lib/identity";
 import { signHistoryRequest } from "@/lib/historySig";
 import { parseBackendPayload, schemaInvalidEnvelope, type BackendParseResult } from "@/lib/responseSchema";
+import { readArbeitsschritte, type Arbeitsschritt } from "./Arbeitsschritte";
 
 
 type UploadVerdict = {
@@ -149,8 +150,8 @@ const buildAssistantMessage = (
         // renders without the line is the unsafe case. Store it as a structured
         // payload instead — the renderer is content-addressed, so `antwort` renders
         // exactly the same markdown.
-        responseText = verstanden
-          ? JSON.stringify({ action: "question", antwort: plain, verstanden })
+        responseText = verstanden || parsed.arbeitsschritte
+          ? JSON.stringify({ action: "question", antwort: plain, verstanden, ...(parsed.arbeitsschritte ? { arbeitsschritte: parsed.arbeitsschritte } : {}) })
           : plain;
       }
     }
@@ -204,7 +205,8 @@ export const ChatContainer = () => {
   const pollCancelRef = useRef(0);
   useEffect(() => () => { pollCancelRef.current += 1; }, []);
   // Clear stale progress whenever a poll is cancelled (new chat, switch, delete).
-  const [pollProgress, setPollProgress] = useState<string | null>(null);
+  const [pollProgress, setPollProgress] = useState<{ line: string; steps: Arbeitsschritt[] } | null>(null);
+  const [stepsOpen, setStepsOpen] = useState(false);
   // Always holds the conversation actually on screen. Assigned on the SAME line as
   // every setConversationId(...) — a useEffect would lag by one render.
   const activeConversationRef = useRef<string | null>(null);
@@ -374,7 +376,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
-    pollCancelRef.current += 1; setPollProgress(null); // cancel any pending analyze_pdf poll
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
@@ -394,7 +396,7 @@ export const ChatContainer = () => {
       toast.error("Gespräch konnte nicht geladen werden.");
       return;
     }
-    pollCancelRef.current += 1; setPollProgress(null);
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false);
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
@@ -417,7 +419,7 @@ export const ChatContainer = () => {
     toast.success("Gespräch gelöscht");
     try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
-      pollCancelRef.current += 1; setPollProgress(null); // cancel any poll belonging to the deleted thread
+      pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); // cancel any poll belonging to the deleted thread
       setMessages([]);
       const newId = crypto.randomUUID();
       setConversationId(newId); activeConversationRef.current = newId;
@@ -540,6 +542,7 @@ export const ChatContainer = () => {
   ): Promise<any> => {
     const token = ++pollCancelRef.current;
     setPollProgress(null);
+    setStepsOpen(false);
     try {
       return await pollLoop(token);
     } finally {
@@ -568,7 +571,7 @@ export const ChatContainer = () => {
           if (pr && typeof pr === "object" && typeof pr.text === "string" && pr.text.trim()) {
             const el = typeof pr.elapsed_seconds === "number" ? pr.elapsed_seconds : null;
             const line = pr.text.trim() + (el !== null && el >= 30 ? ` · ${Math.round(el)} s` : "");
-            setPollProgress((prev) => (prev === line ? prev : line));
+            setPollProgress({ line, steps: readArbeitsschritte(pr.steps) });
           }
         }
         if (p && p.ready === true) {
@@ -734,6 +737,8 @@ export const ChatContainer = () => {
       });
     };
     setIsLoading(true);
+    setPollProgress(null);
+    setStepsOpen(false);
 
     let payload: Record<string, unknown> = {
       sessionId,
@@ -1252,7 +1257,7 @@ export const ChatContainer = () => {
                     correctionDisabled={isLoading}
                   />
                 ))}
-                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress} />}</AnimatePresence>
+                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} />}</AnimatePresence>
                 <div ref={messagesEndRef} />
               </div>
             )}

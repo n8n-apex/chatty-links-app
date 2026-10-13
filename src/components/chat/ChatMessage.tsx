@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { toText } from "@/lib/safeText";
 import { VerstandenZeile } from "./VerstandenZeile";
+import { RechercheBlock } from "./Arbeitsschritte";
 
 export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
@@ -164,6 +165,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
       </div>
 
       <div className={cn("flex max-w-[75%] flex-col gap-1", isUser ? "items-end" : "items-start")}>
+        {!isUser && !isErrorPayload && <RechercheBlock report={structured?.arbeitsschritte} />}
         {!isUser && (
           <VerstandenZeile
             verstanden={message.verstanden}
