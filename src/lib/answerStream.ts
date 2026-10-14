@@ -59,7 +59,7 @@ export function cleanStreamText(raw: string): { text: string; draft: string | nu
     draft = close && close.index !== undefined ? after.slice(0, close.index) : after.replace(/(^|\n)[ \t]*D?R?A?F?T?>{0,3}$/, "$1");
     s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
-  const strip = (t: string) => t.replace(/\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
+  const strip = (t: string) => t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
   return { text: strip(s).trim(), draft: draft ? strip(draft).trim() || null : null };
 }
 
