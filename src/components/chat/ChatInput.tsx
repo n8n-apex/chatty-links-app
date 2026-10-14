@@ -554,7 +554,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
 
               disabled={isLoading}
               className={cn(
-                'flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none',
+                'flex-1 resize-none bg-transparent px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus:outline-none',
                 'min-h-[40px] max-h-[150px]'
               )}
             />

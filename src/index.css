@@ -60,6 +60,8 @@
 }
 
 @layer base {
+  html, body, #root { height: 100%; }
+  body { overflow: hidden; }
   * {
     @apply border-border;
   }
@@ -107,6 +109,38 @@
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+}
+
+/* Reading typography (shared by streamed and finished answers) */
+.answer-md {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px; line-height: 26px; font-weight: 400;
+  color: hsl(var(--foreground)); overflow-wrap: anywhere; min-width: 0;
+}
+.answer-md > :first-child { margin-top: 0; }
+.answer-md p { margin: 8px 0 0; }
+.answer-md ul, .answer-md ol { margin: 8px 0 0; padding-left: 24px; }
+.answer-md ul { list-style: disc; }
+.answer-md ol { list-style: decimal; }
+.answer-md li { margin: 0; }
+.answer-md li > p { margin: 0; }
+.answer-md h1, .answer-md h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 24px 0 4px; }
+.answer-md h3, .answer-md h4 { font-size: 17px; line-height: 26px; font-weight: 600; margin: 20px 0 0; }
+.answer-md strong { font-weight: 600; }
+.answer-md a { color: hsl(var(--primary)); text-decoration: underline; }
+.answer-md code { font-size: 14px; background: hsl(var(--muted)); padding: 1px 4px; border-radius: 4px; }
+.answer-md pre { overflow-x: auto; max-width: 100%; }
+.answer-table { overflow-x: auto; max-width: 100%; margin-top: 8px; }
+.answer-table table { border-collapse: collapse; font-size: 14px; }
+.answer-table th, .answer-table td { border: 1px solid hsl(var(--border)); padding: 4px 8px; text-align: left; }
+.answer-tail { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif; font-size: 16px; line-height: 26px; margin-top: 8px; }
+.user-bubble {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px; line-height: 24px; border-radius: 22px; padding: 10px 16px;
+  background: hsl(var(--secondary)); color: hsl(var(--foreground)); overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .answer-md h1, .answer-md h2 { font-size: 18px; line-height: 26px; }
 }
 
 /* Custom scrollbar */
