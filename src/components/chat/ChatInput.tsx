@@ -403,7 +403,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="border-t border-border bg-background/80 backdrop-blur-xl p-4"
+      className="bg-background px-4 pb-4 pt-2"
     >
       <form
         onSubmit={handleSubmit}
@@ -506,7 +506,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
           )}
         </AnimatePresence>
 
-        <div className="glass rounded-2xl p-2 transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
+        <div className="rounded-[28px] border border-border bg-card p-2 shadow-soft transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/50">
           <div className="flex items-end gap-2">
             <input
               ref={fileInputRef}
@@ -554,7 +554,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
 
               disabled={isLoading}
               className={cn(
-                'flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none',
+                'flex-1 resize-none bg-transparent px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus:outline-none',
                 'min-h-[40px] max-h-[150px]'
               )}
             />
@@ -598,12 +598,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </Button>
           </div>
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          Drücke <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Enter</kbd> zum Senden,{' '}
-          <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">Shift + Enter</kbd> für neue Zeile
-        </p>
         <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
           Max. 8 Dateien, zusammen ca. 11 MB. PDF, JPG, PNG, WebP.
+        </p>
+        <p className="mt-1 text-center text-xs text-muted-foreground">
+          LawGPT ist eine KI und kann Fehler machen. Bitte überprüfe die Antworten.
         </p>
 
       </form>

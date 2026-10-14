@@ -67,7 +67,7 @@ export const ConversationSidebar = ({
 
   // Lock body scroll on mobile when open
   useEffect(() => {
-    if (open && window.innerWidth < 768) {
+    if (open && window.innerWidth < 1024) {
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = '';
@@ -99,7 +99,7 @@ export const ConversationSidebar = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm lg:hidden"
           />
         )}
       </AnimatePresence>
@@ -111,14 +111,14 @@ export const ConversationSidebar = ({
             animate={{ x: 0 }}
             exit={{ x: -280 }}
             transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
-            className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col border-r border-border bg-card/95 backdrop-blur-xl md:relative md:z-auto"
+            className="fixed left-0 top-0 z-50 flex h-screen w-[260px] flex-col border-r border-border bg-card/95 backdrop-blur-xl lg:relative lg:z-auto"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold text-foreground">Baurecht GPT</h2>
               <button
                 onClick={onClose}
-                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors md:hidden"
+                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors lg:hidden"
                 aria-label="Schließen"
               >
                 <X className="h-4 w-4" />

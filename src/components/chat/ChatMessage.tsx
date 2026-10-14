@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import ReactMarkdown from "react-markdown";
 import { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
-import { User, Bot, Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from "lucide-react";
+import { Copy, Check, Download, ThumbsUp, Pencil, X, StickyNote } from "lucide-react";
 import { toast } from "sonner";
-import { StructuredResponse, tryParseStructured, structuredToPlainText } from "./StructuredResponse";
+import { StructuredResponse, tryParseStructured, structuredToPlainText, Md } from "./StructuredResponse";
 import { ConfidenceIndicator } from "./ConfidenceIndicator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -153,18 +152,9 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={cn("group flex gap-3 px-4 py-3", isUser ? "flex-row-reverse" : "flex-row")}
+      className={cn("group flex py-3", isUser ? "justify-end" : "justify-start")}
     >
-      <div
-        className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-          isUser ? "gradient-primary shadow-glow" : "bg-secondary border border-border",
-        )}
-      >
-        {isUser ? <User className="h-4 w-4 text-primary-foreground" /> : <Bot className="h-4 w-4 text-primary" />}
-      </div>
-
-      <div className={cn("flex max-w-[75%] flex-col gap-1", isUser ? "items-end" : "items-start")}>
+      <div className={cn("flex min-w-0 flex-col gap-1", isUser ? "max-w-[85%] sm:max-w-[70%] items-end" : "w-full items-start")}>
         {!isUser && !isErrorPayload && <RechercheBlock report={structured?.arbeitsschritte} />}
         {!isUser && (
           <VerstandenZeile
@@ -178,13 +168,8 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
             {message.routingNotice}
           </div>
         )}
-        <div className="relative">
-          <div
-            className={cn(
-              "rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-              isUser ? "gradient-primary text-primary-foreground rounded-br-md" : "glass text-foreground rounded-bl-md",
-            )}
-          >
+        <div className={cn("relative min-w-0", !isUser && "w-full")}>
+          <div className={cn(isUser ? "user-bubble whitespace-pre-wrap" : "w-full min-w-0 text-foreground")}>
             {isUser ? (
               message.content
             ) : (
@@ -229,29 +214,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
                       );
                     }
                     return (
-                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ol:list-decimal prose-ul:list-disc">
-                        <ReactMarkdown
-                          components={{
-                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                            ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-                            ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-                            li: ({ children }) => <li className="mb-1">{children}</li>,
-                            h1: ({ children }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
-                            h2: ({ children }) => <h2 className="mb-2 text-sm font-bold">{children}</h2>,
-                            h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
-                            a: ({ href, children }) => (
-                              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                                {children}
-                              </a>
-                            ),
-                            code: ({ children }) => (
-                              <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
-                            ),
-                          }}
-                        >
-                          {toText(message.content)}
-                        </ReactMarkdown>
-                      </div>
+<Md>{toText(message.content)}</Md>
                     );
                     })()}
                   </ErrorBoundary>

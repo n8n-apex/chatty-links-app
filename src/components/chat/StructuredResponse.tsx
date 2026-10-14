@@ -110,13 +110,11 @@ export const Md = ({ children, className }: { children: unknown; className?: str
   const text = toText(children);
   if (!text.trim()) return null;
   return (
-    <div className={cn('prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-p:leading-relaxed prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-li:my-0.5 prose-ol:list-decimal prose-ul:list-disc', className)}>
+    <div className={cn('answer-md', className)}>
       <ReactMarkdown
         components={{
-          p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-line">{children}</p>,
-          ul: ({ children }) => <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>,
-          ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>,
-          li: ({ children }) => <li className="mb-1">{children}</li>,
+          p: ({ children }) => <p className="whitespace-pre-line">{children}</p>,
+          table: ({ children }) => <div className="answer-table"><table>{children}</table></div>,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
           ),
