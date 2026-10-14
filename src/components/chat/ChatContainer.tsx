@@ -16,6 +16,7 @@ import { getUserEmail } from "@/lib/identity";
 import { signHistoryRequest } from "@/lib/historySig";
 import { parseBackendPayload, schemaInvalidEnvelope, type BackendParseResult } from "@/lib/responseSchema";
 import { readArbeitsschritte, type Arbeitsschritt } from "./Arbeitsschritte";
+import { isStreamEnabled, buildForwardBody, streamAnswer, cleanStreamText } from "@/lib/answerStream";
 
 
 type UploadVerdict = {
@@ -207,6 +208,10 @@ export const ChatContainer = () => {
   // Clear stale progress whenever a poll is cancelled (new chat, switch, delete).
   const [pollProgress, setPollProgress] = useState<{ line: string; steps: Arbeitsschritt[] } | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
+  // Answer text while it is being written (stream=1 only). Never stored.
+  const [streamView, setStreamView] = useState<{ text: string; draft: string | null } | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const streamEnabledRef = useRef(isStreamEnabled());
   // Always holds the conversation actually on screen. Assigned on the SAME line as
   // every setConversationId(...) — a useEffect would lag by one render.
   const activeConversationRef = useRef<string | null>(null);
@@ -376,7 +381,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
-    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); // cancel any pending analyze_pdf poll
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null); // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
@@ -396,7 +401,7 @@ export const ChatContainer = () => {
       toast.error("Gespräch konnte nicht geladen werden.");
       return;
     }
-    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false);
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null);
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
@@ -419,7 +424,7 @@ export const ChatContainer = () => {
     toast.success("Gespräch gelöscht");
     try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
-      pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); // cancel any poll belonging to the deleted thread
+      pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null); // cancel any poll belonging to the deleted thread
       setMessages([]);
       const newId = crypto.randomUUID();
       setConversationId(newId); activeConversationRef.current = newId;
@@ -598,6 +603,67 @@ export const ChatContainer = () => {
       }
     }
     throw new Error("PollTimeout");
+    }
+  };
+
+  /**
+   * Streamed chat turn. Returns the final payload, or undefined when the stream
+   * never delivered a turn_id (caller then sends the old way via chat-proxy).
+   * The poll runs in parallel for progress and as fallback; whichever yields the
+   * checked result first wins, the other is stopped.
+   */
+  const runStreamTurn = async (
+    payload: Record<string, unknown>, sessionId: string, turnId: string,
+    turnStartedAt: number, cid: string | null, fileName: string | null,
+  ): Promise<any> => {
+    const ctrl = new AbortController();
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = ctrl;
+    let resolveAccepted!: (a: { action?: string } | null) => void;
+    const accepted = new Promise<{ action?: string } | null>((r) => { resolveAccepted = r; });
+    let rawText = "";
+    const streamP = streamAnswer(buildForwardBody(payload), {
+      onAccepted: (info) => resolveAccepted({ action: info.action }),
+      onText: (raw) => {
+        rawText = raw;
+        if (!ctrl.signal.aborted) setStreamView(raw ? cleanStreamText(raw) : null);
+      },
+    }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
+    try {
+      const acc = await accepted;
+      if (!acc) return undefined; // failed before the turn existed
+      const action = acc.action ?? "auto";
+      try {
+        localStorage.setItem("pending-turn:" + cid, JSON.stringify({ turnId, turnStartedAt, action, fileName }));
+      } catch { /* ignore */ }
+      const pollP = pollForResult(sessionId, action, turnId, turnStartedAt, () => {});
+      const myToken = pollCancelRef.current;
+      pollP.catch(() => {});
+      const first = await Promise.race([
+        pollP.then((d) => ({ kind: "poll" as const, d })),
+        streamP.then((o) => ({ kind: "stream" as const, o })),
+      ]);
+      if (first.kind === "poll") return first.d;
+      if (first.o === "done") {
+        try {
+          const res = await invokeChatProxy({ action: "get_result", sessionId, target_action: action, turn_id: turnId, client_turn_id: turnId }, 30000);
+          const p = Array.isArray(res) ? res[0] : res;
+          const fresh = !(typeof p?.age_seconds === "number" && p.age_seconds * 1000 > Date.now() - turnStartedAt + 10000);
+          if (p && p.ready === true && (!p.turn_id || p.turn_id === turnId) && fresh && pollCancelRef.current === myToken) {
+            pollCancelRef.current += 1; // stop the parallel poll
+            setPollProgress(null);
+            return p.payload ?? p;
+          }
+        } catch (e) { console.warn("get_result after stream failed, polling on:", e); }
+      }
+      // Stream ended without a usable result: today's poll carries on.
+      setStreamView(null);
+      return await pollP;
+    } finally {
+      ctrl.abort();
+      if (streamAbortRef.current === ctrl) streamAbortRef.current = null;
+      setStreamView(null);
+      void rawText;
     }
   };
 
@@ -788,7 +854,7 @@ export const ChatContainer = () => {
     } else {
       // ROUTING: the backend router decides. `action` must be sent EXPLICITLY —
       // chat-proxy defaults a missing action to "question", which bypasses R0.
-      payload = { ...payload, message: content, action: "auto" };
+      payload = { ...payload, message: content, action: "auto", turn_id: turnId, client_turn_id: turnId };
     }
 
     const startTime = performance.now();
@@ -796,7 +862,12 @@ export const ChatContainer = () => {
     // unreachable and only turns a German backend error into a network error.
     const timeoutMs = 145000;
     try {
-      let data = await invokeChatProxy(payload, timeoutMs);
+      let data: any = undefined;
+      if (streamEnabledRef.current) {
+        data = await runStreamTurn(payload, sessionId, turnId, turnStartedAt, sendConversationId, firstFile?.name ?? null);
+        if (data !== undefined) { try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ } }
+      }
+      if (data === undefined) data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
 
       // --- ASYNC REQUEST-REPLY ---
@@ -1257,7 +1328,7 @@ export const ChatContainer = () => {
                     correctionDisabled={isLoading}
                   />
                 ))}
-                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} />}</AnimatePresence>
+                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} stream={streamView} />}</AnimatePresence>
                 <div ref={messagesEndRef} />
               </div>
             )}

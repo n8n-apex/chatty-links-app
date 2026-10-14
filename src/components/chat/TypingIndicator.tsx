@@ -3,12 +3,14 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Arbeitsschritte, type Arbeitsschritt } from './Arbeitsschritte';
+import { StreamingAnswer } from './StreamingAnswer';
 
-export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange }: {
+export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange, stream }: {
   status?: string | null;
   steps?: Arbeitsschritt[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  stream?: { text: string; draft: string | null } | null;
 } = {}) => {
   const id = useId();
   const reducedMotion = useReducedMotion();
@@ -37,9 +39,10 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
           </Button>
           {open && <div id={id}><Arbeitsschritte steps={steps} /></div>}
         </> : <>
-          <div className="glass rounded-2xl rounded-bl-md px-4 py-3">{dots}</div>
+          {!stream?.text && !stream?.draft && <div className="glass rounded-2xl rounded-bl-md px-4 py-3">{dots}</div>}
           <div aria-live="polite" className="px-2 text-xs text-muted-foreground">{status || ""}</div>
         </>}
+        {(stream?.text || stream?.draft) && <StreamingAnswer text={stream.text} draft={stream.draft} />}
       </div>
     </motion.div>
   );
