@@ -52,10 +52,12 @@ export function cleanStreamText(raw: string): { text: string; draft: string | nu
   // A marker still arriving at the very end: hide the partial "<<<…" line.
   s = s.replace(/(^|\n)\s*<{1,3}[A-Z]*\s*$/, "$1");
   let draft: string | null = null;
-  const d = s.match(/^\s*<<<DRAFT[^\n]*\n?([\s\S]*?)(?:^\s*DRAFT>>>[^\n]*$|$(?![\s\S]))/m);
-  if (d && d.index !== undefined) {
-    draft = d[1].replace(/\n?\s*D?R?A?F?T?>{0,3}\s*$/, (x) => (/^\s*$/.test(x) ? x : "")).trim();
-    s = s.slice(0, d.index) + s.slice(d.index + d[0].length);
+  const open = s.match(/^[ \t]*<<<DRAFT[^\n]*(\n|$)/m);
+  if (open && open.index !== undefined) {
+    const after = s.slice(open.index + open[0].length);
+    const close = after.match(/^[ \t]*DRAFT>>>[^\n]*$/m);
+    draft = close && close.index !== undefined ? after.slice(0, close.index) : after.replace(/(^|\n)[ \t]*D?R?A?F?T?>{0,3}$/, "$1");
+    s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
   const strip = (t: string) => t.replace(/\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
   return { text: strip(s).trim(), draft: draft ? strip(draft).trim() || null : null };
