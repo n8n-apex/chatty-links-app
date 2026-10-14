@@ -6,12 +6,12 @@ export const StreamingAnswer = ({ text, draft }: { text: string; draft: string |
   const t = splitComplete(text);
   const d = draft ? splitComplete(draft) : null;
   return (
-    <div className="glass min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed text-foreground">
+    <div className="w-full min-w-0 py-1 text-foreground">
       <div className="mb-2 text-[11px] text-muted-foreground">Antwort wird geschrieben und anschließend geprüft</div>
       {text && (
-        <div className="text-sm text-foreground break-words">
+        <div className="text-foreground break-words">
           <Md>{t.done}</Md>
-          {t.tail && <p className="whitespace-pre-line">{t.tail}</p>}
+          {t.tail && <p className="answer-tail whitespace-pre-line">{t.tail}</p>}
         </div>
       )}
       {d && (

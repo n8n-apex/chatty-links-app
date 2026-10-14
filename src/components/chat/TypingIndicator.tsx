@@ -30,7 +30,7 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
         <Bot className="h-4 w-4 text-primary" />
       </div>
 
-      <div className="flex min-w-0 max-w-[75%] flex-col gap-1">
+      <div className="flex w-full min-w-0 flex-col gap-1">
         {steps.length > 0 ? <>
           <Button variant="ghost" className="glass h-auto justify-start whitespace-normal px-4 py-3 text-left text-xs text-muted-foreground" aria-expanded={open} aria-controls={id} aria-label={status || 'Recherche und Prüfung'} onClick={() => onOpenChange?.(!open)}>
             {dots}

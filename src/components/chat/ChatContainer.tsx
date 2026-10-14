@@ -199,7 +199,7 @@ export const ChatContainer = () => {
   const historyEnabled = true;
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.innerWidth >= 768;
+    return window.innerWidth >= 1024;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
@@ -389,7 +389,7 @@ export const ChatContainer = () => {
     setIsLoading(false); // never carry a spinner into another conversation
     
 
-    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
+    if (typeof window !== "undefined" && window.innerWidth < 1024) setSidebarOpen(false);
   };
 
   const handleSelectConversation = async (cid: string) => {
@@ -406,7 +406,7 @@ export const ChatContainer = () => {
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
     localStorage.setItem("chat-session-id", cid);
-    if (typeof window !== "undefined" && window.innerWidth < 768) setSidebarOpen(false);
+    if (typeof window !== "undefined" && window.innerWidth < 1024) setSidebarOpen(false);
   };
 
 
@@ -1260,7 +1260,7 @@ export const ChatContainer = () => {
   })();
 
   return (
-    <div className="flex h-screen w-full bg-background">
+    <div className="flex h-screen h-[100dvh] w-full overflow-hidden bg-background">
       {historyEnabled && (
         <ConversationSidebar
           conversations={conversations}
@@ -1274,7 +1274,7 @@ export const ChatContainer = () => {
         />
       )}
 
-      <div className="relative flex h-screen flex-1 flex-col">
+      <div className="relative flex h-screen h-[100dvh] min-w-0 flex-1 flex-col">
         {/* Ambient glow effect */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
@@ -1311,8 +1311,8 @@ export const ChatContainer = () => {
           </div>
         </div>
 
-        <main className="relative flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl">
+        <main className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="mx-auto w-full max-w-3xl px-4">
             {messages.length === 0 ? (
               <EmptyState />
             ) : (
