@@ -60,7 +60,23 @@ export function cleanStreamText(raw: string): { text: string; draft: string | nu
     s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
   const strip = (t: string) => t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
-  return { text: strip(s).trim(), draft: draft ? strip(draft).trim() || null : null };
+  return { text: dashes(strip(s)).trim(), draft: draft ? dashes(strip(draft)).trim() || null : null };
+}
+
+/** Punctuation dashes → ", "; line-start dash → "- ". Number ranges stay. */
+export function dashes(t: string): string {
+  return t
+    .replace(/^([ \t]*)[–—][ \t]+/gm, "$1- ")
+    .replace(/[ \t]+[–—][ \t]+/g, ", ")
+    .replace(/,\s*,/g, ",");
+}
+
+/** Split into the complete lines (Markdown) and the unfinished last line (plain). */
+export function splitComplete(t: string, finished = false): { done: string; tail: string } {
+  if (finished) return { done: t, tail: "" };
+  const i = t.lastIndexOf("\n");
+  if (i === -1) return { done: "", tail: t.replace(/^#{1,6}\s*|^\s*[-*]\s+|\*\*|__/g, "") };
+  return { done: t.slice(0, i), tail: t.slice(i + 1).replace(/^#{1,6}\s*|^\s*[-*]\s+|\*\*|__/g, "") };
 }
 
 export interface StreamHandlers {

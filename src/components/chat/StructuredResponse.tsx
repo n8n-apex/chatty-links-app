@@ -106,7 +106,7 @@ export interface StructuredPayload {
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
 // `children` is typed unknown on purpose: the backend is not schema-stable and
 // react-markdown throws on non-string input, which would take down the tree.
-const Md = ({ children, className }: { children: unknown; className?: string }) => {
+export const Md = ({ children, className }: { children: unknown; className?: string }) => {
   const text = toText(children);
   if (!text.trim()) return null;
   return (
@@ -374,7 +374,7 @@ const DraftEditor = ({ value, onChange, onSave, onCancel, saving, error }: Draft
   </div>
 );
 
-const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEditorProps }) => {
+export const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEditorProps }) => {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
