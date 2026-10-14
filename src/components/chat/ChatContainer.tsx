@@ -865,6 +865,7 @@ export const ChatContainer = () => {
       let data: any = undefined;
       if (streamEnabledRef.current) {
         data = await runStreamTurn(payload, sessionId, turnId, turnStartedAt, sendConversationId, firstFile?.name ?? null);
+        if (data !== undefined) { try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ } }
       }
       if (data === undefined) data = await invokeChatProxy(payload, timeoutMs);
       console.log("n8n Antwort:", data);
