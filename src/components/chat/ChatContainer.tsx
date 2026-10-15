@@ -622,11 +622,17 @@ export const ChatContainer = () => {
     let resolveAccepted!: (a: { action?: string } | null) => void;
     const accepted = new Promise<{ action?: string } | null>((r) => { resolveAccepted = r; });
     let rawText = "";
+    let advisorEnded = false;
     const streamP = streamAnswer(buildForwardBody(payload), {
       onAccepted: (info) => resolveAccepted({ action: info.action }),
       onText: (raw) => {
         rawText = raw;
+        advisorEnded = false;
         if (!ctrl.signal.aborted) setStreamView(raw ? cleanStreamText(raw) : null);
+      },
+      onAdvisorEnd: () => {
+        advisorEnded = true;
+        if (!ctrl.signal.aborted && rawText) setStreamView(cleanStreamText(rawText, true));
       },
     }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
     try {
