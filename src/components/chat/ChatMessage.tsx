@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { toText } from "@/lib/safeText";
 import { VerstandenZeile } from "./VerstandenZeile";
 import { RechercheBlock } from "./Arbeitsschritte";
+import { AnswerKeyContext } from "./QuelleList";
 
 export type FeedbackStatus = "correct" | "correction" | "inaccurate" | "note";
 
@@ -194,6 +195,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
                   </div>
                 )}
                 {!/<\s*img\s/i.test(message.content) && (
+                  <AnswerKeyContext.Provider value={toText((structured as any)?.turn_id).trim() || message.id}>
                   <ErrorBoundary variant="inline" resetKey={message.id}>
                     {(() => {
                     if (structured) {
@@ -218,6 +220,7 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
                     );
                     })()}
                   </ErrorBoundary>
+                  </AnswerKeyContext.Provider>
                 )}
 
               </>

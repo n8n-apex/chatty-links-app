@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink, Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,6 +43,8 @@ interface QuelleListProps {
 
 /** Open/closed per answer, kept only while the page is open. */
 const openState = new Map<string, boolean>();
+/** Identity of the answer (turn_id, else message id) that owns this list. */
+export const AnswerKeyContext = createContext<string>('');
 export const CITE_EVENT = 'lawgpt-cite';
 
 
@@ -68,6 +70,7 @@ interface ModalState {
 
 export const QuelleList = ({ quellen, className, variant = 'stacked', unverifiziert, decisions }: QuelleListProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
+  const answerKey = useContext(AnswerKeyContext);
   const keyRef = useRef<string>('');
   const [open, setOpenState] = useState(false);
   const [flash, setFlash] = useState<number | null>(null);
@@ -100,7 +103,8 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
     items.push({ label, url, chunk_id, source: q });
   }
 
-  keyRef.current = items.map((i) => i.label).join('|');
+  // One answer can hold more than one list (e.g. analysis + answer); the index keeps them apart.
+  keyRef.current = answerKey ? `${answerKey}#${variant}` : `anon:${items.map((i) => i.label).join('|')}`;
   useEffect(() => {
     if (openState.get(keyRef.current)) setOpenState(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps

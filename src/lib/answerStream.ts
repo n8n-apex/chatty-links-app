@@ -123,10 +123,10 @@ export async function streamAnswer(
       if (node === "Advisor") {
         if (ev.type === "begin") { text = ""; handlers.onText(""); }
         else if (ev.type === "item" && typeof ev.content === "string") { text += ev.content; handlers.onText(text); }
-        else if (ev.type === "end") handlers.onAdvisorEnd?.();
+        // n8n ends the Advisor after every research round; only a round that wrote text is the answer.
+        else if (ev.type === "end" && text) handlers.onAdvisorEnd?.();
         return false;
       }
-      if (text && node && ev.type === "begin") handlers.onAdvisorEnd?.();
       if (node === "Respond Accepted" && ev.type === "item") {
         try {
           const c = typeof ev.content === "string" ? JSON.parse(ev.content) : ev.content;
