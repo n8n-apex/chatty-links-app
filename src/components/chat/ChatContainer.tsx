@@ -209,7 +209,7 @@ export const ChatContainer = () => {
   const [pollProgress, setPollProgress] = useState<{ line: string; steps: Arbeitsschritt[] } | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   // Answer text while it is being written (stream=1 only). Never stored.
-  const [streamView, setStreamView] = useState<{ text: string; draft: string | null } | null>(null);
+  const [streamView, setStreamView] = useState<{ text: string; draft: string | null; checking?: boolean } | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamEnabledRef = useRef(isStreamEnabled());
   // Always holds the conversation actually on screen. Assigned on the SAME line as

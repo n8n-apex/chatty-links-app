@@ -10,7 +10,7 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
   steps?: Arbeitsschritt[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  stream?: { text: string; draft: string | null } | null;
+  stream?: { text: string; draft: string | null; checking?: boolean } | null;
 } = {}) => {
   const id = useId();
   const reducedMotion = useReducedMotion();
@@ -38,7 +38,7 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
           {!stream?.text && !stream?.draft && <div className="glass rounded-2xl rounded-bl-md px-4 py-3">{dots}</div>}
           <div aria-live="polite" className="px-2 text-xs text-muted-foreground">{status || ""}</div>
         </>}
-        {(stream?.text || stream?.draft) && <div className="relative w-full min-w-0"><StreamingAnswer text={stream.text} draft={stream.draft} /></div>}
+        {(stream?.text || stream?.draft) && <div className="relative w-full min-w-0"><StreamingAnswer text={stream.text} draft={stream.draft} checking={stream.checking} /></div>}
       </div>
     </motion.div>
   );
