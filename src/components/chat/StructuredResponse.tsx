@@ -152,7 +152,7 @@ export const structuredToPlainText = (data: StructuredPayload): string => {
       const title = (k as { fakt?: string; punkt?: string }).fakt || (k as { punkt?: string }).punkt || '';
       const desc = (k as { beurteilung?: string; argument?: string }).beurteilung || (k as { argument?: string }).argument || '';
       const rg = (k as { rechtsgrundlage?: string }).rechtsgrundlage ? ` (${(k as { rechtsgrundlage?: string }).rechtsgrundlage})` : '';
-      return `${i + 1}. ${title}${desc ? ` — ${desc}` : ''}${rg}`;
+      return `${i + 1}. ${title}${desc ? `, ${desc}` : ''}${rg}`;
     });
     parts.push(`3. Beurteilung der Einzelfakten:\n${lines.join('\n')}`);
   }
@@ -275,7 +275,7 @@ const Section = ({ children }: { children: React.ReactNode }) => (
 
 const ParagraphBadge = ({ paragraph, quelle }: { paragraph?: string; quelle?: string }) => {
   const [copied, setCopied] = useState(false);
-  const fullRef = [paragraph, quelle].filter(Boolean).join(' — ');
+  const fullRef = [paragraph, quelle].filter(Boolean).join(', ');
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -402,17 +402,17 @@ export const DraftLetter = ({ text, editor }: { text: string; editor?: DraftEdit
 
 const ERROR_MESSAGES: Record<string, string> = {
   analysis_too_complex:
-    'Die Analyse wurde abgebrochen, weil sie mehr Einzelprüfungen erfordert hat als vorgesehen. Das Dokument selbst wurde einwandfrei gelesen — ein erneutes Hochladen ist nicht nötig.',
+    'Die Analyse wurde abgebrochen, weil sie mehr Einzelprüfungen erfordert hat als vorgesehen. Das Dokument selbst wurde einwandfrei gelesen, ein erneutes Hochladen ist nicht nötig.',
   analysis_failed:
     'Die Analyse konnte nicht abgeschlossen werden. Das Dokument liess sich nicht laden oder nicht auslesen. Bitte laden Sie es erneut hoch.',
   feedback_not_saved:
-    'Feedback konnte nicht gespeichert werden — zu dieser Antwort sind keine Quellen hinterlegt.',
+    'Feedback konnte nicht gespeichert werden, zu dieser Antwort sind keine Quellen hinterlegt.',
   JSON_VERTRAG:
     'Die Antwort des Systems war unvollständig oder nicht auswertbar. Bitte senden Sie die Anfrage erneut.',
 };
 
 const DEFAULT_ERROR_MESSAGE =
-  'Die Anfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut — falls das Problem bestehen bleibt, laden Sie die Seite neu.';
+  'Die Anfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut, falls das Problem bestehen bleibt, laden Sie die Seite neu.';
 
 const EMPTY_RESPONSE_MESSAGE =
   'Die Antwort kam ohne Inhalt zurück. Bitte senden Sie die Anfrage erneut.';

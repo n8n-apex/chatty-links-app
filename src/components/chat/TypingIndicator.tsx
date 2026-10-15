@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Bot, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Arbeitsschritte, type Arbeitsschritt } from './Arbeitsschritte';
 import { StreamingAnswer } from './StreamingAnswer';
@@ -24,13 +24,9 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="flex gap-3 px-4 py-3"
+      className="group flex justify-start py-3"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary border border-border">
-        <Bot className="h-4 w-4 text-primary" />
-      </div>
-
-      <div className="flex w-full min-w-0 flex-col gap-1">
+      <div className="flex w-full min-w-0 flex-col items-start gap-1">
         {steps.length > 0 ? <>
           <Button variant="ghost" className="glass h-auto justify-start whitespace-normal px-4 py-3 text-left text-xs text-muted-foreground" aria-expanded={open} aria-controls={id} aria-label={status || 'Recherche und Prüfung'} onClick={() => onOpenChange?.(!open)}>
             {dots}
@@ -42,7 +38,7 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
           {!stream?.text && !stream?.draft && <div className="glass rounded-2xl rounded-bl-md px-4 py-3">{dots}</div>}
           <div aria-live="polite" className="px-2 text-xs text-muted-foreground">{status || ""}</div>
         </>}
-        {(stream?.text || stream?.draft) && <StreamingAnswer text={stream.text} draft={stream.draft} />}
+        {(stream?.text || stream?.draft) && <div className="relative w-full min-w-0"><StreamingAnswer text={stream.text} draft={stream.draft} /></div>}
       </div>
     </motion.div>
   );

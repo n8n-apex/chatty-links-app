@@ -6,7 +6,7 @@ export const StreamingAnswer = ({ text, draft }: { text: string; draft: string |
   const t = splitComplete(text);
   const d = draft ? splitComplete(draft) : null;
   return (
-    <div className="w-full min-w-0 py-1 text-foreground">
+    <div className="w-full min-w-0 text-foreground">
       <div className="mb-2 text-[11px] text-muted-foreground">Antwort wird geschrieben und anschließend geprüft</div>
       {text && (
         <div className="text-foreground break-words">

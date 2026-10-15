@@ -140,7 +140,7 @@ export const ConversationSidebar = ({
             <div className="mt-4 flex-1 overflow-y-auto px-2 pb-4">
               {identityMissing ? (
                 <p className="mx-1 rounded-md border border-border bg-muted/40 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
-                  Kein Benutzerkonto erkannt — der Verlauf kann nicht geladen werden.
+                  Kein Benutzerkonto erkannt. Der Verlauf kann nicht geladen werden.
                 </p>
               ) : conversations.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-muted-foreground">

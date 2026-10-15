@@ -769,7 +769,7 @@ export const ChatContainer = () => {
 
     const displayContent = hasFiles
       ? (content
-          ? `📎 [${files!.map((f) => f.name).join(", ")}] — ${content}`
+          ? `📎 [${files?.map((f) => f.name).join(", ")}]. ${content}`
           : `📎 [${files!.map((f) => f.name).join(", ")}]`)
       : content;
 
@@ -1020,11 +1020,11 @@ export const ChatContainer = () => {
       const msg = backendMessage
         ? backendMessage
         : isPollTimeout
-        ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen — das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
+        ? "Die Analyse dauert länger als 5 Minuten. Bitte erneut versuchen, das Ergebnis wird beim nächsten Versuch normalerweise sofort geladen."
         : isAbort
         ? "Zeitüberschreitung. Die Analyse dauert länger als erwartet. Bitte erneut versuchen."
         : isBackendError
-        ? "Die Anfrage konnte nicht verarbeitet werden — der Server hat einen Fehler gemeldet. Bitte versuchen Sie es erneut. Wenn der Fehler erneut auftritt, melden Sie ihn bitte."
+        ? "Die Anfrage konnte nicht verarbeitet werden. Der Server hat einen Fehler gemeldet. Bitte versuchen Sie es erneut. Wenn der Fehler erneut auftritt, melden Sie ihn bitte."
         : "Der Server ist momentan nicht erreichbar. Bitte senden Sie Ihre Nachricht erneut.";
 
       const errorMessage: Message = {
@@ -1144,10 +1144,10 @@ export const ChatContainer = () => {
         body: { action: "save_statement", sessionId, statement_text: newText },
       });
       // chat-proxy now answers non-2xx when the backend did not confirm the write.
-      if (error) return { error: "Speichern fehlgeschlagen — der Server hat den Vorgang nicht bestätigt." };
+      if (error) return { error: "Speichern fehlgeschlagen. Der Server hat den Vorgang nicht bestätigt." };
       const parsed = Array.isArray(data) ? data[0] : data;
       const saved = parsed && (parsed.saved === true || parsed.status === "success");
-      if (!saved) return { error: parsed?.error || "Speichern fehlgeschlagen — keine Bestätigung vom Server." };
+      if (!saved) return { error: parsed?.error || "Speichern fehlgeschlagen. Keine Bestätigung vom Server." };
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m;
         try {
@@ -1220,8 +1220,8 @@ export const ChatContainer = () => {
     for (let i = idx - 1; i >= 0; i--) {
       if (messages[i].role === "user") { original = messages[i].content; break; }
     }
-    // Strip the attachment prefix the bubble adds: "📎 [a.pdf, b.pdf] — text".
-    const text = original.replace(/^\s*📎\s*\[[^\]]*\]\s*(—\s*)?/, "").trim();
+    // Strip both current punctuation and the legacy attachment separator.
+    const text = original.replace(/^\s*📎\s*\[[^\]]*\]\s*([—.]\s*)?/, "").trim();
     if (!text) {
       toast.error("Der ursprüngliche Text ist nicht mehr verfügbar.");
       return;

@@ -24,4 +24,4 @@ export const copyPlainText = async (
   }
 };
 
-export const UNVERIFIED_SUFFIX = ' — nicht in den abgerufenen Quellen belegt';
+export const UNVERIFIED_SUFFIX = ', nicht in den abgerufenen Quellen belegt';

@@ -27,6 +27,7 @@ type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done'
 
 const MAX_FILES = 8;
 const MAX_TOTAL_BYTES = 15 * 1024 * 1024; // 15 MB encoded ceiling
+const FILE_LIMITS = `Max. ${MAX_FILES} Dateien, zusammen ca. 11 MB (15 MB nach Kodierung). Max. 20 MB je Originaldatei. PDF oder Bilder.`;
 
 /** Downscale an image blob to ~2000px longest side, JPEG q~0.8. Returns original if not an image. */
 const downscaleImage = async (file: File): Promise<File> => {
@@ -138,7 +139,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
         continue;
       }
       if (f.size > 20 * 1024 * 1024) {
-        toast.error(`${f.name}: Datei ist zu groß. Maximal 20 MB.`);
+        toast.error(`${f.name}: Datei ist zu groß. ${FILE_LIMITS}`);
         continue;
       }
       list.push(f);
@@ -162,11 +163,11 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
       const total = combined.reduce((s, f) => s + f.size, 0);
       // Base64 inflates ~33% → ~1.34x
       if (total * 1.34 > MAX_TOTAL_BYTES) {
-        toast.error('Anhang zu groß (max. ~15 MB nach Kodierung). Bitte weniger/kleinere Dateien.');
+        toast.error(`Anhang zu groß. ${FILE_LIMITS} Bitte weniger oder kleinere Dateien auswählen.`);
         return prev;
       }
       if (combined.length > MAX_FILES) {
-        toast.error(`Maximal ${MAX_FILES} Dateien pro Analyse.`);
+        toast.error(`Zu viele Dateien. ${FILE_LIMITS}`);
         return combined.slice(0, MAX_FILES);
       }
       return combined;
@@ -525,7 +526,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                   disabled={isLoading}
                   className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
                   aria-label="Datei anhängen"
-                  title="PDF oder Bilder anhängen (mehrere möglich)"
+                  title={FILE_LIMITS}
                 >
                   {isProcessingFiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                 </Button>
@@ -598,9 +599,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
             </Button>
           </div>
         </div>
-        <p className="mt-1 text-center text-[11px] text-muted-foreground/80">
-          Max. 8 Dateien, zusammen ca. 11 MB. PDF, JPG, PNG, WebP.
-        </p>
         <p className="mt-1 text-center text-xs text-muted-foreground">
           LawGPT ist eine KI und kann Fehler machen. Bitte überprüfe die Antworten.
         </p>
