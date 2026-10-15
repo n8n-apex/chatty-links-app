@@ -18,8 +18,8 @@ export type AttachIntent = 'schreiben' | 'quelle';
 interface ChatInputProps {
   onSendMessage: (message: string, files?: File[] | null, attachIntent?: AttachIntent) => void;
   isLoading: boolean;
-  inputValue?: string;
-  onInputChange?: (value: string) => void;
+  /** Text handed back by the container (retry, "Zurückholen"); nonce = apply once. */
+  restoreText?: { text: string; nonce: number } | null;
   /** A message is already waiting for the running turn; another send adds nothing. */
   queueFull?: boolean;
   /** Files handed back by "Zurückholen"; nonce makes each restore apply once. */
@@ -57,7 +57,7 @@ const downscaleImage = async (file: File): Promise<File> => {
   }
 };
 
-export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, queueFull = false, restoreFiles }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = false, restoreFiles }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   // Default is analyse: in a chat product a paperclip means "look at this".
@@ -84,11 +84,9 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange,
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const message = inputValue !== undefined ? inputValue : internalMessage;
-  const setMessage = (value: string) => {
-    if (onInputChange) onInputChange(value);
-    else setInternalMessage(value);
-  };
+  const message = internalMessage;
+  const setMessage = setInternalMessage;
+  useEffect(() => { if (restoreText) setInternalMessage(restoreText.text); }, [restoreText]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
