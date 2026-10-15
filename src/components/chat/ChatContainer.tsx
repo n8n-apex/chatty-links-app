@@ -750,7 +750,12 @@ export const ChatContainer = () => {
     if (isLoading || !queued) return;
     const q = queued;
     setQueued(null);
-    if (q.conversationId !== conversationId) return; // conversation switched: drop
+    if (q.conversationId !== conversationId) {
+      // Conversation switched: never send into another thread; hand the text back.
+      setInputValue(q.content);
+      setRestoreFiles(q.files?.length ? { files: q.files, intent: q.attachIntent, nonce: Date.now() } : null);
+      return;
+    }
     sendMessage(q.content, q.files, q.attachIntent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
