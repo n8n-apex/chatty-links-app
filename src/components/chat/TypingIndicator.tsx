@@ -1,11 +1,11 @@
-import { useId } from 'react';
+import { memo, useId } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Arbeitsschritte, type Arbeitsschritt } from './Arbeitsschritte';
 import { StreamingAnswer } from './StreamingAnswer';
 
-export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange, stream }: {
+const TypingIndicatorInner = ({ status, steps = [], open = false, onOpenChange, stream }: {
   status?: string | null;
   steps?: Arbeitsschritt[];
   open?: boolean;
@@ -23,7 +23,6 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
       className="group flex justify-start py-3"
     >
       <div className="flex w-full min-w-0 flex-col items-start gap-1">
@@ -43,3 +42,5 @@ export const TypingIndicator = ({ status, steps = [], open = false, onOpenChange
     </motion.div>
   );
 };
+
+export const TypingIndicator = memo(TypingIndicatorInner);

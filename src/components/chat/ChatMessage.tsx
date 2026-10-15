@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { Message } from "@/types/chat";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ interface ChatMessageProps {
   correctionDisabled?: boolean;
 }
 
-export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatement, onCorrect, correctionDisabled }: ChatMessageProps) => {
+const ChatMessageInner = ({ message, onFeedback, isAdmin = false, onSaveStatement, onCorrect, correctionDisabled }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
   // The admin view is gated on the server answer only (check_admin via
@@ -150,9 +150,10 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={isUser ? { opacity: 0, y: 10 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
+      data-msg-id={message.id}
       className={cn("group flex py-3", isUser ? "justify-end" : "justify-start")}
     >
       <div className={cn("flex min-w-0 flex-col gap-1", isUser ? "max-w-[85%] sm:max-w-[70%] items-end" : "w-full items-start")}>
@@ -382,3 +383,13 @@ export const ChatMessage = ({ message, onFeedback, isAdmin = false, onSaveStatem
     </motion.div>
   );
 };
+
+// Finished messages never re-render: compare by id, content and the fields shown.
+const sameMsg = (a: Message, b: Message) =>
+  a === b || (a.id === b.id && a.content === b.content && a.feedbackSubmitted === b.feedbackSubmitted &&
+    a.verstanden === b.verstanden && a.routingNotice === b.routingNotice && a.durationMs === b.durationMs &&
+    a.imageUrl === b.imageUrl && a.timestamp?.getTime?.() === b.timestamp?.getTime?.() &&
+    (a.usedChunkIds?.length ?? 0) === (b.usedChunkIds?.length ?? 0));
+export const ChatMessage = memo(ChatMessageInner, (a, b) =>
+  sameMsg(a.message, b.message) && a.isAdmin === b.isAdmin && a.correctionDisabled === b.correctionDisabled &&
+  a.onFeedback === b.onFeedback && a.onSaveStatement === b.onSaveStatement && a.onCorrect === b.onCorrect);

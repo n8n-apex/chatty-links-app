@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { Menu } from "lucide-react";
 import { Message, Verstanden } from "@/types/chat";
 import { ChatHeader } from "./ChatHeader";
@@ -189,7 +188,9 @@ export const ChatContainer = () => {
   // One message typed while a turn runs; sent once that turn has its final card.
   const [queued, setQueued] = useState<null | { content: string; files: File[] | null; attachIntent?: 'schreiben' | 'quelle'; conversationId: string | null }>(null);
   const [restoreFiles, setRestoreFiles] = useState<{ files: File[]; intent?: 'schreiben' | 'quelle'; nonce: number } | null>(null);
-  const [inputValue, setInputValue] = useState("");
+  // Composer text lives in ChatInput; the container only hands text back (nonce = apply once).
+  const [restoreText, setRestoreText] = useState<{ text: string; nonce: number } | null>(null);
+  const setInputValue = useCallback((text: string) => setRestoreText({ text, nonce: Date.now() + Math.random() }), []);
   const [currentUserEmail, setCurrentUserEmail] = useState(getUserEmail);
   const isUnresolvedEmail = currentUserEmail.includes("{{") || currentUserEmail.includes("}}");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -205,6 +206,7 @@ export const ChatContainer = () => {
     return window.innerWidth >= 1024;
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   // Guard for async polling (analyze_pdf). Bump to cancel any in-flight poll.
   const pollCancelRef = useRef(0);
   useEffect(() => () => { pollCancelRef.current += 1; }, []);
@@ -222,13 +224,24 @@ export const ChatContainer = () => {
   const resumePendingTurnRef = useRef<((cid: string) => void) | null>(null);
 
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Streamed text is flushed at most every 100 ms.
+  const streamPendingRef = useRef<{ text: string; draft: string | null; checking?: boolean } | null | undefined>(undefined);
+  const streamTimerRef = useRef<number | null>(null);
+  const setStreamViewThrottled = useCallback((v: { text: string; draft: string | null; checking?: boolean } | null) => {
+    streamPendingRef.current = v;
+    if (streamTimerRef.current != null) return;
+    streamTimerRef.current = window.setTimeout(() => {
+      streamTimerRef.current = null;
+      const pend = streamPendingRef.current;
+      streamPendingRef.current = undefined;
+      if (pend !== undefined) setStreamView(pend);
+    }, 100);
   }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading, scrollToBottom]);
+  const resetStreamView = useCallback(() => {
+    if (streamTimerRef.current != null) { clearTimeout(streamTimerRef.current); streamTimerRef.current = null; }
+    streamPendingRef.current = undefined;
+    setStreamView(null);
+  }, []);
 
   // All chat_messages access is routed through the chat-history edge function,
   // which uses the service role and scopes every operation to a single
@@ -384,7 +397,7 @@ export const ChatContainer = () => {
   const handleNewConversation = () => {
     // sessionId sent to n8n == conversationId, so a new conversation
     // always means a fresh, empty gpt_session_context on the backend.
-    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null); // cancel any pending analyze_pdf poll
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); resetStreamView(); // cancel any pending analyze_pdf poll
     const newId = crypto.randomUUID();
     setConversationId(newId); activeConversationRef.current = newId;
     localStorage.setItem("chat-session-id", newId);
@@ -404,7 +417,7 @@ export const ChatContainer = () => {
       toast.error("Gespräch konnte nicht geladen werden.");
       return;
     }
-    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null);
+    pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); resetStreamView();
     setConversationId(cid); activeConversationRef.current = cid;
     setIsLoading(false);
     // Keep n8n session aligned with the selected conversation.
@@ -427,7 +440,7 @@ export const ChatContainer = () => {
     toast.success("Gespräch gelöscht");
     try { localStorage.removeItem("pending-turn:" + cid); } catch { /* ignore */ }
     if (conversationId === cid) {
-      pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); setStreamView(null); // cancel any poll belonging to the deleted thread
+      pollCancelRef.current += 1; setPollProgress(null); setStepsOpen(false); streamAbortRef.current?.abort(); resetStreamView(); // cancel any poll belonging to the deleted thread
       setMessages([]);
       const newId = crypto.randomUUID();
       setConversationId(newId); activeConversationRef.current = newId;
@@ -631,11 +644,11 @@ export const ChatContainer = () => {
       onText: (raw) => {
         rawText = raw;
         advisorEnded = false;
-        if (!ctrl.signal.aborted) setStreamView(raw ? cleanStreamText(raw) : null);
+        if (!ctrl.signal.aborted) setStreamViewThrottled(raw ? cleanStreamText(raw) : null);
       },
       onAdvisorEnd: () => {
         advisorEnded = true;
-        if (!ctrl.signal.aborted && rawText) setStreamView(cleanStreamText(rawText, true));
+        if (!ctrl.signal.aborted && rawText) setStreamViewThrottled(cleanStreamText(rawText, true));
       },
     }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
     try {
@@ -666,12 +679,12 @@ export const ChatContainer = () => {
         } catch (e) { console.warn("get_result after stream failed, polling on:", e); }
       }
       // Stream ended without a usable result: today's poll carries on.
-      setStreamView(null);
+      resetStreamView();
       return await pollP;
     } finally {
       ctrl.abort();
       if (streamAbortRef.current === ctrl) streamAbortRef.current = null;
-      setStreamView(null);
+      resetStreamView();
       void rawText;
     }
   };
@@ -1283,6 +1296,54 @@ export const ChatContainer = () => {
     return null;
   })();
 
+  // Stable handler identities so finished messages (React.memo) never re-render.
+  const handlersRef = useRef({ handleFeedback, handleSaveStatement, handleCorrect });
+  handlersRef.current = { handleFeedback, handleSaveStatement, handleCorrect };
+  const stableFeedback = useCallback((...a: Parameters<typeof handleFeedback>) => handlersRef.current.handleFeedback(...a), []);
+  const stableSaveStatement = useCallback((...a: Parameters<typeof handleSaveStatement>) => handlersRef.current.handleSaveStatement(...a), []);
+  const stableCorrect = useCallback((...a: Parameters<typeof handleCorrect>) => handlersRef.current.handleCorrect(...a), []);
+
+  // Scroll: follow the bottom only while the reader is within 120 px of it,
+  // instantly; smooth only when the user's own message is added; keep the
+  // answer's first line in place when the checked card replaces the stream.
+  const nearBottomRef = useRef(true);
+  const onMainScroll = useCallback(() => {
+    const el = mainRef.current;
+    if (el) nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+  const lastUserIdRef = useRef<string | null>(null);
+  const firstIdRef = useRef<string | null>(null);
+  const prevMessagesRef = useRef(messages);
+  const streamAnchorRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = mainRef.current;
+    const messagesChanged = prevMessagesRef.current !== messages;
+    prevMessagesRef.current = messages;
+    if (!el) return;
+    const first = messages[0]?.id ?? null;
+    if (first !== firstIdRef.current) { firstIdRef.current = first; nearBottomRef.current = true; streamAnchorRef.current = null; }
+    const last = messages[messages.length - 1];
+    if (last?.role === "user" && last.id !== lastUserIdRef.current) {
+      lastUserIdRef.current = last.id;
+      nearBottomRef.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    if (streamAnchorRef.current != null && !streamView) {
+      if (messagesChanged && last?.role === "assistant") {
+        const top = streamAnchorRef.current;
+        streamAnchorRef.current = null;
+        const node = el.querySelector(`[data-msg-id="${CSS.escape(last.id)}"] .answer-md`) || el.querySelector(`[data-msg-id="${CSS.escape(last.id)}"]`);
+        if (node) { el.scrollTop += node.getBoundingClientRect().top - top; onMainScroll(); return; }
+      } else if (!isLoading) streamAnchorRef.current = null;
+    }
+    if (streamView) {
+      const n = el.querySelector("[data-stream-answer] .answer-md, [data-stream-answer]");
+      if (n) streamAnchorRef.current = n.getBoundingClientRect().top;
+    }
+    if (nearBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, isLoading, streamView, pollProgress, queued, stepsOpen, onMainScroll]);
+
   return (
     <div className="flex h-screen h-[100dvh] w-full overflow-hidden bg-background">
       {historyEnabled && (
@@ -1335,7 +1396,7 @@ export const ChatContainer = () => {
           </div>
         </div>
 
-        <main className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <main ref={mainRef} onScroll={onMainScroll} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden [overflow-anchor:none]">
           <div className="mx-auto w-full max-w-3xl px-4">
             {messages.length === 0 ? (
               <EmptyState />
@@ -1345,14 +1406,14 @@ export const ChatContainer = () => {
                   <ChatMessage
                     key={message.id}
                     message={message}
-                    onFeedback={handleFeedback}
+                    onFeedback={stableFeedback}
                     isAdmin={isAdmin}
-                    onSaveStatement={handleSaveStatement}
-                    onCorrect={handleCorrect}
+                    onSaveStatement={stableSaveStatement}
+                    onCorrect={stableCorrect}
                     correctionDisabled={isLoading}
                   />
                 ))}
-                <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} stream={streamView} />}</AnimatePresence>
+                {isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} stream={streamView} />}
                 {queued && queued.conversationId === conversationId && (
                   <div className="flex justify-end py-3">
                     <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1 sm:max-w-[70%]">
@@ -1395,13 +1456,11 @@ export const ChatContainer = () => {
             } else {
               sendMessage(msg, files, attachIntent);
             }
-            setInputValue("");
           }}
           queueFull={!!queued}
           restoreFiles={restoreFiles}
           isLoading={isLoading}
-          inputValue={inputValue}
-          onInputChange={setInputValue}
+          restoreText={restoreText}
         />
 
       </div>

@@ -123,28 +123,24 @@ const citeLinks = (children: React.ReactNode): React.ReactNode =>
     });
   });
 
-export const Md = ({ children, className }: { children: unknown; className?: string }) => {
-  const text = toText(children);
-  if (!text.trim()) return null;
-  return (
-    <div className={cn('answer-md', className)}>
-      <ReactMarkdown
-        components={{
-          p: ({ children }) => <p className="whitespace-pre-line">{citeLinks(children)}</p>,
-          li: ({ children }) => <li>{citeLinks(children)}</li>,
-          table: ({ children }) => <div className="answer-table"><table>{children}</table></div>,
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </div>
-  );
+// Defined once at module level: a new map per render makes react-markdown
+// re-create every node of every answer.
+const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+  p: ({ children }) => <p className="whitespace-pre-line">{citeLinks(children)}</p>,
+  li: ({ children }) => <li>{citeLinks(children)}</li>,
+  table: ({ children }) => <div className="answer-table"><table>{children}</table></div>,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
+  ),
 };
 
-
+const MdInner = ({ children, className }: { children: unknown; className?: string }) => {
+  const text = toText(children);
+  const rendered = React.useMemo(() => <ReactMarkdown components={MD_COMPONENTS}>{text}</ReactMarkdown>, [text]);
+  if (!text.trim()) return null;
+  return <div className={cn('answer-md', className)}>{rendered}</div>;
+};
+export const Md = React.memo(MdInner, (a, b) => a.className === b.className && toText(a.children) === toText(b.children));
 
 export const structuredToPlainText = (data: StructuredPayload): string => {
   const parts: string[] = [];
@@ -465,7 +461,7 @@ const ErrorCard = ({ data, onRetry }: { data: StructuredPayload; onRetry?: () =>
   );
 };
 
-export const StructuredResponse = ({ data, draftEditor, onRetry }: { data: StructuredPayload; draftEditor?: DraftEditorProps; onRetry?: () => void }) => {
+const StructuredResponseInner = ({ data, draftEditor, onRetry }: { data: StructuredPayload; draftEditor?: DraftEditorProps; onRetry?: () => void }) => {
   // Failure path first — must sit above analyze_pdf, otherwise a failed B4
   // analysis is handed to BehoerdenAnalysis and disappears.
   if (data.status === 'error') {
@@ -1191,3 +1187,5 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
   );
 };
 
+
+export const StructuredResponse = React.memo(StructuredResponseInner);
