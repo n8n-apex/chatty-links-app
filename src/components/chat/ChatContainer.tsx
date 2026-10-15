@@ -186,6 +186,9 @@ const buildAssistantMessage = (
 export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // One message typed while a turn runs; sent once that turn has its final card.
+  const [queued, setQueued] = useState<null | { content: string; files: File[] | null; attachIntent?: 'schreiben' | 'quelle'; conversationId: string | null }>(null);
+  const [restoreFiles, setRestoreFiles] = useState<{ files: File[]; intent?: 'schreiben' | 'quelle'; nonce: number } | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [currentUserEmail, setCurrentUserEmail] = useState(getUserEmail);
   const isUnresolvedEmail = currentUserEmail.includes("{{") || currentUserEmail.includes("}}");
@@ -741,6 +744,16 @@ export const ChatContainer = () => {
   };
 
 
+
+  // Send the waiting message right after the running turn ends (final or error card).
+  useEffect(() => {
+    if (isLoading || !queued) return;
+    const q = queued;
+    setQueued(null);
+    if (q.conversationId !== conversationId) return; // conversation switched: drop
+    sendMessage(q.content, q.files, q.attachIntent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   const sendMessage = async (
     content: string,
@@ -1335,6 +1348,32 @@ export const ChatContainer = () => {
                   />
                 ))}
                 <AnimatePresence>{isLoading && <TypingIndicator status={pollProgress?.line} steps={pollProgress?.steps} open={stepsOpen} onOpenChange={setStepsOpen} stream={streamView} />}</AnimatePresence>
+                {queued && queued.conversationId === conversationId && (
+                  <div className="flex justify-end py-3">
+                    <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1 sm:max-w-[70%]">
+                      <div className="user-bubble whitespace-pre-wrap break-words opacity-80">
+                        {queued.files?.length
+                          ? `📎 [${queued.files.map((f) => f.name).join(", ")}]${queued.content ? `. ${queued.content}` : ""}`
+                          : queued.content}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-x-2 px-2 text-xs text-muted-foreground">
+                        <span aria-live="polite">Wird gesendet, sobald die aktuelle Antwort fertig ist</span>
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 hover:text-foreground"
+                          onClick={() => {
+                            const q = queued;
+                            setQueued(null);
+                            setInputValue(q.content);
+                            setRestoreFiles(q.files?.length ? { files: q.files, intent: q.attachIntent, nonce: Date.now() } : null);
+                          }}
+                        >
+                          Zurückholen
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -1345,9 +1384,16 @@ export const ChatContainer = () => {
 
         <ChatInput
           onSendMessage={(msg, files, attachIntent) => {
-            sendMessage(msg, files, attachIntent);
+            if (isLoading) {
+              if (queued) return;
+              setQueued({ content: msg, files: files ?? null, attachIntent, conversationId });
+            } else {
+              sendMessage(msg, files, attachIntent);
+            }
             setInputValue("");
           }}
+          queueFull={!!queued}
+          restoreFiles={restoreFiles}
           isLoading={isLoading}
           inputValue={inputValue}
           onInputChange={setInputValue}
