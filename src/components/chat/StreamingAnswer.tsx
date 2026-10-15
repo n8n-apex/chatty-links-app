@@ -7,7 +7,7 @@ export const StreamingAnswer = ({ text, draft, checking = false }: { text: strin
   const t = splitComplete(text);
   const d = draft ? splitComplete(draft) : null;
   return (
-    <div className="w-full min-w-0 text-foreground">
+    <div data-stream-answer className="w-full min-w-0 text-foreground">
       <div aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
         {checking ? <>
           <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none text-muted-foreground" />

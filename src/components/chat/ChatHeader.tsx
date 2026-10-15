@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { RotateCcw, Copy, Check, Maximize2 } from 'lucide-react';
+import { RotateCcw, Copy, Check } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 interface ChatHeaderProps {
@@ -26,16 +26,6 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
     await navigator.clipboard.writeText(sessionId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleFullscreen = async () => {
-    const el = document.documentElement;
-    const inFrame = window.self !== window.top;
-    if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
-    if (el.requestFullscreen && document.fullscreenEnabled) {
-      try { await el.requestFullscreen(); return; } catch { /* fall through */ }
-    }
-    if (inFrame || !document.fullscreenEnabled) window.open(window.location.href, '_blank', 'noopener');
   };
 
   return (
@@ -70,14 +60,6 @@ export const ChatHeader = ({ onLogoClick }: ChatHeaderProps) => {
 
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-1.5">
-              <button
-                onClick={handleFullscreen}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/50 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                title="Vollbild"
-                aria-label="Vollbild"
-              >
-                <Maximize2 className="h-4 w-4" />
-              </button>
               <button
                 onClick={onLogoClick}
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background/50 text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
