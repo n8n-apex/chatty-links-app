@@ -22,7 +22,7 @@ export const EmptyState = () => {
           Baurecht GPT
         </h2>
         <p className="mx-auto max-w-xl text-center text-muted-foreground">
-          KI-Assistent für deutsches Baurecht — Stellen Sie Rechtsfragen, erstellen Sie Stellungnahmen oder analysieren Sie Behördenschreiben
+          KI-Assistent für deutsches Baurecht. Stellen Sie Rechtsfragen, erstellen Sie Stellungnahmen oder analysieren Sie Behördenschreiben
         </p>
       </motion.div>
     </div>
