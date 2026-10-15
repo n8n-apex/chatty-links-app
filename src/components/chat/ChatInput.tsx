@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle } from 'lucide-react';
+import { Send, Clock, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -20,6 +20,10 @@ interface ChatInputProps {
   isLoading: boolean;
   inputValue?: string;
   onInputChange?: (value: string) => void;
+  /** A message is already waiting for the running turn; another send adds nothing. */
+  queueFull?: boolean;
+  /** Files handed back by "Zurückholen"; nonce makes each restore apply once. */
+  restoreFiles?: { files: File[]; intent?: AttachIntent; nonce: number } | null;
 }
 
 
@@ -53,7 +57,7 @@ const downscaleImage = async (file: File): Promise<File> => {
   }
 };
 
-export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange, queueFull = false, restoreFiles }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   // Default is analyse: in a chat product a paperclip means "look at this".
@@ -88,7 +92,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading || isProcessingFiles) return;
+    if ((isLoading && queueFull) || isProcessingFiles) return;
     if (!message.trim() && attachedFiles.length === 0) return;
     const files = attachedFiles.length > 0 ? attachedFiles : null;
     onSendMessage(message.trim(), files, files ? attachIntent : undefined);
@@ -106,7 +110,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isLoading || isProcessingFiles) return;
+      if ((isLoading && queueFull) || isProcessingFiles) return;
       handleSubmit(e);
     }
   };
@@ -201,7 +205,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
     e.preventDefault();
     dragDepthRef.current = 0;
     setIsDragOver(false);
-    if (isLoading) return;
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length > 0) addFiles(files);
   };
@@ -266,7 +269,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
 
   // ---------- Mic ----------
   const startRecording = async () => {
-    if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting' || isLoading) return;
+    if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting') return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -377,13 +380,19 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
   // addFiles path as picker/drop/paste so all three admit the same set.
   useEffect(() => {
     const onGlobalDrop = (e: Event) => {
-      if (isLoading) return;
       const files = (e as CustomEvent<File[]>).detail;
       if (Array.isArray(files) && files.length > 0) addFiles(files);
     };
     window.addEventListener('lawgpt:global-drop', onGlobalDrop);
     return () => window.removeEventListener('lawgpt:global-drop', onGlobalDrop);
-  }, [isLoading]);
+  }, []);
+
+  useEffect(() => {
+    if (!restoreFiles) return;
+    setAttachedFiles(restoreFiles.files);
+    setAttachIntent(restoreFiles.intent ?? 'schreiben');
+    textareaRef.current?.focus();
+  }, [restoreFiles?.nonce]);
 
   const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
   const recording = audioStatus === 'recording';
@@ -523,7 +532,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
                   type="button"
                   size="icon"
                   variant="ghost"
-                  disabled={isLoading}
                   className="h-10 w-10 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
                   aria-label="Datei anhängen"
                   title={FILE_LIMITS}
@@ -552,8 +560,6 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               onPaste={handlePaste}
               placeholder="Frage stellen, Schreiben anhängen oder Änderung am Entwurf beschreiben …"
               rows={1}
-
-              disabled={isLoading}
               className={cn(
                 'flex-1 resize-none bg-transparent px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus:outline-none',
                 'min-h-[40px] max-h-[150px]'
@@ -563,7 +569,7 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               type="button"
               size="icon"
               variant="ghost"
-              disabled={isLoading || transcribing || submitting}
+              disabled={transcribing || submitting}
               onClick={recording ? stopRecording : startRecording}
               className={cn(
                 'h-10 w-10 shrink-0 rounded-xl',
@@ -587,11 +593,14 @@ export const ChatInput = ({ onSendMessage, isLoading, inputValue, onInputChange 
               type="submit"
               size="icon"
               variant="glow"
-              disabled={(!message.trim() && !hasFiles) || isLoading || isProcessingFiles}
+              disabled={(!message.trim() && !hasFiles) || (isLoading && queueFull) || isProcessingFiles}
               className="h-10 w-10 shrink-0 rounded-xl"
-              title={isLoading ? 'Bitte warten…' : isProcessingFiles ? 'Dateien werden vorbereitet…' : 'Senden'}
+              title={isProcessingFiles ? 'Dateien werden vorbereitet…' : isLoading && queueFull ? 'Eine Nachricht wartet bereits' : isLoading ? 'Senden, sobald die aktuelle Antwort fertig ist' : 'Senden'}
+              aria-label={isLoading && queueFull ? 'Eine Nachricht wartet bereits' : 'Senden'}
             >
-              {isLoading || isProcessingFiles ? (
+              {isLoading && queueFull ? (
+                <Clock className="h-4 w-4" />
+              ) : isProcessingFiles ? (
                 <Sparkles className="h-4 w-4 animate-pulse" />
               ) : (
                 <Send className="h-4 w-4" />
