@@ -1,9 +1,10 @@
+import React from 'react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { ChevronDown, ChevronRight, FileText, Check, ExternalLink, Copy, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { QuelleList } from './QuelleList';
+import { QuelleList, CITE_EVENT } from './QuelleList';
 import { BehoerdenAnalysis, type BehoerdenAnalysisData } from './BehoerdenAnalysis';
 import { toText, toStringList } from '@/lib/safeText';
 import { UnverifizierteNormen } from './UnverifizierteNormen';
@@ -106,6 +107,22 @@ export interface StructuredPayload {
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
 // `children` is typed unknown on purpose: the backend is not schema-stable and
 // react-markdown throws on non-string input, which would take down the tree.
+const citeLinks = (children: React.ReactNode): React.ReactNode =>
+  React.Children.map(children, (c) => {
+    if (typeof c !== 'string' || !/\[\d{1,3}\]/.test(c)) return c;
+    return c.split(/(\[\d{1,3}\])/).map((part, i) => {
+      const m = /^\[(\d{1,3})\]$/.exec(part);
+      if (!m) return part;
+      const n = Number(m[1]);
+      return (
+        <button key={i} type="button" className="cite-marker" title={`Quelle ${n} anzeigen`}
+          onClick={(e) => { e.stopPropagation(); e.currentTarget.dispatchEvent(new CustomEvent(CITE_EVENT, { detail: n, bubbles: true })); }}>
+          {part}
+        </button>
+      );
+    });
+  });
+
 export const Md = ({ children, className }: { children: unknown; className?: string }) => {
   const text = toText(children);
   if (!text.trim()) return null;
@@ -113,7 +130,8 @@ export const Md = ({ children, className }: { children: unknown; className?: str
     <div className={cn('answer-md', className)}>
       <ReactMarkdown
         components={{
-          p: ({ children }) => <p className="whitespace-pre-line">{children}</p>,
+          p: ({ children }) => <p className="whitespace-pre-line">{citeLinks(children)}</p>,
+          li: ({ children }) => <li>{citeLinks(children)}</li>,
           table: ({ children }) => <div className="answer-table"><table>{children}</table></div>,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
@@ -941,7 +959,6 @@ const renderCommonExtras = (data: StructuredPayload) => {
           )}
           {visibleQuellen.length > 0 && (
             <div className="flex flex-col gap-1">
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
               <QuelleList
                 quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']}
                 unverifiziert={data.rechtsgrundlage_unverifiziert}
@@ -1019,9 +1036,9 @@ const renderRechtsfrageExtras = (data: StructuredPayload) => {
       )}
       {visibleQuellen.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Quellen</div>
           <QuelleList
             quellen={data.quellen as Parameters<typeof QuelleList>[0]['quellen']}
+            decisions={footnotes}
             variant="inline"
             unverifiziert={data.rechtsgrundlage_unverifiziert}
           />

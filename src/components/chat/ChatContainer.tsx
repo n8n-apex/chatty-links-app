@@ -209,7 +209,7 @@ export const ChatContainer = () => {
   const [pollProgress, setPollProgress] = useState<{ line: string; steps: Arbeitsschritt[] } | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   // Answer text while it is being written (stream=1 only). Never stored.
-  const [streamView, setStreamView] = useState<{ text: string; draft: string | null } | null>(null);
+  const [streamView, setStreamView] = useState<{ text: string; draft: string | null; checking?: boolean } | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamEnabledRef = useRef(isStreamEnabled());
   // Always holds the conversation actually on screen. Assigned on the SAME line as
@@ -622,11 +622,17 @@ export const ChatContainer = () => {
     let resolveAccepted!: (a: { action?: string } | null) => void;
     const accepted = new Promise<{ action?: string } | null>((r) => { resolveAccepted = r; });
     let rawText = "";
+    let advisorEnded = false;
     const streamP = streamAnswer(buildForwardBody(payload), {
       onAccepted: (info) => resolveAccepted({ action: info.action }),
       onText: (raw) => {
         rawText = raw;
+        advisorEnded = false;
         if (!ctrl.signal.aborted) setStreamView(raw ? cleanStreamText(raw) : null);
+      },
+      onAdvisorEnd: () => {
+        advisorEnded = true;
+        if (!ctrl.signal.aborted && rawText) setStreamView(cleanStreamText(rawText, true));
       },
     }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
     try {

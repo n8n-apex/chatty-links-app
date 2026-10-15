@@ -45,9 +45,10 @@ export function buildForwardBody(body: Record<string, unknown>): Record<string, 
 }
 
 /** Raw text before the checks → what may be shown. */
-export function cleanStreamText(raw: string): { text: string; draft: string | null } {
+export function cleanStreamText(raw: string, advisorEnded = false): { text: string; draft: string | null; checking: boolean } {
   let s = raw;
   const caseIdx = s.search(/^\s*<<<CASE/m);
+  const checking = advisorEnded || caseIdx !== -1;
   if (caseIdx !== -1) s = s.slice(0, caseIdx);
   // A marker still arriving at the very end: hide the partial "<<<…" line.
   s = s.replace(/(^|\n)\s*<{1,3}[A-Z]*\s*$/, "$1");
@@ -60,7 +61,7 @@ export function cleanStreamText(raw: string): { text: string; draft: string | nu
     s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
   const strip = (t: string) => t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
-  return { text: dashes(strip(s)).trim(), draft: draft ? dashes(strip(draft)).trim() || null : null };
+  return { text: dashes(strip(s)).trim(), draft: draft ? dashes(strip(draft)).trim() || null : null, checking };
 }
 
 /** Punctuation dashes → ", "; line-start dash → "- ". Number ranges stay. */
@@ -82,6 +83,8 @@ export function splitComplete(t: string, finished = false): { done: string; tail
 export interface StreamHandlers {
   onAccepted: (info: { turnId?: string; action?: string }) => void;
   onText: (raw: string) => void;
+  /** The Advisor node finished writing (checks still running). */
+  onAdvisorEnd?: () => void;
 }
 
 export type StreamOutcome = "done" | "failed";
@@ -120,8 +123,10 @@ export async function streamAnswer(
       if (node === "Advisor") {
         if (ev.type === "begin") { text = ""; handlers.onText(""); }
         else if (ev.type === "item" && typeof ev.content === "string") { text += ev.content; handlers.onText(text); }
+        else if (ev.type === "end") handlers.onAdvisorEnd?.();
         return false;
       }
+      if (text && node && ev.type === "begin") handlers.onAdvisorEnd?.();
       if (node === "Respond Accepted" && ev.type === "item") {
         try {
           const c = typeof ev.content === "string" ? JSON.parse(ev.content) : ev.content;
