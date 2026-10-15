@@ -582,8 +582,7 @@ export const BehoerdenAnalysis = ({ data }: { data: BehoerdenAnalysisData }) => 
       {/* Quellen */}
       {Array.isArray(data.quellen) && data.quellen.length > 0 && (
         <Sec>
-          <SectionHeading>Quellen</SectionHeading>
-          <QuelleList quellen={data.quellen} unverifiziert={data.rechtsgrundlage_unverifiziert} />
+          <QuelleList quellen={data.quellen} unverifiziert={data.rechtsgrundlage_unverifiziert} decisions={Array.isArray(data.rechtsprechung_footnotes) ? data.rechtsprechung_footnotes : null} />
         </Sec>
       )}
 

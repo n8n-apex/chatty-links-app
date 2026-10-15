@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ExternalLink, Loader2, Copy } from 'lucide-react';
+import { ExternalLink, Loader2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { copyPlainText, UNVERIFIED_SUFFIX } from '@/lib/copyText';
@@ -37,7 +37,13 @@ interface QuelleListProps {
   variant?: 'stacked' | 'inline';
   /** Provisions without a retrieved source — appended to "Alle Quellen kopieren". */
   unverifiziert?: unknown;
+  /** Court decisions cited by the answer, for the count in the closed row. */
+  decisions?: Array<{ status?: unknown }> | null;
 }
+
+/** Open/closed per answer, kept only while the page is open. */
+const openState = new Map<string, boolean>();
+export const CITE_EVENT = 'lawgpt-cite';
 
 
 interface ChunkResponse {
@@ -60,7 +66,12 @@ interface ModalState {
   fallbackLabel: string;
 }
 
-export const QuelleList = ({ quellen, className, variant = 'stacked', unverifiziert }: QuelleListProps) => {
+export const QuelleList = ({ quellen, className, variant = 'stacked', unverifiziert, decisions }: QuelleListProps) => {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const keyRef = useRef<string>('');
+  const [open, setOpenState] = useState(false);
+  const [flash, setFlash] = useState<number | null>(null);
+  const setOpen = (o: boolean) => { openState.set(keyRef.current, o); setOpenState(o); };
   const [modal, setModal] = useState<ModalState>({
     open: false,
     loading: false,
@@ -89,7 +100,37 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
     items.push({ label, url, chunk_id, source: q });
   }
 
+  keyRef.current = items.map((i) => i.label).join('|');
+  useEffect(() => {
+    if (openState.get(keyRef.current)) setOpenState(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyRef.current]);
+
+  useEffect(() => {
+    const host = rootRef.current?.closest('.group') ?? rootRef.current?.parentElement;
+    if (!host) return;
+    const onCite = (e: Event) => {
+      const n = (e as CustomEvent<number>).detail;
+      if (!n || n < 1 || n > items.length) return;
+      e.stopPropagation();
+      openState.set(keyRef.current, true);
+      setOpenState(true);
+      setFlash(n);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        rootRef.current?.querySelector(`[data-quelle="${n}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }));
+      window.setTimeout(() => setFlash((f) => (f === n ? null : f)), 2000);
+      const it = items[n - 1];
+      if (it?.url) window.open(it.url, '_blank', 'noopener,noreferrer');
+      else if (it?.chunk_id) openChunk(it.chunk_id, it.label);
+    };
+    host.addEventListener(CITE_EVENT, onCite);
+    return () => host.removeEventListener(CITE_EVENT, onCite);
+  });
+
   if (items.length === 0) return null;
+  const decList = Array.isArray(decisions) ? decisions : [];
+  const decAllVerified = decList.length > 0 && decList.every((d) => d?.status === 'verified');
 
   const openChunk = async (chunkId: string, label: string) => {
     if (loadingChunkId) return;
@@ -135,7 +176,27 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
 
   return (
     <>
-      <div className="flex flex-col gap-1.5">
+      <div ref={rootRef} className="flex min-w-0 max-w-full flex-col gap-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="inline-flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        <span>Quellen ({items.length})</span>
+        {decList.length > 0 && (
+          <span className={cn(
+            'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+            decAllVerified
+              ? 'border-green-600/40 bg-green-600/10 text-green-700 dark:text-green-400'
+              : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+          )}>
+            {decList.length} {decList.length === 1 ? 'Entscheidung' : 'Entscheidungen'}
+          </span>
+        )}
+      </button>
+      {open && <>
       <div
         className={cn(
           variant === 'inline' ? 'flex flex-wrap gap-1.5' : 'flex flex-col gap-1.5',
@@ -148,6 +209,7 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
           return (
             <span
               key={i}
+              data-quelle={i + 1}
               onClick={
                 clickable
                   ? (e) => {
@@ -172,6 +234,7 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
                 'inline-flex max-w-full items-start self-start whitespace-normal break-words rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[11px] leading-snug text-foreground transition-colors',
                 clickable &&
                   'cursor-pointer hover:bg-muted hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary',
+                flash === i + 1 && 'border-primary ring-2 ring-primary/60 bg-primary/10',
               )}
               title={clickable ? 'Quellentext anzeigen' : undefined}
             >
@@ -221,6 +284,7 @@ export const QuelleList = ({ quellen, className, variant = 'stacked', unverifizi
           Alle Quellen kopieren
         </button>
       )}
+      </>}
       </div>
 
 

@@ -160,3 +160,7 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
 }
+.cite-marker {
+  @apply rounded px-0.5 text-primary hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+  font: inherit;
+}
