@@ -4,8 +4,10 @@ import { Loader2 } from "lucide-react";
 
 /** The answer while it is being written; same renderer/layout as the finished card. */
 export const StreamingAnswer = ({ text, draft, checking = false }: { text: string; draft: string | null; checking?: boolean }) => {
-  const t = splitComplete(text);
-  const d = draft ? splitComplete(draft) : null;
+  // Once the Advisor is done (checking), the last line is complete too —
+  // render it as Markdown so the swap to the checked card changes nothing.
+  const t = splitComplete(text, checking);
+  const d = draft ? splitComplete(draft, checking) : null;
   return (
     <div data-stream-answer className="w-full min-w-0 text-foreground">
       <CiteStaticContext.Provider value={true}>
