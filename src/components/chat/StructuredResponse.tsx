@@ -107,13 +107,18 @@ export interface StructuredPayload {
 // Small markdown wrapper for long text fields (paragraphs, lists, bold).
 // `children` is typed unknown on purpose: the backend is not schema-stable and
 // react-markdown throws on non-string input, which would take down the tree.
-const citeLinks = (children: React.ReactNode): React.ReactNode =>
+// While streaming, [n] markers look exactly like the final ones but are not
+// clickable yet (the source list does not exist until the checked answer).
+export const CiteStaticContext = React.createContext(false);
+
+const citeLinks = (children: React.ReactNode, staticMode = false): React.ReactNode =>
   React.Children.map(children, (c) => {
     if (typeof c !== 'string' || !/\[\d{1,3}\]/.test(c)) return c;
     return c.split(/(\[\d{1,3}\])/).map((part, i) => {
       const m = /^\[(\d{1,3})\]$/.exec(part);
       if (!m) return part;
       const n = Number(m[1]);
+      if (staticMode) return <span key={i} className="cite-marker">{part}</span>;
       return (
         <button key={i} type="button" className="cite-marker" title={`Quelle ${n} anzeigen`}
           onClick={(e) => { e.stopPropagation(); e.currentTarget.dispatchEvent(new CustomEvent(CITE_EVENT, { detail: n, bubbles: true })); }}>
@@ -123,11 +128,20 @@ const citeLinks = (children: React.ReactNode): React.ReactNode =>
     });
   });
 
+const MdP = ({ children }: { children?: React.ReactNode }) => {
+  const staticMode = React.useContext(CiteStaticContext);
+  return <p className="whitespace-pre-line">{citeLinks(children, staticMode)}</p>;
+};
+const MdLi = ({ children }: { children?: React.ReactNode }) => {
+  const staticMode = React.useContext(CiteStaticContext);
+  return <li>{citeLinks(children, staticMode)}</li>;
+};
+
 // Defined once at module level: a new map per render makes react-markdown
 // re-create every node of every answer.
 const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p: ({ children }) => <p className="whitespace-pre-line">{citeLinks(children)}</p>,
-  li: ({ children }) => <li>{citeLinks(children)}</li>,
+  p: MdP,
+  li: MdLi,
   table: ({ children }) => <div className="answer-table"><table>{children}</table></div>,
   a: ({ href, children }) => (
     <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>
