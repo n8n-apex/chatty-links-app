@@ -27,6 +27,7 @@ export const StreamingAnswer = ({ text, draft, checking = false }: { text: strin
           <DraftLetter text={d.done + (d.tail ? "\n" + d.tail : "")} />
         </div>
       )}
+      </CiteStaticContext.Provider>
     </div>
   );
 };
