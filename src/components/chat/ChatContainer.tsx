@@ -639,16 +639,19 @@ export const ChatContainer = () => {
     const accepted = new Promise<{ action?: string } | null>((r) => { resolveAccepted = r; });
     let rawText = "";
     let advisorEnded = false;
+    // Per-turn source numbering: [n] markers appear already while streaming,
+    // so the checked answer only adds the finishing touches.
+    const citeNum = new Map<string, number>();
     const streamP = streamAnswer(buildForwardBody(payload), {
       onAccepted: (info) => resolveAccepted({ action: info.action }),
       onText: (raw) => {
         rawText = raw;
         advisorEnded = false;
-        if (!ctrl.signal.aborted) setStreamViewThrottled(raw ? cleanStreamText(raw) : null);
+        if (!ctrl.signal.aborted) setStreamViewThrottled(raw ? cleanStreamText(raw, false, citeNum) : null);
       },
       onAdvisorEnd: () => {
         advisorEnded = true;
-        if (!ctrl.signal.aborted && rawText) setStreamViewThrottled(cleanStreamText(rawText, true));
+        if (!ctrl.signal.aborted && rawText) setStreamViewThrottled(cleanStreamText(rawText, true, citeNum));
       },
     }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
     try {
@@ -684,7 +687,8 @@ export const ChatContainer = () => {
     } finally {
       ctrl.abort();
       if (streamAbortRef.current === ctrl) streamAbortRef.current = null;
-      resetStreamView();
+      // Do NOT reset streamView here: the caller clears it in the same commit
+      // that places the checked answer, so the text never vanishes in between.
       void rawText;
     }
   };
@@ -971,6 +975,8 @@ export const ChatContainer = () => {
         if (activeConversationRef.current === sendConversationId) {
           placeAssistantMessage(note.message);
         }
+        // The re-asked question runs without a stream — clear the old text now.
+        resetStreamView();
         replaceConsumed = true;
         persistMessage("ai", note.responseText, note.meta, sendConversationId).then((rowId) => {
           if (!rowId) return;
@@ -1029,6 +1035,9 @@ export const ChatContainer = () => {
       if (activeConversationRef.current === sendConversationId) {
         placeAssistantMessage(assistantMessage);
       }
+      // Clear the streamed text in the same commit as the checked card, so
+      // the answer never disappears between stream and final render.
+      resetStreamView();
       // The user may have switched away. The answer belongs to sendConversationId;
       // persist it there — resume-on-open surfaces it when they return.
       persistMessage("ai", responseText, meta, sendConversationId).then((rowId) => {
@@ -1083,6 +1092,7 @@ export const ChatContainer = () => {
         // A failed retry shows the error card in the replaced answer's position.
         placeAssistantMessage(errorMessage);
       }
+      resetStreamView();
       // Definitive failure — nothing left to resume.
       try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       // Preserve the user's input in the composer so they can retry

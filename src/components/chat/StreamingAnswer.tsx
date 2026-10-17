@@ -1,13 +1,16 @@
-import { Md, DraftLetter } from "./StructuredResponse";
+import { Md, DraftLetter, CiteStaticContext } from "./StructuredResponse";
 import { splitComplete } from "@/lib/answerStream";
 import { Loader2 } from "lucide-react";
 
 /** The answer while it is being written; same renderer/layout as the finished card. */
 export const StreamingAnswer = ({ text, draft, checking = false }: { text: string; draft: string | null; checking?: boolean }) => {
-  const t = splitComplete(text);
-  const d = draft ? splitComplete(draft) : null;
+  // Once the Advisor is done (checking), the last line is complete too —
+  // render it as Markdown so the swap to the checked card changes nothing.
+  const t = splitComplete(text, checking);
+  const d = draft ? splitComplete(draft, checking) : null;
   return (
     <div data-stream-answer className="w-full min-w-0 text-foreground">
+      <CiteStaticContext.Provider value={true}>
       <div aria-live="polite" className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
         {checking ? <>
           <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none text-muted-foreground" />
@@ -26,6 +29,7 @@ export const StreamingAnswer = ({ text, draft, checking = false }: { text: strin
           <DraftLetter text={d.done + (d.tail ? "\n" + d.tail : "")} />
         </div>
       )}
+      </CiteStaticContext.Provider>
     </div>
   );
 };

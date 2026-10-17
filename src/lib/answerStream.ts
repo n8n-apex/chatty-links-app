@@ -44,8 +44,26 @@ export function buildForwardBody(body: Record<string, unknown>): Record<string, 
   return out;
 }
 
+/**
+ * Number source pointers [[lc:12345 L4-L9]] as [n] while streaming, following
+ * the backend rule: n by first appearance of each source, consecutive
+ * duplicates of the same source collapsed. `num` is per-turn state so numbers
+ * stay stable across chunks; the finished answer then differs only by the
+ * checks, not by freshly appearing markers.
+ */
+function numberPointers(t: string, num: Map<string, number>): string {
+  const out = t.replace(/\[\[([^\]]*)\]\]/g, (_m, inner: string) => {
+    const key = inner.trim().split(/\s+/)[0] || inner.trim();
+    let n = num.get(key);
+    if (n === undefined) { n = num.size + 1; num.set(key, n); }
+    return `[${n}]`;
+  });
+  // Consecutive duplicates of the same source: "[2] [2]" / "[2],[2]" → "[2]".
+  return out.replace(/(\[\d{1,3}\])([\s,]*\1)+/g, "$1");
+}
+
 /** Raw text before the checks → what may be shown. */
-export function cleanStreamText(raw: string, advisorEnded = false): { text: string; draft: string | null; checking: boolean } {
+export function cleanStreamText(raw: string, advisorEnded = false, num?: Map<string, number>): { text: string; draft: string | null; checking: boolean } {
   let s = raw;
   const caseIdx = s.search(/^\s*<<<CASE/m);
   const checking = advisorEnded || caseIdx !== -1;
@@ -60,7 +78,10 @@ export function cleanStreamText(raw: string, advisorEnded = false): { text: stri
     draft = close && close.index !== undefined ? after.slice(0, close.index) : after.replace(/(^|\n)[ \t]*D?R?A?F?T?>{0,3}$/, "$1");
     s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
-  const strip = (t: string) => t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
+  const strip = (t: string) => {
+    const numbered = num ? numberPointers(t, num) : t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "");
+    return numbered.replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
+  };
   return { text: dashes(strip(s)).trim(), draft: draft ? dashes(strip(draft)).trim() || null : null, checking };
 }
 
