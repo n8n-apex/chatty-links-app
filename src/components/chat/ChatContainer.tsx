@@ -639,16 +639,19 @@ export const ChatContainer = () => {
     const accepted = new Promise<{ action?: string } | null>((r) => { resolveAccepted = r; });
     let rawText = "";
     let advisorEnded = false;
+    // Per-turn source numbering: [n] markers appear already while streaming,
+    // so the checked answer only adds the finishing touches.
+    const citeNum = new Map<string, number>();
     const streamP = streamAnswer(buildForwardBody(payload), {
       onAccepted: (info) => resolveAccepted({ action: info.action }),
       onText: (raw) => {
         rawText = raw;
         advisorEnded = false;
-        if (!ctrl.signal.aborted) setStreamViewThrottled(raw ? cleanStreamText(raw) : null);
+        if (!ctrl.signal.aborted) setStreamViewThrottled(raw ? cleanStreamText(raw, false, citeNum) : null);
       },
       onAdvisorEnd: () => {
         advisorEnded = true;
-        if (!ctrl.signal.aborted && rawText) setStreamViewThrottled(cleanStreamText(rawText, true));
+        if (!ctrl.signal.aborted && rawText) setStreamViewThrottled(cleanStreamText(rawText, true, citeNum));
       },
     }, ctrl.signal).then((o) => { resolveAccepted(null); return o; });
     try {

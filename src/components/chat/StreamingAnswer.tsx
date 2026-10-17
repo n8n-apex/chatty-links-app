@@ -1,4 +1,4 @@
-import { Md, DraftLetter } from "./StructuredResponse";
+import { Md, DraftLetter, CiteStaticContext } from "./StructuredResponse";
 import { splitComplete } from "@/lib/answerStream";
 import { Loader2 } from "lucide-react";
 
