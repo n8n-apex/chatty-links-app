@@ -1033,6 +1033,9 @@ export const ChatContainer = () => {
       if (activeConversationRef.current === sendConversationId) {
         placeAssistantMessage(assistantMessage);
       }
+      // Clear the streamed text in the same commit as the checked card, so
+      // the answer never disappears between stream and final render.
+      resetStreamView();
       // The user may have switched away. The answer belongs to sendConversationId;
       // persist it there — resume-on-open surfaces it when they return.
       persistMessage("ai", responseText, meta, sendConversationId).then((rowId) => {
@@ -1087,6 +1090,7 @@ export const ChatContainer = () => {
         // A failed retry shows the error card in the replaced answer's position.
         placeAssistantMessage(errorMessage);
       }
+      resetStreamView();
       // Definitive failure — nothing left to resume.
       try { localStorage.removeItem("pending-turn:" + sendConversationId); } catch { /* ignore */ }
       // Preserve the user's input in the composer so they can retry
