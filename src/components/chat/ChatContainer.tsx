@@ -687,7 +687,8 @@ export const ChatContainer = () => {
     } finally {
       ctrl.abort();
       if (streamAbortRef.current === ctrl) streamAbortRef.current = null;
-      resetStreamView();
+      // Do NOT reset streamView here: the caller clears it in the same commit
+      // that places the checked answer, so the text never vanishes in between.
       void rawText;
     }
   };
