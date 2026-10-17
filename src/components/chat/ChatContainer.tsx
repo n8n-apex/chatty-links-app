@@ -975,6 +975,8 @@ export const ChatContainer = () => {
         if (activeConversationRef.current === sendConversationId) {
           placeAssistantMessage(note.message);
         }
+        // The re-asked question runs without a stream — clear the old text now.
+        resetStreamView();
         replaceConsumed = true;
         persistMessage("ai", note.responseText, note.meta, sendConversationId).then((rowId) => {
           if (!rowId) return;
