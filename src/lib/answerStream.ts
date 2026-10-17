@@ -78,7 +78,10 @@ export function cleanStreamText(raw: string, advisorEnded = false, num?: Map<str
     draft = close && close.index !== undefined ? after.slice(0, close.index) : after.replace(/(^|\n)[ \t]*D?R?A?F?T?>{0,3}$/, "$1");
     s = s.slice(0, open.index) + (close && close.index !== undefined ? after.slice(close.index + close[0].length) : "");
   }
-  const strip = (t: string) => t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "").replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
+  const strip = (t: string) => {
+    const numbered = num ? numberPointers(t, num) : t.replace(/[ \t]?\[\[[^\]]*\]\]/g, "");
+    return numbered.replace(/\[\[[^\]]*$/, "").replace(/[ \t]+([.,;:])/g, "$1");
+  };
   return { text: dashes(strip(s)).trim(), draft: draft ? dashes(strip(draft)).trim() || null : null, checking };
 }
 
