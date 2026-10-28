@@ -17,11 +17,15 @@ const TRANSCRIPT_URL = 'https://server.umnutzung.de/webhook/lawgpt-dictation-tra
 const DB_NAME = 'lawgpt-dictation';
 const DB_VERSION = 1;
 
-const SEG_MIN_MS = 45_000; // earliest cut, at the next pause
-const SEG_MAX_MS = 90_000; // latest cut, pause or not
-const PAUSE_MS = 400; // silence length that counts as a pause
-const LEVEL_INTERVAL_MS = 100;
-const SILENCE_RMS = 0.012; // analyser level below this counts as silence
+const SEG_MIN_MS = 30_000; // from here: cut at a pause of PAUSE_MS
+const SEG_LATE_MS = 75_000; // from here: a shorter pause is enough
+const SEG_MAX_MS = 120_000; // forced cut (with 1 s overlap) if no pause came
+const PAUSE_MS = 300;
+const PAUSE_LATE_MS = 150;
+const OVERLAP_MS = 1_000;
+const LEVEL_INTERVAL_MS = 50;
+const LEVEL_WINDOW_MS = 10_000; // background/speech level measured over this window
+const SILENCE_RMS = 0.012; // fallback threshold until the window has data
 const RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 const STOP_GRACE_MS = 20_000; // after stop: wait this long before polling the transcript
 const TRANSCRIPT_POLL_MS = 10_000;
@@ -140,6 +144,27 @@ export const stripAsrArtifacts = (raw: string): string => {
   return s;
 };
 
+// ---------- Overlap removal ----------
+
+const normWord = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * After a forced cut the next segment repeats ~1 s of audio. Drop from the end
+ * of `prev` the longest run (2..15 words) that equals the start of `next`,
+ * ignoring case and punctuation.
+ */
+export const trimOverlap = (prev: string, next: string): string => {
+  const p = prev.trim().split(/\s+/).filter(Boolean);
+  const n = next.trim().split(/\s+/).filter(Boolean).slice(0, 15).map(normWord);
+  const tail = p.slice(-15).map(normWord);
+  for (let k = Math.min(tail.length, n.length); k >= 2; k--) {
+    let ok = true;
+    for (let i = 0; i < k; i++) if (!tail[tail.length - k + i] || tail[tail.length - k + i] !== n[i]) { ok = false; break; }
+    if (ok) return p.slice(0, p.length - k).join(' ');
+  }
+  return prev.trim();
+};
+
 // ---------- Server calls ----------
 
 const uploadSegmentOnce = async (seg: StoredSegment, rec: StoredRecording): Promise<string> => {
@@ -213,7 +238,11 @@ export interface DictationEvents {
 export class DictationRecorder {
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
-  private chunks: Blob[] = [];
+  private levels: { t: number; rms: number }[] = [];
+  private overlapSeqs = new Set<number>(); // segments that start 1 s before the previous ended
+  private texts = new Map<number, string>(); // arrived, not yet released to the UI
+  private nextRelease = 0;
+  private forcing = false;
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private levelTimer: number | null = null;
@@ -318,14 +347,18 @@ export class DictationRecorder {
 
   // --- segment lifecycle ---
 
-  private startSegment() {
+  private startSegment(overlap = false) {
     if (!this.stream || !this.rec) return;
-    this.chunks = [];
+    const seq = this.rec.nextSeq;
+    this.rec.nextSeq = seq + 1;
+    void putRecording(this.rec);
+    if (overlap) this.overlapSeqs.add(seq);
+    const chunks: Blob[] = [];
     const mr = new MediaRecorder(this.stream, this.mime ? { mimeType: this.mime } : undefined);
     mr.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) this.chunks.push(e.data);
+      if (e.data && e.data.size > 0) chunks.push(e.data);
     };
-    mr.onstop = () => void this.finishSegment();
+    mr.onstop = () => void this.finishSegment(seq, chunks, mr);
     this.recorder = mr;
     this.segStartedAt = Date.now();
     this.silenceSince = null;
@@ -333,10 +366,11 @@ export class DictationRecorder {
   }
 
   private checkLevel() {
-    if (!this.recorder || this.recorder.state !== 'recording') return;
-    const elapsed = Date.now() - this.segStartedAt;
+    if (!this.recorder || this.recorder.state !== 'recording' || this.forcing) return;
+    const now = Date.now();
+    const elapsed = now - this.segStartedAt;
     if (elapsed >= SEG_MAX_MS) {
-      this.cutSegment();
+      this.forceCut();
       return;
     }
     if (!this.analyser) return;
@@ -348,42 +382,72 @@ export class DictationRecorder {
       sum += v * v;
     }
     const rms = Math.sqrt(sum / buf.length);
-    const now = Date.now();
-    if (rms < SILENCE_RMS) {
+    this.levels.push({ t: now, rms });
+    while (this.levels.length && now - this.levels[0].t > LEVEL_WINDOW_MS) this.levels.shift();
+
+    // Threshold relative to the room: background (p10) + 25 % of the gap to speech (p80).
+    let threshold = SILENCE_RMS;
+    if (this.levels.length >= 40) {
+      const sorted = this.levels.map((l) => l.rms).sort((a, b) => a - b);
+      const pct = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+      const bg = pct(0.1);
+      const speech = pct(0.8);
+      threshold = bg + 0.25 * Math.max(0, speech - bg);
+    }
+
+    if (rms < threshold) {
       if (this.silenceSince === null) this.silenceSince = now;
-      else if (elapsed >= SEG_MIN_MS && now - this.silenceSince >= PAUSE_MS) this.cutSegment();
+      const pause = now - this.silenceSince;
+      const needed = elapsed >= SEG_LATE_MS ? PAUSE_LATE_MS : PAUSE_MS;
+      if (elapsed >= SEG_MIN_MS && pause >= needed) this.cutSegment();
     } else {
       this.silenceSince = null;
     }
   }
 
+  /** Cut in a pause: stop now, the next segment starts in onstop. */
   private cutSegment() {
     if (!this.recorder || this.recorder.state !== 'recording') return;
-    this.recorder.stop(); // onstop → finishSegment, which starts the next one
+    this.recorder.stop();
   }
 
-  private async finishSegment() {
+  /** No pause within the limit: start the next segment first, stop this one 1 s later. */
+  private forceCut() {
+    const old = this.recorder;
+    if (!old || old.state !== 'recording') return;
+    this.forcing = true;
+    (old as MediaRecorder & { _overlapped?: boolean })._overlapped = true;
+    this.startSegment(true);
+    window.setTimeout(() => {
+      this.forcing = false;
+      if (old.state !== 'inactive') old.stop();
+    }, OVERLAP_MS);
+  }
+
+  private async finishSegment(seq: number, chunks: Blob[], mr: MediaRecorder) {
     const rec = this.rec;
     if (!rec) return;
-    const seq = rec.nextSeq;
-    const blob = new Blob(this.chunks, { type: this.mime || 'audio/webm' });
-    this.chunks = [];
-    if (this.stopping) {
-      this.stream?.getTracks().forEach((t) => t.stop());
-      void this.audioCtx?.close().catch(() => {});
-    } else {
-      this.startSegment(); // keep recording seamlessly across the cut
+    const overlapped = (mr as MediaRecorder & { _overlapped?: boolean })._overlapped === true;
+    const blob = new Blob(chunks, { type: this.mime || 'audio/webm' });
+    const isCurrent = this.recorder === mr;
+    if (isCurrent) {
+      if (this.stopping) {
+        this.stream?.getTracks().forEach((t) => t.stop());
+        void this.audioCtx?.close().catch(() => {});
+      } else if (!overlapped) {
+        this.startSegment(); // pause cut: continue seamlessly
+      }
     }
     if (blob.size > 0) {
-      rec.nextSeq = seq + 1;
-      await putRecording(rec);
       // Store BEFORE uploading: the segment survives a crash from here on.
       await putSegment({ recording_id: rec.recording_id, seq, blob, mime: this.mime || 'audio/webm', status: 'stored' });
       this.pendingTexts.add(seq);
       this.emitPending();
       this.enqueue(seq);
+    } else {
+      this.deliverText(seq, ''); // empty segment: nothing to wait for
     }
-    if (this.stopping) this.beginStopWait();
+    if (this.stopping && isCurrent) this.beginStopWait();
   }
 
   // --- upload queue: in order, at most two at a time ---
@@ -478,13 +542,41 @@ export class DictationRecorder {
     this.pendingTexts.delete(seq);
     this.failedSeqs.delete(seq);
     void deleteSegment(this.rec.recording_id, seq);
+    this.texts.set(seq, text);
+    this.releaseTexts();
     this.emitPending();
     this.emitFailed();
-    if (text) this.opts.events.onText(seq, text);
     if (this.stopping && this.pendingTexts.size === 0) this.finishAll();
   }
 
+  /**
+   * Hand texts to the UI in seq order. A text whose successor overlaps waits
+   * for that successor, so the repeated words can be cut from its end first.
+   */
+  private releaseTexts() {
+    const total = this.rec?.nextSeq ?? 0;
+    while (this.texts.has(this.nextRelease)) {
+      const seq = this.nextRelease;
+      let text = this.texts.get(seq)!;
+      if (this.overlapSeqs.has(seq + 1)) {
+        if (!this.texts.has(seq + 1)) {
+          if (seq + 1 < total || !this.stopping) break; // successor still on its way
+        } else {
+          text = trimOverlap(text, this.texts.get(seq + 1)!);
+        }
+      }
+      this.texts.delete(seq);
+      this.nextRelease = seq + 1;
+      if (text) this.opts.events.onText(seq, text);
+    }
+  }
+
   private finishAll() {
+    this.releaseTexts();
+    for (const [seq, text] of [...this.texts].sort((a, b) => a[0] - b[0])) {
+      if (text) this.opts.events.onText(seq, text); // successor lost: release untrimmed
+    }
+    this.texts.clear();
     if (this.graceTimer !== null) {
       clearTimeout(this.graceTimer);
       this.graceTimer = null;
