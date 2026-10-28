@@ -1471,6 +1471,7 @@ export const ChatContainer = () => {
           restoreFiles={restoreFiles}
           isLoading={isLoading}
           restoreText={restoreText}
+          sessionId={conversationId || localStorage.getItem("chat-session-id") || ""}
         />
 
       </div>

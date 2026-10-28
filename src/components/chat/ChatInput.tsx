@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Clock, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle } from 'lucide-react';
+import { Send, Clock, Sparkles, Paperclip, X, Mic, Square, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +10,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { getUserEmail } from '@/lib/identity';
+import {
+  DictationRecorder,
+  findUnfinishedRecording,
+  resumeRecording,
+  discardRecording,
+} from '@/lib/dictation';
 
 export type AttachIntent = 'schreiben' | 'quelle';
 
@@ -24,10 +29,11 @@ interface ChatInputProps {
   queueFull?: boolean;
   /** Files handed back by "Zurückholen"; nonce makes each restore apply once. */
   restoreFiles?: { files: File[]; intent?: AttachIntent; nonce: number } | null;
+  /** Chat session, sent with every dictation segment. */
+  sessionId?: string;
 }
 
-
-type AudioStatus = 'idle' | 'recording' | 'transcribing' | 'submitting' | 'done' | 'error';
+type AudioStatus = 'idle' | 'recording' | 'converting';
 
 const MAX_FILES = 8;
 const MAX_TOTAL_BYTES = 15 * 1024 * 1024; // 15 MB encoded ceiling
@@ -57,7 +63,7 @@ const downscaleImage = async (file: File): Promise<File> => {
   }
 };
 
-export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = false, restoreFiles }: ChatInputProps) => {
+export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = false, restoreFiles, sessionId }: ChatInputProps) => {
   const [internalMessage, setInternalMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   // Default is analyse: in a chat product a paperclip means "look at this".
@@ -69,18 +75,17 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
 
-
-  const [audioTranscript, setAudioTranscript] = useState<string | null>(null);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const recStartRef = useRef<number>(0);
-  // Voice UI feedback: elapsed clock + recording length (for the estimate) +
-  // a cancel flag honoured by the async onstop handler.
+  // Dictation state. Segments upload while the user speaks; texts are appended
+  // to the box in seq order without touching what the user typed.
   const [audioElapsedMs, setAudioElapsedMs] = useState(0);
-  const [lastRecordingMs, setLastRecordingMs] = useState(0);
-  const [transcribeStartMs, setTranscribeStartMs] = useState(0);
-  const transcribeCancelRef = useRef(false);
+  const [pendingSegments, setPendingSegments] = useState(0);
+  const [failedSegments, setFailedSegments] = useState(0);
+  const [restoreOffer, setRestoreOffer] = useState<{ recordingId: string; startedAt: number } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const recorderRef = useRef<DictationRecorder | null>(null);
+  const recStartRef = useRef<number>(0);
+  const nextInsertSeqRef = useRef(0);
+  const arrivedTextsRef = useRef<Map<number, string>>(new Map());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,11 +103,6 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
     setAttachedFiles([]);
     setAttachIntent('schreiben');
     if (fileInputRef.current) fileInputRef.current.value = '';
-    if (audioStatus !== 'submitting' && audioStatus !== 'transcribing') {
-      setAudioStatus('idle');
-      setAudioTranscript(null);
-      setAudioError(null);
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -120,7 +120,6 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
     e.preventDefault();
     addFiles(pasted);
   };
-
 
   const isAcceptedFile = (file: File): boolean => {
     const name = file.name.toLowerCase();
@@ -156,7 +155,6 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
     } finally {
       setIsProcessingFiles(false);
     }
-
 
     setAttachedFiles((prev) => {
       const combined = [...prev, ...processed];
@@ -211,122 +209,49 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
     setAttachedFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const blobToBase64 = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => {
-        const s = r.result as string;
-        resolve(s.split(',')[1] || '');
-      };
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
+  // ---------- Dictation ----------
 
-  // Strip Whisper ASR subtitle boilerplate that appears over silence.
-  const ARTIFACT_PATTERNS: RegExp[] = [
-    /copyright\s+wdr(?:\s+\d{4})?\.?$/i,
-    /untertitel(?:ung)?\s+(?:im\s+auftrag\s+des\s+|des\s+)?zdf[^.]*\.?$/i,
-    /untertitel\s+von\s+stephanie\s+geiges\.?$/i,
-    /(?:die\s+)?untertitel[- ]?community\.?$/i,
-    /untertitel(?:ung)?\s+(?:der\s+)?amara\.org[- ]?community\.?$/i,
-    /vielen\s+dank\s+f(?:ü|u)r'?s\s+zuschauen\.?$/i,
-    /bis\s+zum\s+n(?:ä|a)chsten\s+mal\.?$/i,
-    /mehr\s+infos\s+auf\s+\S+\.?$/i,
-  ];
-  const stripAsrArtifacts = (raw: string): string => {
-    let s = (raw || '').trim();
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const re of ARTIFACT_PATTERNS) {
-        const next = s.replace(re, '').replace(/[\s\.,;:!?-]+$/, '').trim();
-        if (next !== s) { s = next; changed = true; }
-      }
+  // Segment texts arrive in upload order, not seq order. Buffer them and append
+  // only when the next expected seq is here, so the text reads in spoken order.
+  const handleSegmentText = (seq: number, text: string) => {
+    arrivedTextsRef.current.set(seq, text);
+    let next = nextInsertSeqRef.current;
+    const toAppend: string[] = [];
+    while (arrivedTextsRef.current.has(next)) {
+      toAppend.push(arrivedTextsRef.current.get(next)!);
+      arrivedTextsRef.current.delete(next);
+      next++;
     }
-    return s;
+    nextInsertSeqRef.current = next;
+    const addition = toAppend.filter(Boolean).join(' ');
+    if (addition) {
+      // Functional update: never overwrite what the user typed meanwhile.
+      setMessage((prev) => (prev ? `${prev} ${addition}` : addition));
+    }
   };
 
-  const transcribe = async (blob: Blob): Promise<string> => {
-    const base64 = await blobToBase64(blob);
-    const { data, error } = await supabase.functions.invoke('chat-proxy', {
-      body: { action: 'transcribe_audio', audio_base64: base64, mime_type: 'audio/webm', language: 'de' },
-    });
-    if (error) {
-      // Non-2xx from chat-proxy (prompt D): the body carries a German message.
-      let msg = '';
-      try {
-        const ctx = (error as { context?: Response }).context;
-        if (ctx) msg = (await ctx.clone().json())?.message || '';
-      } catch { /* body unreadable — fall through */ }
-      throw new Error(msg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
-    }
-    // 2xx error envelope: prefer the German message over the error code.
-    if (data?.error) throw new Error(data.message || data.error);
-    return stripAsrArtifacts((data?.text || '').trim());
-  };
-
-  // ---------- Mic ----------
   const startRecording = async () => {
-    if (audioStatus === 'recording' || audioStatus === 'transcribing' || audioStatus === 'submitting') return;
+    if (audioStatus !== 'idle') return;
+    setRestoreOffer(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      recordedChunksRef.current = [];
-      setAudioTranscript(null);
-      setAudioError(null);
-      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const durationMs = Date.now() - recStartRef.current;
-        setLastRecordingMs(durationMs);
-        // Cancelled while the recorder wound down: discard silently.
-        if (transcribeCancelRef.current) {
-          transcribeCancelRef.current = false;
-          setAudioStatus('idle');
-          return;
-        }
-        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0 || durationMs < 500) {
-          setAudioStatus('idle');
-          return;
-        }
-        setTranscribeStartMs(Date.now());
-        setAudioStatus('transcribing');
-        try {
-          const text = await transcribe(blob);
-          // Cancelled during the request: discard the result, keep the field.
-          if (transcribeCancelRef.current) {
-            transcribeCancelRef.current = false;
+      const rec = new DictationRecorder({
+        sessionId: sessionId || localStorage.getItem('chat-session-id') || '',
+        userEmail: getUserEmail(),
+        events: {
+          onText: handleSegmentText,
+          onPendingChange: setPendingSegments,
+          onFailedChange: setFailedSegments,
+          onAllDone: () => {
             setAudioStatus('idle');
-            return;
-          }
-          if (!text) {
-            // Whole transcript was artifact / empty → leave field untouched.
-            setAudioStatus('idle');
-            return;
-          }
-          // Insert into field; DO NOT auto-send.
-          setMessage(message ? `${message} ${text}` : text);
-          setAudioTranscript(text);
-          setAudioStatus('idle');
-          setTimeout(() => setAudioTranscript(null), 400);
-        } catch (err) {
-          if (transcribeCancelRef.current) {
-            transcribeCancelRef.current = false;
-            setAudioStatus('idle');
-            return;
-          }
-          console.error('Transcription error:', err);
-          setAudioStatus('error');
-          // chat-proxy (prompt D) returns a German message — surface it, never
-          // replace it with a generic string. Fall back only if absent.
-          const backendMsg = err instanceof Error ? err.message : '';
-          setAudioError(backendMsg || 'Transkription fehlgeschlagen. Bitte erneut versuchen.');
-        }
-      };
-      mediaRecorderRef.current = mr;
+            setPendingSegments(0);
+          },
+        },
+      });
+      await rec.start();
+      recorderRef.current = rec;
+      nextInsertSeqRef.current = 0;
+      arrivedTextsRef.current.clear();
       recStartRef.current = Date.now();
-      mr.start();
       setAudioStatus('recording');
     } catch (err) {
       console.error('Mic access error:', err);
@@ -335,36 +260,64 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
   };
 
   const stopRecording = () => {
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== 'inactive') mr.stop();
-    setTranscribeStartMs(Date.now());
-    setAudioStatus('transcribing');
+    const rec = recorderRef.current;
+    if (!rec) return;
+    rec.stop();
+    setAudioStatus('converting');
   };
 
-  // Escape hatch: cancel an in-flight transcription. The flag is honoured by
-  // the onstop handler above (before, during, and after the request).
-  const cancelTranscription = () => {
-    transcribeCancelRef.current = true;
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== 'inactive') mr.stop();
-    setAudioStatus('idle');
-    setAudioTranscript(null);
-    setAudioError(null);
+  const retryFailedUploads = () => {
+    recorderRef.current?.retryFailed();
   };
 
-  // Elapsed clock for the voice UI: ticks while recording (from recStartRef)
-  // and while transcribing (from transcribeStartMs). Shows real seconds, never
-  // an invented percentage.
+  const saveFailedAudio = () => {
+    void recorderRef.current?.downloadFailedAudio();
+  };
+
+  // On load: an unfinished recording in IndexedDB means the page was closed or
+  // reloaded mid-dictation. Offer to restore it.
   useEffect(() => {
-    if (audioStatus !== 'recording' && audioStatus !== 'transcribing') return;
-    const tick = () => {
-      const start = audioStatus === 'recording' ? recStartRef.current : transcribeStartMs;
-      setAudioElapsedMs(start ? Date.now() - start : 0);
+    let cancelled = false;
+    findUnfinishedRecording()
+      .then((rec) => {
+        if (!cancelled && rec) setRestoreOffer({ recordingId: rec.recording_id, startedAt: rec.startedAt });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
     };
+  }, []);
+
+  const handleRestoreDictation = async () => {
+    if (!restoreOffer) return;
+    setRestoring(true);
+    try {
+      const text = await resumeRecording(restoreOffer.recordingId);
+      if (text) setMessage((prev) => (prev ? `${prev} ${text}` : text));
+      setRestoreOffer(null);
+    } catch {
+      toast.error('Das Diktat konnte nicht wiederhergestellt werden.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const dismissRestoreDictation = () => {
+    if (restoreOffer) void discardRecording(restoreOffer.recordingId).catch(() => {});
+    setRestoreOffer(null);
+  };
+
+  // Elapsed clock for the voice UI: ticks while recording. Shows real seconds.
+  useEffect(() => {
+    if (audioStatus !== 'recording') return;
+    const tick = () => setAudioElapsedMs(recStartRef.current ? Date.now() - recStartRef.current : 0);
     tick();
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
-  }, [audioStatus, transcribeStartMs]);
+  }, [audioStatus]);
+
+  // Release the recorder when the composer unmounts.
+  useEffect(() => () => recorderRef.current?.dispose(), []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -392,20 +345,19 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
     textareaRef.current?.focus();
   }, [restoreFiles?.nonce]);
 
-  const showStatusBar = audioStatus !== 'idle' && audioStatus !== 'done';
   const recording = audioStatus === 'recording';
-  const transcribing = audioStatus === 'transcribing';
-  const submitting = audioStatus === 'submitting';
+  const converting = audioStatus === 'converting';
+  const showStatusBar = recording || converting;
   const hasFiles = attachedFiles.length > 0;
 
   const fmtElapsed = (ms: number) => {
     const total = Math.floor(ms / 1000);
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
   };
-  // Whisper is roughly an order of magnitude faster than real time — an
-  // estimate, never a countdown to a hard number.
-  const transcribeEstimateS = Math.max(2, Math.round(lastRecordingMs / 10000));
-  const transcribeSlowHint = transcribing && audioElapsedMs / 1000 > transcribeEstimateS;
+  const pendingLabel =
+    pendingSegments === 1
+      ? '1 Abschnitt wird noch umgewandelt'
+      : `${pendingSegments} Abschnitte werden noch umgewandelt`;
 
   return (
     <motion.div
@@ -447,6 +399,56 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
           </div>
         )}
 
+        {restoreOffer && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-foreground" role="status">
+            <RotateCcw className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span>
+              Diktat vom {new Date(restoreOffer.startedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr wiederherstellen
+            </span>
+            <button
+              type="button"
+              onClick={handleRestoreDictation}
+              disabled={restoring}
+              className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-50"
+            >
+              {restoring ? 'Wird wiederhergestellt …' : 'Wiederherstellen'}
+            </button>
+            <button
+              type="button"
+              onClick={dismissRestoreDictation}
+              className="rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
+              aria-label="Wiederherstellung verwerfen"
+            >
+              Verwerfen
+            </button>
+          </div>
+        )}
+
+        {failedSegments > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {failedSegments === 1
+                ? 'Ein Abschnitt konnte nicht gesendet werden.'
+                : `${failedSegments} Abschnitte konnten nicht gesendet werden.`}
+            </span>
+            <button
+              type="button"
+              onClick={retryFailedUploads}
+              className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium hover:bg-destructive/15"
+            >
+              Erneut versuchen
+            </button>
+            <button
+              type="button"
+              onClick={saveFailedAudio}
+              className="rounded-md px-2 py-0.5 text-xs font-medium hover:bg-destructive/15"
+            >
+              Aufnahme speichern
+            </button>
+          </div>
+        )}
+
         <AnimatePresence initial={false} mode="wait">
           {showStatusBar && (
             <motion.div
@@ -460,55 +462,30 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
               className={cn(
                 'mb-2 rounded-xl border px-3 py-2 text-xs',
                 recording && 'border-red-500/30 bg-red-500/10 text-red-500',
-                transcribing && 'border-primary/30 bg-primary/10 text-primary',
-                submitting && 'border-primary/30 bg-primary/10 text-foreground',
-                audioStatus === 'error' && 'border-destructive/40 bg-destructive/10 text-destructive',
+                converting && 'border-primary/30 bg-primary/10 text-primary',
               )}
             >
               {recording && (
-                <div className="flex items-center gap-2">
-                  <span className="relative inline-flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-                  </span>
-                  <span>Aufnahme läuft… (klick zum Stoppen)</span>
-                  <span className="ml-auto font-mono tabular-nums" aria-label="Aufnahmedauer">
-                    {fmtElapsed(audioElapsedMs)}
-                  </span>
-                </div>
-              )}
-              {transcribing && (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Transkription läuft…</span>
-                    <span className="font-mono tabular-nums">{fmtElapsed(audioElapsedMs)}</span>
-                    <button
-                      type="button"
-                      onClick={cancelTranscription}
-                      className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
-                    >
-                      Abbrechen
-                    </button>
+                    <span className="relative inline-flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/70" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                    </span>
+                    <span>Aufnahme läuft. Text erscheint, während du sprichst.</span>
+                    <span className="ml-auto font-mono tabular-nums" aria-label="Aufnahmedauer">
+                      {fmtElapsed(audioElapsedMs)}
+                    </span>
                   </div>
-                  {/* Indeterminate by design — Whisper sends no progress events,
-                      so any percentage would be invented. Full bar, pulsing. */}
-                  <Progress value={100} className="h-1.5 animate-pulse" aria-label="Transkription läuft" />
-                  <div className="text-[11px] opacity-80">
-                    {transcribeSlowHint
-                      ? 'Längere Aufnahmen dauern etwas.'
-                      : `Geschätzt ca. ${transcribeEstimateS}s.`}
-                  </div>
+                  {pendingSegments > 0 && <div className="text-[11px] opacity-80">{pendingLabel}</div>}
                 </div>
               )}
-              {audioStatus === 'error' && (
+              {converting && (
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  <span>{audioError || 'Fehler bei der Aufnahme.'}</span>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Wird umgewandelt …</span>
+                  {pendingSegments > 0 && <span className="text-[11px] opacity-80">{pendingLabel}</span>}
                 </div>
-              )}
-              {audioTranscript && !transcribing && (
-                <div className="mt-1 text-foreground/90 italic">„{audioTranscript}“</div>
               )}
             </motion.div>
           )}
@@ -567,21 +544,21 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
               type="button"
               size="icon"
               variant="ghost"
-              disabled={transcribing || submitting}
+              disabled={converting}
               onClick={recording ? stopRecording : startRecording}
               className={cn(
                 'h-10 w-10 shrink-0 rounded-xl',
                 recording ? 'text-red-500 hover:text-red-500' : 'text-muted-foreground hover:text-foreground',
               )}
               aria-label={recording ? 'Aufnahme stoppen' : 'Spracheingabe'}
-              title={recording ? 'Aufnahme läuft… (klick zum Stoppen)' : 'Spracheingabe (Deutsch)'}
+              title={recording ? 'Aufnahme läuft. Klick zum Stoppen.' : 'Spracheingabe (Deutsch)'}
             >
               {recording ? (
                 <span className="relative inline-flex h-3 w-3 items-center justify-center">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/60" />
                   <Square className="h-3 w-3 fill-red-500 text-red-500" />
                 </span>
-              ) : transcribing || submitting ? (
+              ) : converting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Mic className="h-4 w-4" />
