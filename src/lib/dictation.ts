@@ -243,6 +243,7 @@ export class DictationRecorder {
   private texts = new Map<number, string>(); // arrived, not yet released to the UI
   private nextRelease = 0;
   private forcing = false;
+  private live = 0; // recorders still running (two during an overlap)
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private levelTimer: number | null = null;
@@ -360,6 +361,7 @@ export class DictationRecorder {
     };
     mr.onstop = () => void this.finishSegment(seq, chunks, mr);
     this.recorder = mr;
+    this.live++;
     this.segStartedAt = Date.now();
     this.silenceSince = null;
     mr.start(1000);
@@ -429,14 +431,14 @@ export class DictationRecorder {
     if (!rec) return;
     const overlapped = (mr as MediaRecorder & { _overlapped?: boolean })._overlapped === true;
     const blob = new Blob(chunks, { type: this.mime || 'audio/webm' });
-    const isCurrent = this.recorder === mr;
-    if (isCurrent) {
-      if (this.stopping) {
-        this.stream?.getTracks().forEach((t) => t.stop());
-        void this.audioCtx?.close().catch(() => {});
-      } else if (!overlapped) {
-        this.startSegment(); // pause cut: continue seamlessly
-      }
+    this.live--;
+    if (this.recorder === mr && !this.stopping && !overlapped) {
+      this.startSegment(); // pause cut: continue seamlessly
+    }
+    const lastOne = this.stopping && this.live === 0;
+    if (lastOne) {
+      this.stream?.getTracks().forEach((t) => t.stop());
+      void this.audioCtx?.close().catch(() => {});
     }
     if (blob.size > 0) {
       // Store BEFORE uploading: the segment survives a crash from here on.
@@ -447,7 +449,7 @@ export class DictationRecorder {
     } else {
       this.deliverText(seq, ''); // empty segment: nothing to wait for
     }
-    if (this.stopping && isCurrent) this.beginStopWait();
+    if (lastOne) this.beginStopWait();
   }
 
   // --- upload queue: in order, at most two at a time ---
