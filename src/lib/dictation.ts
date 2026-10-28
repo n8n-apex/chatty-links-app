@@ -1,6 +1,6 @@
 /**
  * Segmented dictation. The recorder cuts one complete audio file per segment
- * (45–90 s, cut at a pause), stores every segment in IndexedDB BEFORE uploading
+ * (cut at a pause relative to the room level; 120 s forced cut with 1 s overlap), stores every segment in IndexedDB BEFORE uploading
  * it, and deletes it only after the server answered status "transcribed".
  * A dictation of any length survives network loss and page reloads; the
  * server's safety net transcribes stored segments even if the browser closes.
