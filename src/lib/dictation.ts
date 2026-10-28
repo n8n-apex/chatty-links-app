@@ -1,6 +1,6 @@
 /**
  * Segmented dictation. The recorder cuts one complete audio file per segment
- * (cut at a pause relative to the room level; 120 s forced cut with 1 s overlap), stores every segment in IndexedDB BEFORE uploading
+ * (cut at a pause relative to the room level; 120 s forced cut with 2 s overlap), stores every segment in IndexedDB BEFORE uploading
  * it, and deletes it only after the server answered status "transcribed".
  * A dictation of any length survives network loss and page reloads; the
  * server's safety net transcribes stored segments even if the browser closes.
@@ -22,7 +22,7 @@ const SEG_LATE_MS = 75_000; // from here: a shorter pause is enough
 const SEG_MAX_MS = 120_000; // forced cut (with 1 s overlap) if no pause came
 const PAUSE_MS = 300;
 const PAUSE_LATE_MS = 150;
-const OVERLAP_MS = 1_000;
+const OVERLAP_MS = 2_000;
 const LEVEL_INTERVAL_MS = 50;
 const LEVEL_WINDOW_MS = 10_000; // background/speech level measured over this window
 const SILENCE_RMS = 0.012; // fallback threshold until the window has data
@@ -146,24 +146,8 @@ export const stripAsrArtifacts = (raw: string): string => {
 
 // ---------- Overlap removal ----------
 
-const normWord = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-
-/**
- * After a forced cut the next segment repeats ~1 s of audio. Drop from the end
- * of `prev` the longest run (2..15 words) that equals the start of `next`,
- * ignoring case and punctuation.
- */
-export const trimOverlap = (prev: string, next: string): string => {
-  const p = prev.trim().split(/\s+/).filter(Boolean);
-  const n = next.trim().split(/\s+/).filter(Boolean).slice(0, 15).map(normWord);
-  const tail = p.slice(-15).map(normWord);
-  for (let k = Math.min(tail.length, n.length); k >= 2; k--) {
-    let ok = true;
-    for (let i = 0; i < k; i++) if (!tail[tail.length - k + i] || tail[tail.length - k + i] !== n[i]) { ok = false; break; }
-    if (ok) return p.slice(0, p.length - k).join(' ');
-  }
-  return prev.trim();
-};
+export { joinOverlap, mergeIntoBox, findOverlapRun } from './overlap';
+import { joinOverlap } from './overlap';
 
 // ---------- Server calls ----------
 
@@ -564,7 +548,9 @@ export class DictationRecorder {
         if (!this.texts.has(seq + 1)) {
           if (seq + 1 < total || !this.stopping) break; // successor still on its way
         } else {
-          text = trimOverlap(text, this.texts.get(seq + 1)!);
+          const j = joinOverlap(text, this.texts.get(seq + 1)!);
+          text = j.prev;
+          this.texts.set(seq + 1, j.next);
         }
       }
       this.texts.delete(seq);
