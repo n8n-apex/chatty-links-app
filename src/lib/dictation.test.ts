@@ -24,7 +24,9 @@ test('five-minute polling deadline releases received text in order, marks missin
     callbacks.push({ fn, ms });
     return callbacks.length;
   }) as typeof setTimeout);
-  const fetchMock = spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}));
+  const fetchMock = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(
+    () => new Promise<Response>(() => {}), { preconnect: globalThis.fetch.preconnect },
+  ));
   const texts: string[] = [];
   let failed = 0;
   let status = 'converting';
