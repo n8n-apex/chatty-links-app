@@ -243,6 +243,9 @@ export class DictationRecorder {
   private pollTimer: number | null = null;
   private graceTimer: number | null = null;
   private mime = '';
+  private finishingSegments = 0;
+  private completionNotified = false;
+  private deadlineTimer: number | null = null;
 
   constructor(private opts: { sessionId: string; userEmail: string; events: DictationEvents }) {}
 
@@ -287,13 +290,14 @@ export class DictationRecorder {
     }
     if (this.recorder && this.recorder.state !== 'inactive') {
       this.recorder.stop(); // onstop → finishSegment → beginStopWait
-    } else {
+    } else if (this.live === 0 && this.finishingSegments === 0) {
       this.beginStopWait();
     }
   }
 
   /** Re-upload every segment that failed after its retries. */
   retryFailed() {
+    this.completionNotified = false;
     const seqs = [...this.failedSeqs];
     this.failedSeqs.clear();
     this.emitFailed();
@@ -301,6 +305,7 @@ export class DictationRecorder {
       if (this.rec) void setSegmentStatus(this.rec.recording_id, seq, 'stored');
       this.enqueue(seq);
     }
+    if (this.stopping) this.beginStopWait();
   }
 
   /** Download the failed segments' audio so nothing is lost. */
@@ -323,6 +328,7 @@ export class DictationRecorder {
     if (this.levelTimer !== null) clearInterval(this.levelTimer);
     if (this.pollTimer !== null) clearTimeout(this.pollTimer);
     if (this.graceTimer !== null) clearTimeout(this.graceTimer);
+    if (this.deadlineTimer !== null) clearTimeout(this.deadlineTimer);
     try {
       if (this.recorder && this.recorder.state !== 'inactive') this.recorder.stop();
     } catch { /* already stopped */ }
@@ -415,6 +421,7 @@ export class DictationRecorder {
     if (!rec) return;
     const overlapped = (mr as MediaRecorder & { _overlapped?: boolean })._overlapped === true;
     const blob = new Blob(chunks, { type: this.mime || 'audio/webm' });
+    this.finishingSegments++;
     this.live--;
     if (this.recorder === mr && !this.stopping && !overlapped) {
       this.startSegment(); // pause cut: continue seamlessly
@@ -433,7 +440,8 @@ export class DictationRecorder {
     } else {
       this.deliverText(seq, ''); // empty segment: nothing to wait for
     }
-    if (lastOne) this.beginStopWait();
+    this.finishingSegments--;
+    if (this.stopping && this.live === 0 && this.finishingSegments === 0) this.beginStopWait();
   }
 
   // --- upload queue: in order, at most two at a time ---
@@ -483,6 +491,7 @@ export class DictationRecorder {
   // --- stop flow: grace period, then transcript polling ---
 
   private beginStopWait() {
+    if (this.completionNotified || this.live > 0 || this.finishingSegments > 0) return;
     if (this.rec) {
       this.rec.stopped = true;
       void putRecording(this.rec);
@@ -491,14 +500,22 @@ export class DictationRecorder {
       this.finishAll();
       return;
     }
-    this.graceTimer = window.setTimeout(() => this.startTranscriptPolling(), STOP_GRACE_MS);
+    if (this.graceTimer === null && this.deadlineTimer === null) {
+      this.graceTimer = window.setTimeout(() => {
+        this.graceTimer = null;
+        this.startTranscriptPolling();
+      }, STOP_GRACE_MS);
+    }
   }
 
   private startTranscriptPolling() {
+    if (this.completionNotified) return;
     const started = Date.now();
+    this.deadlineTimer = window.setTimeout(() => this.finishIncomplete(), TRANSCRIPT_POLL_MAX_MS);
     const tick = async () => {
-      if (!this.rec) return;
+      if (!this.rec || this.completionNotified) return;
       const t = await fetchTranscript(this.rec.recording_id);
+      if (this.completionNotified) return;
       if (t) {
         for (const s of t.segments || []) {
           if (s.status === 'transcribed' && typeof s.text === 'string' && !this.delivered.has(s.seq)) {
@@ -516,6 +533,8 @@ export class DictationRecorder {
       }
       if (Date.now() - started < TRANSCRIPT_POLL_MAX_MS) {
         this.pollTimer = window.setTimeout(() => void tick(), TRANSCRIPT_POLL_MS);
+      } else {
+        this.finishIncomplete();
       }
       // After 5 min the server's safety net still finishes; nothing more to do here.
     };
@@ -532,7 +551,7 @@ export class DictationRecorder {
     this.releaseTexts();
     this.emitPending();
     this.emitFailed();
-    if (this.stopping && this.pendingTexts.size === 0) this.finishAll();
+    if (this.stopping && this.live === 0 && this.finishingSegments === 0 && this.pendingTexts.size === 0) this.finishAll();
   }
 
   /**
@@ -559,12 +578,28 @@ export class DictationRecorder {
     }
   }
 
+  private finishIncomplete() {
+    if (this.completionNotified) return;
+    for (const seq of this.pendingTexts) {
+      this.failedSeqs.add(seq);
+      if (this.rec) void setSegmentStatus(this.rec.recording_id, seq, 'failed');
+    }
+    this.emitFailed();
+    this.finishAll();
+  }
+
   private finishAll() {
+    if (this.completionNotified) return;
+    this.completionNotified = true;
     this.releaseTexts();
     for (const [seq, text] of [...this.texts].sort((a, b) => a[0] - b[0])) {
       if (text) this.opts.events.onText(seq, text); // successor lost: release untrimmed
     }
     this.texts.clear();
+    if (this.deadlineTimer !== null) {
+      clearTimeout(this.deadlineTimer);
+      this.deadlineTimer = null;
+    }
     if (this.graceTimer !== null) {
       clearTimeout(this.graceTimer);
       this.graceTimer = null;
@@ -574,7 +609,7 @@ export class DictationRecorder {
       this.pollTimer = null;
     }
     if (this.rec) {
-      this.rec.done = true;
+      this.rec.done = this.pendingTexts.size === 0 && this.failedSeqs.size === 0;
       void putRecording(this.rec);
     }
     this.opts.events.onAllDone();

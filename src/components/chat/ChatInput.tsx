@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { getUserEmail } from '@/lib/identity';
+import { DictationSend, INCOMPLETE_DICTATION, type AudioStatus } from '@/lib/dictationSend';
 import {
   DictationRecorder,
   findUnfinishedRecording,
@@ -32,8 +33,6 @@ interface ChatInputProps {
   /** Chat session, sent with every dictation segment. */
   sessionId?: string;
 }
-
-type AudioStatus = 'idle' | 'recording' | 'converting';
 
 const MAX_FILES = 8;
 const MAX_TOTAL_BYTES = 15 * 1024 * 1024; // 15 MB encoded ceiling
@@ -72,6 +71,9 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
   // would let the router decide on a turn whose attachment it cannot see.
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
+  const [pendingSend, setPendingSend] = useState(false);
+  const failedSegmentsRef = useRef(0);
+  const messageRef = useRef('');
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
 
@@ -84,25 +86,42 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
   const [restoring, setRestoring] = useState(false);
   const recorderRef = useRef<DictationRecorder | null>(null);
   const recStartRef = useRef<number>(0);
-  const nextInsertSeqRef = useRef(0);
-  const arrivedTextsRef = useRef<Map<number, string>>(new Map());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const message = internalMessage;
-  const setMessage = setInternalMessage;
-  useEffect(() => { if (restoreText) setInternalMessage(restoreText.text); }, [restoreText]);
+  const setMessage = (value: string | ((previous: string) => string)) => {
+    const next = typeof value === 'function' ? value(messageRef.current) : value;
+    messageRef.current = next;
+    setInternalMessage(next);
+  };
+  useEffect(() => { if (restoreText) setMessage(restoreText.text); }, [restoreText]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendCurrent = () => {
     if ((isLoading && queueFull) || isProcessingFiles) return;
-    if (!message.trim() && attachedFiles.length === 0) return;
+    if (!messageRef.current.trim() && attachedFiles.length === 0) return;
     const files = attachedFiles.length > 0 ? attachedFiles : null;
-    onSendMessage(message.trim(), files, files ? attachIntent : undefined);
+    onSendMessage(messageRef.current.trim(), files, files ? attachIntent : undefined);
     setMessage('');
     setAttachedFiles([]);
     setAttachIntent('schreiben');
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  const sendCurrentRef = useRef(sendCurrent);
+  sendCurrentRef.current = sendCurrent;
+  const [dictationSend] = useState(() => new DictationSend({
+    changed: setPendingSend,
+    send: () => sendCurrentRef.current(),
+    incomplete: () => toast.error(INCOMPLETE_DICTATION),
+  }));
+  useEffect(() => {
+    dictationSend.flush((isLoading && queueFull) || isProcessingFiles);
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((isLoading && queueFull) || isProcessingFiles) return;
+    dictationSend.request(audioStatus, stopRecording);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -211,27 +230,13 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
 
   // ---------- Dictation ----------
 
-  // Segment texts arrive in upload order, not seq order. Buffer them and append
-  // only when the next expected seq is here, so the text reads in spoken order.
-  const handleSegmentText = (seq: number, text: string) => {
-    arrivedTextsRef.current.set(seq, text);
-    let next = nextInsertSeqRef.current;
-    const toAppend: string[] = [];
-    while (arrivedTextsRef.current.has(next)) {
-      toAppend.push(arrivedTextsRef.current.get(next)!);
-      arrivedTextsRef.current.delete(next);
-      next++;
-    }
-    nextInsertSeqRef.current = next;
-    const addition = toAppend.filter(Boolean).join(' ');
-    if (addition) {
-      // Functional update: never overwrite what the user typed meanwhile.
-      setMessage((prev) => (prev ? `${prev} ${addition}` : addition));
-    }
+  // The recorder releases in order, including received texts after a missing segment.
+  const handleSegmentText = (_seq: number, text: string) => {
+    if (text) setMessage((prev) => (prev ? `${prev} ${text}` : text));
   };
 
   const startRecording = async () => {
-    if (audioStatus !== 'idle') return;
+    if (audioStatus !== 'idle' || dictationSend.pending) return;
     setRestoreOffer(null);
     try {
       const rec = new DictationRecorder({
@@ -240,17 +245,21 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
         events: {
           onText: handleSegmentText,
           onPendingChange: setPendingSegments,
-          onFailedChange: setFailedSegments,
+          onFailedChange: (failed) => {
+            failedSegmentsRef.current = failed;
+            setFailedSegments(failed);
+          },
           onAllDone: () => {
             setAudioStatus('idle');
             setPendingSegments(0);
+            dictationSend.complete(failedSegmentsRef.current);
           },
         },
       });
       await rec.start();
       recorderRef.current = rec;
-      nextInsertSeqRef.current = 0;
-      arrivedTextsRef.current.clear();
+      failedSegmentsRef.current = 0;
+      setFailedSegments(0);
       recStartRef.current = Date.now();
       setAudioStatus('recording');
     } catch (err) {
@@ -262,11 +271,12 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
   const stopRecording = () => {
     const rec = recorderRef.current;
     if (!rec) return;
-    rec.stop();
     setAudioStatus('converting');
+    rec.stop();
   };
 
   const retryFailedUploads = () => {
+    setAudioStatus('converting');
     recorderRef.current?.retryFailed();
   };
 
@@ -449,6 +459,15 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
           </div>
         )}
 
+        {pendingSend && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-primary" role="status" aria-live="polite">
+            <span>Diktat wird fertig umgewandelt, dann wird gesendet …</span>
+            <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => dictationSend.cancel()}>
+              Nicht senden
+            </Button>
+          </div>
+        )}
+
         <AnimatePresence initial={false} mode="wait">
           {showStatusBar && (
             <motion.div
@@ -544,7 +563,7 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
               type="button"
               size="icon"
               variant="ghost"
-              disabled={converting}
+              disabled={converting || pendingSend}
               onClick={recording ? stopRecording : startRecording}
               className={cn(
                 'h-10 w-10 shrink-0 rounded-xl',
@@ -568,12 +587,14 @@ export const ChatInput = ({ onSendMessage, isLoading, restoreText, queueFull = f
               type="submit"
               size="icon"
               variant="glow"
-              disabled={(!message.trim() && !hasFiles) || (isLoading && queueFull) || isProcessingFiles}
+              disabled={pendingSend || (audioStatus === 'idle' && !message.trim() && !hasFiles) || (isLoading && queueFull) || isProcessingFiles}
               className="h-10 w-10 shrink-0 rounded-xl"
-              title={isProcessingFiles ? 'Dateien werden vorbereitet…' : isLoading && queueFull ? 'Eine Nachricht wartet bereits' : isLoading ? 'Senden, sobald die aktuelle Antwort fertig ist' : 'Senden'}
-              aria-label={isLoading && queueFull ? 'Eine Nachricht wartet bereits' : 'Senden'}
+              title={pendingSend ? 'Wird gesendet, sobald das Diktat vollständig ist' : isProcessingFiles ? 'Dateien werden vorbereitet…' : isLoading && queueFull ? 'Eine Nachricht wartet bereits' : isLoading ? 'Senden, sobald die aktuelle Antwort fertig ist' : 'Senden'}
+              aria-label={pendingSend ? 'Wird gesendet, sobald das Diktat vollständig ist' : isLoading && queueFull ? 'Eine Nachricht wartet bereits' : 'Senden'}
             >
-              {isLoading && queueFull ? (
+              {pendingSend ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isLoading && queueFull ? (
                 <Clock className="h-4 w-4" />
               ) : isProcessingFiles ? (
                 <Sparkles className="h-4 w-4 animate-pulse" />
